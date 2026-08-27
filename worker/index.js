@@ -4,13 +4,31 @@
  *
  * Worker: v8adminuniversal
  *
- * API:
- * GET  /
- * GET  /api/health
- * POST /api/login
+ * Backend:
+ * Cloudflare Workers + KV
  *
- * GET/POST/PUT/DELETE /api/data/clients
- * GET/POST/PUT/DELETE /api/data/projects
+ * API:
+ *
+ * GET     /
+ * GET     /api
+ * GET     /api/health
+ *
+ * POST    /api/login
+ *
+ * GET     /api/data/clients
+ * POST    /api/data/clients
+ * PUT     /api/data/clients
+ * DELETE  /api/data/clients?id=ID
+ *
+ * GET     /api/data/projects
+ * POST    /api/data/projects
+ * PUT     /api/data/projects
+ * DELETE  /api/data/projects?id=ID
+ *
+ * Aliases:
+ *
+ * GET/POST/PUT/DELETE /api/clients
+ * GET/POST/PUT/DELETE /api/projects
  *
  * GET /api/dashboard/stats
  * GET /api/data/leads/:projectId
@@ -18,8 +36,8 @@
  * GET  /api/public/config/:projectId
  * POST /api/public/leads/:projectId
  *
- * GET  /api/client/:token
- * PUT  /api/client/:token
+ * GET /api/client/:token
+ * PUT /api/client/:token
  *
  * GET  /api/client-link/:projectId
  * POST /api/client-link/:projectId
@@ -41,27 +59,30 @@
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods":
-    "GET,POST,PUT,DELETE,OPTIONS",
+    "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
     "Content-Type, Authorization",
+  "Access-Control-Max-Age": "86400",
 };
 
 // ============================================================
-// RESPOSTAS
+// RESPONSE HELPERS
 // ============================================================
 
-function json(data, status = 200) {
+function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type":
         "application/json; charset=UTF-8",
+
       ...CORS_HEADERS,
+      ...extraHeaders,
     },
   });
 }
 
-function badRequest(message) {
+function badRequest(message = "Requisição inválida") {
   return json(
     {
       error: true,
@@ -83,6 +104,18 @@ function unauthorized(
   );
 }
 
+function forbidden(
+  message = "Acesso negado"
+) {
+  return json(
+    {
+      error: true,
+      message,
+    },
+    403
+  );
+}
+
 function notFound(
   message = "Rota não encontrada"
 ) {
@@ -92,6 +125,22 @@ function notFound(
       message,
     },
     404
+  );
+}
+
+function methodNotAllowed(
+  message = "Método não permitido"
+) {
+  return json(
+    {
+      error: true,
+      message,
+    },
+    405,
+    {
+      Allow:
+        "GET, POST, PUT, DELETE, OPTIONS",
+    }
   );
 }
 
@@ -161,6 +210,33 @@ function b64urlDecodeStr(str) {
   return atob(str);
 }
 
+function base64UrlToBytes(str) {
+  str = str
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+
+  while (str.length % 4) {
+    str += "=";
+  }
+
+  const binary = atob(str);
+
+  const bytes = new Uint8Array(
+    binary.length
+  );
+
+  for (
+    let i = 0;
+    i < binary.length;
+    i++
+  ) {
+    bytes[i] =
+      binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
 // ============================================================
 // TOKEN
 // ============================================================
@@ -180,12 +256,13 @@ async function getSigningKey(secret) {
       hash: "SHA-256",
     },
     false,
-    ["sign"]
+    ["sign", "verify"]
   );
 }
 
 async function signToken(payload, secret) {
-  const key = await getSigningKey(secret);
+  const key =
+    await getSigningKey(secret);
 
   const payloadStr =
     b64urlEncodeStr(
@@ -214,7 +291,8 @@ async function verifyToken(
 ) {
   if (
     !token ||
-    typeof token !== "string"
+    typeof token !== "string" ||
+    !secret
   ) {
     return null;
   }
@@ -234,18 +312,7 @@ async function verifyToken(
 
   try {
     const key =
-      await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(
-          secret
-        ),
-        {
-          name: "HMAC",
-          hash: "SHA-256",
-        },
-        false,
-        ["verify"]
-      );
+      await getSigningKey(secret);
 
     const valid =
       await crypto.subtle.verify(
@@ -283,36 +350,8 @@ async function verifyToken(
   }
 }
 
-function base64UrlToBytes(str) {
-  str = str
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-
-  while (str.length % 4) {
-    str += "=";
-  }
-
-  const binary = atob(str);
-
-  const bytes =
-    new Uint8Array(
-      binary.length
-    );
-
-  for (
-    let i = 0;
-    i < binary.length;
-    i++
-  ) {
-    bytes[i] =
-      binary.charCodeAt(i);
-  }
-
-  return bytes;
-}
-
 // ============================================================
-// AUTH ADMIN
+// AUTH
 // ============================================================
 
 function getBearerToken(request) {
@@ -327,7 +366,7 @@ function getBearerToken(request) {
     );
 
   return match
-    ? match[1]
+    ? match[1].trim()
     : null;
 }
 
@@ -379,7 +418,7 @@ async function kvGetJSON(
   const raw =
     await env.V8_KV.get(key);
 
-  if (!raw) {
+  if (raw === null) {
     return fallback;
   }
 
@@ -393,7 +432,8 @@ async function kvGetJSON(
 async function kvPutJSON(
   env,
   key,
-  value
+  value,
+  options = undefined
 ) {
   if (!env.V8_KV) {
     throw new Error(
@@ -403,7 +443,8 @@ async function kvPutJSON(
 
   await env.V8_KV.put(
     key,
-    JSON.stringify(value)
+    JSON.stringify(value),
+    options
   );
 }
 
@@ -412,6 +453,7 @@ async function kvPutJSON(
 // ============================================================
 
 const LOGIN_MAX_ATTEMPTS = 5;
+
 const LOGIN_WINDOW_SECONDS =
   15 * 60;
 
@@ -432,7 +474,7 @@ async function checkLoginRateLimit(
     );
 
   return (
-    record.count <
+    Number(record?.count || 0) <
     LOGIN_MAX_ATTEMPTS
   );
 }
@@ -453,11 +495,13 @@ async function registerLoginFailure(
       }
     );
 
-  record.count++;
+  record.count =
+    Number(record.count || 0) + 1;
 
-  await env.V8_KV.put(
+  await kvPutJSON(
+    env,
     key,
-    JSON.stringify(record),
+    record,
     {
       expirationTtl:
         LOGIN_WINDOW_SECONDS,
@@ -469,6 +513,10 @@ async function clearLoginRateLimit(
   env,
   ip
 ) {
+  if (!env.V8_KV) {
+    return;
+  }
+
   await env.V8_KV.delete(
     `ratelimit:login:${ip}`
   );
@@ -526,14 +574,12 @@ async function handleLogin(
   }
 
   const email =
-    typeof body?.email ===
-    "string"
+    typeof body?.email === "string"
       ? body.email.trim()
       : "";
 
   const password =
-    typeof body?.password ===
-    "string"
+    typeof body?.password === "string"
       ? body.password
       : "";
 
@@ -544,10 +590,8 @@ async function handleLogin(
   }
 
   if (
-    email !==
-      env.ADMIN_EMAIL ||
-    password !==
-      env.ADMIN_PASS
+    email !== env.ADMIN_EMAIL ||
+    password !== env.ADMIN_PASS
   ) {
     await registerLoginFailure(
       env,
@@ -592,7 +636,7 @@ async function handleLogin(
 }
 
 // ============================================================
-// COLEÇÕES
+// COLLECTIONS
 // ============================================================
 
 async function handleCollectionGet(
@@ -617,7 +661,7 @@ async function handleCollectionCreate(
   request,
   env,
   collection,
-  shapeFn
+  shapeFn = null
 ) {
   let body;
 
@@ -630,6 +674,16 @@ async function handleCollectionCreate(
     );
   }
 
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body)
+  ) {
+    return badRequest(
+      "O corpo da requisição deve ser um objeto JSON"
+    );
+  }
+
   const list =
     await kvGetJSON(
       env,
@@ -637,10 +691,19 @@ async function handleCollectionCreate(
       []
     );
 
-  const item = {
-    ...(shapeFn
+  if (!Array.isArray(list)) {
+    return serverError(
+      `Coleção '${collection}' inválida`
+    );
+  }
+
+  const defaults =
+    typeof shapeFn === "function"
       ? shapeFn()
-      : {}),
+      : {};
+
+  const item = {
+    ...defaults,
     ...body,
     id: uuid(),
     createdAt:
@@ -677,7 +740,16 @@ async function handleCollectionUpdate(
     );
   }
 
-  if (!body?.id) {
+  if (
+    !body ||
+    typeof body !== "object"
+  ) {
+    return badRequest(
+      "O corpo da requisição deve ser um objeto JSON"
+    );
+  }
+
+  if (!body.id) {
     return badRequest(
       "Campo 'id' é obrigatório"
     );
@@ -690,11 +762,16 @@ async function handleCollectionUpdate(
       []
     );
 
+  if (!Array.isArray(list)) {
+    return serverError(
+      `Coleção '${collection}' inválida`
+    );
+  }
+
   const index =
     list.findIndex(
       item =>
-        item.id ===
-        body.id
+        item?.id === body.id
     );
 
   if (index === -1) {
@@ -706,7 +783,8 @@ async function handleCollectionUpdate(
   list[index] = {
     ...list[index],
     ...body,
-    id: list[index].id,
+    id:
+      list[index].id,
   };
 
   await kvPutJSON(
@@ -739,10 +817,16 @@ async function handleCollectionDelete(
       []
     );
 
+  if (!Array.isArray(list)) {
+    return serverError(
+      `Coleção '${collection}' inválida`
+    );
+  }
+
   const filtered =
     list.filter(
       item =>
-        item.id !== id
+        item?.id !== id
     );
 
   if (
@@ -762,16 +846,18 @@ async function handleCollectionDelete(
 
   return json({
     deleted: true,
+    id,
   });
 }
 
 // ============================================================
-// PROJETO
+// PROJECT DEFAULT
 // ============================================================
 
 function defaultProjectShape() {
   return {
     name: "",
+
     status:
       "Em desenvolvimento",
 
@@ -807,6 +893,12 @@ async function handleGetLeads(
   env,
   projectId
 ) {
+  if (!projectId) {
+    return badRequest(
+      "Project ID obrigatório"
+    );
+  }
+
   const leads =
     await kvGetJSON(
       env,
@@ -826,6 +918,12 @@ async function handlePublicCreateLead(
   env,
   projectId
 ) {
+  if (!projectId) {
+    return badRequest(
+      "Project ID obrigatório"
+    );
+  }
+
   const projects =
     await kvGetJSON(
       env,
@@ -834,11 +932,12 @@ async function handlePublicCreateLead(
     );
 
   const project =
-    projects.find(
-      p =>
-        p.id ===
-        projectId
-    );
+    Array.isArray(projects)
+      ? projects.find(
+          p =>
+            p?.id === projectId
+        )
+      : null;
 
   if (!project) {
     return notFound(
@@ -857,8 +956,9 @@ async function handlePublicCreateLead(
     );
   }
 
-  // Honeypot
-  if (body?.website) {
+  if (
+    body?.website
+  ) {
     return json({
       ok: true,
     });
@@ -866,24 +966,35 @@ async function handlePublicCreateLead(
 
   const lead = {
     id: uuid(),
+
     name:
-      typeof body?.name ===
-      "string"
+      typeof body?.name === "string"
         ? body.name.trim()
         : "",
+
     email:
-      typeof body?.email ===
-      "string"
+      typeof body?.email === "string"
         ? body.email.trim()
         : "",
+
     message:
-      typeof body?.message ===
-      "string"
+      typeof body?.message === "string"
         ? body.message.trim()
         : "",
+
     createdAt:
       Date.now(),
   };
+
+  if (
+    !lead.name &&
+    !lead.email &&
+    !lead.message
+  ) {
+    return badRequest(
+      "Informe pelo menos um dado do lead"
+    );
+  }
 
   const leads =
     await kvGetJSON(
@@ -892,12 +1003,17 @@ async function handlePublicCreateLead(
       []
     );
 
-  leads.unshift(lead);
+  const list =
+    Array.isArray(leads)
+      ? leads
+      : [];
+
+  list.unshift(lead);
 
   await kvPutJSON(
     env,
     `leads:${projectId}`,
-    leads.slice(0, 500)
+    list.slice(0, 500)
   );
 
   return json(
@@ -910,13 +1026,19 @@ async function handlePublicCreateLead(
 }
 
 // ============================================================
-// CONFIG PÚBLICA
+// PUBLIC CONFIG
 // ============================================================
 
 async function handlePublicConfig(
   env,
   projectId
 ) {
+  if (!projectId) {
+    return badRequest(
+      "Project ID obrigatório"
+    );
+  }
+
   const projects =
     await kvGetJSON(
       env,
@@ -925,11 +1047,12 @@ async function handlePublicConfig(
     );
 
   const project =
-    projects.find(
-      p =>
-        p.id ===
-        projectId
-    );
+    Array.isArray(projects)
+      ? projects.find(
+          p =>
+            p?.id === projectId
+        )
+      : null;
 
   if (!project) {
     return notFound(
@@ -939,22 +1062,21 @@ async function handlePublicConfig(
 
   return json({
     tracking:
-      project.tracking ||
-      {},
+      project.tracking || {},
+
     contact:
-      project.contact ||
-      {},
+      project.contact || {},
+
     social:
-      project.social ||
-      {},
+      project.social || {},
+
     formspree:
-      project.formspree ||
-      "",
+      project.formspree || "",
   });
 }
 
 // ============================================================
-// DASHBOARD STATS
+// DASHBOARD
 // ============================================================
 
 async function handleDashboardStats(
@@ -974,11 +1096,22 @@ async function handleDashboardStats(
       []
     );
 
+  const clientList =
+    Array.isArray(clients)
+      ? clients
+      : [];
+
+  const projectList =
+    Array.isArray(projects)
+      ? projects
+      : [];
+
   let totalLeads = 0;
+
   const recentLeads = [];
 
   for (
-    const project of projects
+    const project of projectList
   ) {
     const leads =
       await kvGetJSON(
@@ -987,15 +1120,23 @@ async function handleDashboardStats(
         []
       );
 
+    const list =
+      Array.isArray(leads)
+        ? leads
+        : [];
+
     totalLeads +=
-      leads.length;
+      list.length;
 
     for (
-      const lead of
-        leads.slice(0, 10)
+      const lead of list.slice(
+        0,
+        10
+      )
     ) {
       recentLeads.push({
         ...lead,
+
         projectName:
           project.name ||
           "Projeto",
@@ -1011,10 +1152,10 @@ async function handleDashboardStats(
 
   return json({
     totalClients:
-      clients.length,
+      clientList.length,
 
     totalProjects:
-      projects.length,
+      projectList.length,
 
     totalLeads,
 
@@ -1048,7 +1189,7 @@ const ALLOWED_CLIENT_FIELDS = [
   "formspree",
 ];
 
-async function handleClientLinksGet(
+async function getProject(
   env,
   projectId
 ) {
@@ -1059,11 +1200,24 @@ async function handleClientLinksGet(
       []
     );
 
+  if (!Array.isArray(projects)) {
+    return null;
+  }
+
+  return projects.find(
+    p =>
+      p?.id === projectId
+  ) || null;
+}
+
+async function handleClientLinksGet(
+  env,
+  projectId
+) {
   const project =
-    projects.find(
-      p =>
-        p.id ===
-        projectId
+    await getProject(
+      env,
+      projectId
     );
 
   if (!project) {
@@ -1091,23 +1245,21 @@ async function handleClientLinkCreate(
   env,
   projectId
 ) {
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
   const project =
-    projects.find(
-      p =>
-        p.id ===
-        projectId
+    await getProject(
+      env,
+      projectId
     );
 
   if (!project) {
     return notFound(
       "Projeto não encontrado"
+    );
+  }
+
+  if (!env.TOKEN_SECRET) {
+    return serverError(
+      "TOKEN_SECRET não configurado no Worker"
     );
   }
 
@@ -1132,6 +1284,8 @@ async function handleClientLinkCreate(
   const fields =
     requested.filter(
       field =>
+        typeof field ===
+          "string" &&
         ALLOWED_CLIENT_FIELDS.includes(
           field
         )
@@ -1188,7 +1342,12 @@ async function handleClientLinkCreate(
       []
     );
 
-  links.unshift({
+  const list =
+    Array.isArray(links)
+      ? links
+      : [];
+
+  list.unshift({
     jti,
     projectId,
     fields,
@@ -1202,7 +1361,7 @@ async function handleClientLinkCreate(
   await kvPutJSON(
     env,
     `client_links:${projectId}`,
-    links.slice(0, 100)
+    list.slice(0, 100)
   );
 
   return json(
@@ -1257,8 +1416,13 @@ async function handleClientLinkRevoke(
       []
     );
 
+  const list =
+    Array.isArray(links)
+      ? links
+      : [];
+
   const updated =
-    links.map(
+    list.map(
       link =>
         link.jti === jti
           ? {
@@ -1281,13 +1445,17 @@ async function handleClientLinkRevoke(
 }
 
 // ============================================================
-// CLIENTE
+// CLIENT ACCESS
 // ============================================================
 
 async function requireClientToken(
   token,
   env
 ) {
+  if (!env.TOKEN_SECRET) {
+    return null;
+  }
+
   const payload =
     await verifyToken(
       token,
@@ -1296,8 +1464,7 @@ async function requireClientToken(
 
   if (
     !payload ||
-    payload.role !==
-      "client"
+    payload.role !== "client"
   ) {
     return null;
   }
@@ -1331,8 +1498,14 @@ async function requireClientToken(
 
   return {
     ...payload,
+
     fields:
-      record.fields || [],
+      Array.isArray(
+        record.fields
+      )
+        ? record.fields
+        : [],
+
     projectId:
       record.projectId,
   };
@@ -1342,6 +1515,12 @@ async function handleClientGet(
   env,
   token
 ) {
+  if (!token) {
+    return unauthorized(
+      "Token obrigatório"
+    );
+  }
+
   const auth =
     await requireClientToken(
       token,
@@ -1354,18 +1533,10 @@ async function handleClientGet(
     );
   }
 
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
   const project =
-    projects.find(
-      p =>
-        p.id ===
-        auth.projectId
+    await getProject(
+      env,
+      auth.projectId
     );
 
   if (!project) {
@@ -1377,9 +1548,12 @@ async function handleClientGet(
   return json({
     projectName:
       project.name,
+
     fields:
       auth.fields,
-    data: project,
+
+    data:
+      project,
   });
 }
 
@@ -1388,6 +1562,12 @@ async function handleClientUpdate(
   env,
   token
 ) {
+  if (!token) {
+    return unauthorized(
+      "Token obrigatório"
+    );
+  }
+
   const auth =
     await requireClientToken(
       token,
@@ -1418,10 +1598,16 @@ async function handleClientUpdate(
       []
     );
 
+  if (!Array.isArray(projects)) {
+    return serverError(
+      "Coleção de projetos inválida"
+    );
+  }
+
   const index =
     projects.findIndex(
       p =>
-        p.id ===
+        p?.id ===
         auth.projectId
     );
 
@@ -1442,8 +1628,7 @@ async function handleClientUpdate(
       );
 
     if (
-      value !==
-      undefined
+      value !== undefined
     ) {
       setByPath(
         projects[index],
@@ -1465,18 +1650,27 @@ async function handleClientUpdate(
 }
 
 // ============================================================
-// GET / SET BY PATH
+// OBJECT PATH HELPERS
 // ============================================================
 
 function getByPath(
   obj,
   path
 ) {
+  if (
+    !obj ||
+    !path
+  ) {
+    return undefined;
+  }
+
   return path
     .split(".")
     .reduce(
       (current, key) =>
-        current
+        current &&
+        typeof current ===
+          "object"
           ? current[key]
           : undefined,
       obj
@@ -1488,6 +1682,13 @@ function setByPath(
   path,
   value
 ) {
+  if (
+    !obj ||
+    !path
+  ) {
+    return;
+  }
+
   const keys =
     path.split(".");
 
@@ -1530,6 +1731,10 @@ export default {
     request,
     env
   ) {
+    // --------------------------------------------------------
+    // CORS PREFLIGHT
+    // --------------------------------------------------------
+
     if (
       request.method ===
       "OPTIONS"
@@ -1561,9 +1766,9 @@ export default {
       request.method.toUpperCase();
 
     try {
-      // ------------------------------------------------------
+      // ======================================================
       // HOME
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path === "/" &&
@@ -1571,19 +1776,82 @@ export default {
       ) {
         return json({
           ok: true,
+
           worker:
             "v8adminuniversal",
+
           status:
             "online",
+
           api: true,
+
+          version:
+            "1.0.0",
+
           time:
             new Date().toISOString(),
         });
       }
 
-      // ------------------------------------------------------
+      // ======================================================
+      // API INFO
+      // ======================================================
+
+      if (
+        path === "/api" &&
+        method === "GET"
+      ) {
+        return json({
+          ok: true,
+
+          worker:
+            "v8adminuniversal",
+
+          status:
+            "online",
+
+          api: true,
+
+          version:
+            "1.0.0",
+
+          endpoints: {
+            health:
+              "/api/health",
+
+            login:
+              "POST /api/login",
+
+            clients:
+              "/api/data/clients",
+
+            projects:
+              "/api/data/projects",
+
+            dashboard:
+              "/api/dashboard/stats",
+
+            publicConfig:
+              "/api/public/config/:projectId",
+
+            publicLeads:
+              "POST /api/public/leads/:projectId",
+
+            client:
+              "/api/client/:token",
+
+            clientLinks:
+              "/api/client-link/:projectId",
+          },
+
+          time:
+            new Date().toISOString(),
+        });
+      }
+
+      // ======================================================
       // HEALTH
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path ===
@@ -1592,8 +1860,10 @@ export default {
       ) {
         return json({
           ok: true,
+
           worker:
             "v8adminuniversal",
+
           status:
             "online",
 
@@ -1614,31 +1884,45 @@ export default {
         });
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // LOGIN
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path ===
-          "/api/login" &&
-        method === "POST"
+          "/api/login"
       ) {
+        if (
+          method !== "POST"
+        ) {
+          return methodNotAllowed(
+            "Use POST /api/login"
+          );
+        }
+
         return handleLogin(
           request,
           env
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // PUBLIC CONFIG
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path.startsWith(
           "/api/public/config/"
-        ) &&
-        method === "GET"
+        )
       ) {
+        if (
+          method !== "GET"
+        ) {
+          return methodNotAllowed(
+            "Use GET nesta rota"
+          );
+        }
+
         const projectId =
           decodeURIComponent(
             path.substring(
@@ -1653,16 +1937,23 @@ export default {
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // PUBLIC LEADS
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path.startsWith(
           "/api/public/leads/"
-        ) &&
-        method === "POST"
+        )
       ) {
+        if (
+          method !== "POST"
+        ) {
+          return methodNotAllowed(
+            "Use POST nesta rota"
+          );
+        }
+
         const projectId =
           decodeURIComponent(
             path.substring(
@@ -1678,9 +1969,9 @@ export default {
         );
       }
 
-      // ------------------------------------------------------
-      // CLIENT LINK ACCESS
-      // ------------------------------------------------------
+      // ======================================================
+      // CLIENT TOKEN
+      // ======================================================
 
       if (
         path.startsWith(
@@ -1714,14 +2005,12 @@ export default {
           );
         }
 
-        return notFound(
-          "Método não permitido"
-        );
+        return methodNotAllowed();
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // ADMIN AUTH
-      // ------------------------------------------------------
+      // ======================================================
 
       const admin =
         await requireAdmin(
@@ -1735,27 +2024,34 @@ export default {
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // DASHBOARD
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path ===
-          "/api/dashboard/stats" &&
-        method === "GET"
+          "/api/dashboard/stats"
       ) {
+        if (
+          method !== "GET"
+        ) {
+          return methodNotAllowed();
+        }
+
         return handleDashboardStats(
           env
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // CLIENTS
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path ===
-        "/api/data/clients"
+          "/api/data/clients" ||
+        path ===
+          "/api/clients"
       ) {
         if (
           method === "GET"
@@ -1800,18 +2096,18 @@ export default {
           );
         }
 
-        return badRequest(
-          "Método não permitido"
-        );
+        return methodNotAllowed();
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // PROJECTS
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path ===
-        "/api/data/projects"
+          "/api/data/projects" ||
+        path ===
+          "/api/projects"
       ) {
         if (
           method === "GET"
@@ -1857,21 +2153,24 @@ export default {
           );
         }
 
-        return badRequest(
-          "Método não permitido"
-        );
+        return methodNotAllowed();
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // ADMIN LEADS
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path.startsWith(
           "/api/data/leads/"
-        ) &&
-        method === "GET"
+        )
       ) {
+        if (
+          method !== "GET"
+        ) {
+          return methodNotAllowed();
+        }
+
         const projectId =
           decodeURIComponent(
             path.substring(
@@ -1886,9 +2185,9 @@ export default {
         );
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // CLIENT LINKS
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         path.startsWith(
@@ -1901,17 +2200,21 @@ export default {
               .length
           );
 
-        // ----------------------------------------------
+        // ----------------------------------------------------
         // REVOKE
-        // /api/client-link/:jti/revoke
-        // ----------------------------------------------
+        // ----------------------------------------------------
 
         if (
           rest.endsWith(
             "/revoke"
-          ) &&
-          method === "POST"
+          )
         ) {
+          if (
+            method !== "POST"
+          ) {
+            return methodNotAllowed();
+          }
+
           const jti =
             decodeURIComponent(
               rest.replace(
@@ -1926,10 +2229,9 @@ export default {
           );
         }
 
-        // ----------------------------------------------
+        // ----------------------------------------------------
         // PROJECT LINK
-        // /api/client-link/:projectId
-        // ----------------------------------------------
+        // ----------------------------------------------------
 
         const projectId =
           decodeURIComponent(
@@ -1955,14 +2257,12 @@ export default {
           );
         }
 
-        return badRequest(
-          "Método não permitido"
-        );
+        return methodNotAllowed();
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // NOT FOUND
-      // ------------------------------------------------------
+      // ======================================================
 
       return notFound(
         `Rota não encontrada: ${method} ${path}`
@@ -1970,19 +2270,12 @@ export default {
 
     } catch (error) {
       console.error(
-        "Worker error:",
+        "V8 ADMIN Worker error:",
         error
       );
 
-      return json(
-        {
-          error: true,
-          message:
-            "Erro interno no Worker",
-          detail:
-            String(error),
-        },
-        500
+      return serverError(
+        "Erro interno no Worker"
       );
     }
   },
