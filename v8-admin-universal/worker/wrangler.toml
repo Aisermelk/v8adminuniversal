@@ -1,0 +1,15 @@
+name = "v8adminuniversal"
+main = "index.js"
+compatibility_date = "2024-11-01"
+
+# KV Namespace — crie com:
+#   wrangler kv namespace create V8_KV
+# e cole o "id" gerado aqui embaixo.
+[[kv_namespaces]]
+binding = "V8_KV"
+id = "13dc8548480f4e2cafef0edf68c4a472"
+
+# Secrets (NÃO ficam neste arquivo — configure com os comandos abaixo):
+#   wrangler secret put ADMIN_EMAIL
+#   wrangler secret put ADMIN_PASS
+#   wrangler secret put TOKEN_SECRET   (uma string aleatória longa, ex: gerada com `openssl rand -hex 32`)
