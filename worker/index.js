@@ -3,12 +3,27 @@
  * Cloudflare Worker
  *
  * Worker: v8adminuniversal
- * API: https://v8adminuniversal.aisermelk.workers.dev
  *
- * Rotas principais:
- * POST /api/login
- * GET  /api/health
+ * API:
  * GET  /
+ * GET  /api/health
+ * POST /api/login
+ *
+ * GET/POST/PUT/DELETE /api/data/clients
+ * GET/POST/PUT/DELETE /api/data/projects
+ *
+ * GET /api/dashboard/stats
+ * GET /api/data/leads/:projectId
+ *
+ * GET  /api/public/config/:projectId
+ * POST /api/public/leads/:projectId
+ *
+ * GET  /api/client/:token
+ * PUT  /api/client/:token
+ *
+ * GET  /api/client-link/:projectId
+ * POST /api/client-link/:projectId
+ * POST /api/client-link/:jti/revoke
  *
  * KV:
  * V8_KV
@@ -20,20 +35,27 @@
  */
 
 // ============================================================
-// CONFIGURAÇÃO
+// CONFIG
 // ============================================================
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods":
+    "GET,POST,PUT,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization",
 };
+
+// ============================================================
+// RESPOSTAS
+// ============================================================
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type": "application/json; charset=UTF-8",
+      "Content-Type":
+        "application/json; charset=UTF-8",
       ...CORS_HEADERS,
     },
   });
@@ -49,7 +71,9 @@ function badRequest(message) {
   );
 }
 
-function unauthorized(message = "Não autorizado") {
+function unauthorized(
+  message = "Não autorizado"
+) {
   return json(
     {
       error: true,
@@ -59,7 +83,9 @@ function unauthorized(message = "Não autorizado") {
   );
 }
 
-function notFound(message = "Rota não encontrada") {
+function notFound(
+  message = "Rota não encontrada"
+) {
   return json(
     {
       error: true,
@@ -70,7 +96,8 @@ function notFound(message = "Rota não encontrada") {
 }
 
 function tooMany(
-  message = "Muitas tentativas. Tente novamente em alguns minutos."
+  message =
+    "Muitas tentativas. Tente novamente em alguns minutos."
 ) {
   return json(
     {
@@ -81,7 +108,9 @@ function tooMany(
   );
 }
 
-function serverError(message = "Erro interno do servidor") {
+function serverError(
+  message = "Erro interno do servidor"
+) {
   return json(
     {
       error: true,
@@ -115,11 +144,15 @@ function b64urlEncode(bytes) {
 }
 
 function b64urlEncodeStr(str) {
-  return b64urlEncode(new TextEncoder().encode(str));
+  return b64urlEncode(
+    new TextEncoder().encode(str)
+  );
 }
 
 function b64urlDecodeStr(str) {
-  str = str.replace(/-/g, "+").replace(/_/g, "/");
+  str = str
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
 
   while (str.length % 4) {
     str += "=";
@@ -129,12 +162,14 @@ function b64urlDecodeStr(str) {
 }
 
 // ============================================================
-// TOKEN HMAC SHA-256
+// TOKEN
 // ============================================================
 
 async function getSigningKey(secret) {
   if (!secret) {
-    throw new Error("TOKEN_SECRET não configurado");
+    throw new Error(
+      "TOKEN_SECRET não configurado"
+    );
   }
 
   return crypto.subtle.importKey(
@@ -145,28 +180,42 @@ async function getSigningKey(secret) {
       hash: "SHA-256",
     },
     false,
-    ["sign", "verify"]
+    ["sign"]
   );
 }
 
 async function signToken(payload, secret) {
   const key = await getSigningKey(secret);
 
-  const payloadStr = b64urlEncodeStr(JSON.stringify(payload));
+  const payloadStr =
+    b64urlEncodeStr(
+      JSON.stringify(payload)
+    );
 
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(payloadStr)
+  const signature =
+    await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(
+        payloadStr
+      )
+    );
+
+  return (
+    payloadStr +
+    "." +
+    b64urlEncode(signature)
   );
-
-  const sig = b64urlEncode(signature);
-
-  return `${payloadStr}.${sig}`;
 }
 
-async function verifyToken(token, secret) {
-  if (!token || typeof token !== "string") {
+async function verifyToken(
+  token,
+  secret
+) {
+  if (
+    !token ||
+    typeof token !== "string"
+  ) {
     return null;
   }
 
@@ -177,44 +226,54 @@ async function verifyToken(token, secret) {
   }
 
   const payloadStr = parts[0];
-  const sig = parts[1];
+  const signature = parts[1];
 
-  if (!payloadStr || !sig) {
+  if (!payloadStr || !signature) {
     return null;
   }
 
   try {
-    const key = await getSigningKey(secret);
+    const key =
+      await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(
+          secret
+        ),
+        {
+          name: "HMAC",
+          hash: "SHA-256",
+        },
+        false,
+        ["verify"]
+      );
 
-    const expectedSignature = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      new TextEncoder().encode(payloadStr)
-    );
+    const valid =
+      await crypto.subtle.verify(
+        "HMAC",
+        key,
+        base64UrlToBytes(signature),
+        new TextEncoder().encode(
+          payloadStr
+        )
+      );
 
-    const expectedSig = b64urlEncode(expectedSignature);
-
-    if (sig.length !== expectedSig.length) {
+    if (!valid) {
       return null;
     }
 
-    let diff = 0;
-
-    for (let i = 0; i < sig.length; i++) {
-      diff |= sig.charCodeAt(i) ^ expectedSig.charCodeAt(i);
-    }
-
-    if (diff !== 0) {
-      return null;
-    }
-
-    const payload = JSON.parse(b64urlDecodeStr(payloadStr));
+    const payload =
+      JSON.parse(
+        b64urlDecodeStr(payloadStr)
+      );
 
     if (!payload.exp) {
       return null;
     }
 
-    if (Date.now() / 1000 > payload.exp) {
+    if (
+      Date.now() / 1000 >
+      payload.exp
+    ) {
       return null;
     }
 
@@ -224,36 +283,78 @@ async function verifyToken(token, secret) {
   }
 }
 
+function base64UrlToBytes(str) {
+  str = str
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+
+  while (str.length % 4) {
+    str += "=";
+  }
+
+  const binary = atob(str);
+
+  const bytes =
+    new Uint8Array(
+      binary.length
+    );
+
+  for (
+    let i = 0;
+    i < binary.length;
+    i++
+  ) {
+    bytes[i] =
+      binary.charCodeAt(i);
+  }
+
+  return bytes;
+}
+
 // ============================================================
-// AUTORIZAÇÃO
+// AUTH ADMIN
 // ============================================================
 
 function getBearerToken(request) {
   const authorization =
-    request.headers.get("Authorization") || "";
+    request.headers.get(
+      "Authorization"
+    ) || "";
 
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  const match =
+    authorization.match(
+      /^Bearer\s+(.+)$/i
+    );
 
-  return match ? match[1] : null;
+  return match
+    ? match[1]
+    : null;
 }
 
-async function requireAdmin(request, env) {
-  const token = getBearerToken(request);
+async function requireAdmin(
+  request,
+  env
+) {
+  const token =
+    getBearerToken(request);
 
   if (!token) {
     return null;
   }
 
-  const payload = await verifyToken(
-    token,
-    env.TOKEN_SECRET
-  );
+  const payload =
+    await verifyToken(
+      token,
+      env.TOKEN_SECRET
+    );
 
   if (!payload) {
     return null;
   }
 
-  if (payload.role !== "admin") {
+  if (
+    payload.role !== "admin"
+  ) {
     return null;
   }
 
@@ -264,12 +365,19 @@ async function requireAdmin(request, env) {
 // KV
 // ============================================================
 
-async function kvGetJSON(env, key, fallback = null) {
+async function kvGetJSON(
+  env,
+  key,
+  fallback = null
+) {
   if (!env.V8_KV) {
-    throw new Error("Binding V8_KV não configurado");
+    throw new Error(
+      "Binding V8_KV não configurado"
+    );
   }
 
-  const raw = await env.V8_KV.get(key);
+  const raw =
+    await env.V8_KV.get(key);
 
   if (!raw) {
     return fallback;
@@ -282,9 +390,15 @@ async function kvGetJSON(env, key, fallback = null) {
   }
 }
 
-async function kvPutJSON(env, key, value) {
+async function kvPutJSON(
+  env,
+  key,
+  value
+) {
   if (!env.V8_KV) {
-    throw new Error("Binding V8_KV não configurado");
+    throw new Error(
+      "Binding V8_KV não configurado"
+    );
   }
 
   await env.V8_KV.put(
@@ -294,49 +408,67 @@ async function kvPutJSON(env, key, value) {
 }
 
 // ============================================================
-// RATE LIMIT LOGIN
+// RATE LIMIT
 // ============================================================
 
 const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_WINDOW_SECONDS = 15 * 60;
+const LOGIN_WINDOW_SECONDS =
+  15 * 60;
 
-async function checkLoginRateLimit(env, ip) {
-  const key = `ratelimit:login:${ip}`;
+async function checkLoginRateLimit(
+  env,
+  ip
+) {
+  const key =
+    `ratelimit:login:${ip}`;
 
-  const record = await kvGetJSON(
-    env,
-    key,
-    {
-      count: 0,
-    }
+  const record =
+    await kvGetJSON(
+      env,
+      key,
+      {
+        count: 0,
+      }
+    );
+
+  return (
+    record.count <
+    LOGIN_MAX_ATTEMPTS
   );
-
-  return record.count < LOGIN_MAX_ATTEMPTS;
 }
 
-async function registerLoginFailure(env, ip) {
-  const key = `ratelimit:login:${ip}`;
+async function registerLoginFailure(
+  env,
+  ip
+) {
+  const key =
+    `ratelimit:login:${ip}`;
 
-  const record = await kvGetJSON(
-    env,
-    key,
-    {
-      count: 0,
-    }
-  );
+  const record =
+    await kvGetJSON(
+      env,
+      key,
+      {
+        count: 0,
+      }
+    );
 
-  record.count += 1;
+  record.count++;
 
   await env.V8_KV.put(
     key,
     JSON.stringify(record),
     {
-      expirationTtl: LOGIN_WINDOW_SECONDS,
+      expirationTtl:
+        LOGIN_WINDOW_SECONDS,
     }
   );
 }
 
-async function clearLoginRateLimit(env, ip) {
+async function clearLoginRateLimit(
+  env,
+  ip
+) {
   await env.V8_KV.delete(
     `ratelimit:login:${ip}`
   );
@@ -346,7 +478,10 @@ async function clearLoginRateLimit(env, ip) {
 // LOGIN
 // ============================================================
 
-async function handleLogin(request, env) {
+async function handleLogin(
+  request,
+  env
+) {
   if (!env.ADMIN_EMAIL) {
     return serverError(
       "ADMIN_EMAIL não configurado no Worker"
@@ -366,28 +501,39 @@ async function handleLogin(request, env) {
   }
 
   const ip =
-    request.headers.get("CF-Connecting-IP") ||
-    "unknown";
+    request.headers.get(
+      "CF-Connecting-IP"
+    ) || "unknown";
 
-  if (!(await checkLoginRateLimit(env, ip))) {
+  if (
+    !(await checkLoginRateLimit(
+      env,
+      ip
+    ))
+  ) {
     return tooMany();
   }
 
   let body;
 
   try {
-    body = await request.json();
+    body =
+      await request.json();
   } catch {
-    return badRequest("JSON inválido");
+    return badRequest(
+      "JSON inválido"
+    );
   }
 
   const email =
-    typeof body?.email === "string"
+    typeof body?.email ===
+    "string"
       ? body.email.trim()
       : "";
 
   const password =
-    typeof body?.password === "string"
+    typeof body?.password ===
+    "string"
       ? body.password
       : "";
 
@@ -398,55 +544,73 @@ async function handleLogin(request, env) {
   }
 
   if (
-    email !== env.ADMIN_EMAIL ||
-    password !== env.ADMIN_PASS
+    email !==
+      env.ADMIN_EMAIL ||
+    password !==
+      env.ADMIN_PASS
   ) {
-    await registerLoginFailure(env, ip);
+    await registerLoginFailure(
+      env,
+      ip
+    );
 
     return unauthorized(
       "E-mail ou senha inválidos"
     );
   }
 
-  await clearLoginRateLimit(env, ip);
+  await clearLoginRateLimit(
+    env,
+    ip
+  );
 
   const now =
-    Math.floor(Date.now() / 1000);
+    Math.floor(
+      Date.now() / 1000
+    );
 
   const exp =
-    now + 60 * 60 * 12;
+    now +
+    60 * 60 * 12;
 
-  const token = await signToken(
-    {
-      role: "admin",
-      iat: now,
-      exp,
-    },
-    env.TOKEN_SECRET
-  );
+  const token =
+    await signToken(
+      {
+        role: "admin",
+        iat: now,
+        exp,
+      },
+      env.TOKEN_SECRET
+    );
 
   return json({
     success: true,
     token,
-    expiresAt: exp * 1000,
+    expiresAt:
+      exp * 1000,
   });
 }
 
 // ============================================================
-// CLIENTES / PROJETOS
+// COLEÇÕES
 // ============================================================
 
 async function handleCollectionGet(
   env,
   collection
 ) {
-  const list = await kvGetJSON(
-    env,
-    collection,
-    []
-  );
+  const list =
+    await kvGetJSON(
+      env,
+      collection,
+      []
+    );
 
-  return json(list);
+  return json(
+    Array.isArray(list)
+      ? list
+      : []
+  );
 }
 
 async function handleCollectionCreate(
@@ -458,22 +622,29 @@ async function handleCollectionCreate(
   let body;
 
   try {
-    body = await request.json();
+    body =
+      await request.json();
   } catch {
-    return badRequest("JSON inválido");
+    return badRequest(
+      "JSON inválido"
+    );
   }
 
-  const list = await kvGetJSON(
-    env,
-    collection,
-    []
-  );
+  const list =
+    await kvGetJSON(
+      env,
+      collection,
+      []
+    );
 
   const item = {
-    ...(shapeFn ? shapeFn() : {}),
+    ...(shapeFn
+      ? shapeFn()
+      : {}),
     ...body,
     id: uuid(),
-    createdAt: Date.now(),
+    createdAt:
+      Date.now(),
   };
 
   list.push(item);
@@ -484,7 +655,10 @@ async function handleCollectionCreate(
     list
   );
 
-  return json(item, 201);
+  return json(
+    item,
+    201
+  );
 }
 
 async function handleCollectionUpdate(
@@ -495,9 +669,12 @@ async function handleCollectionUpdate(
   let body;
 
   try {
-    body = await request.json();
+    body =
+      await request.json();
   } catch {
-    return badRequest("JSON inválido");
+    return badRequest(
+      "JSON inválido"
+    );
   }
 
   if (!body?.id) {
@@ -506,15 +683,19 @@ async function handleCollectionUpdate(
     );
   }
 
-  const list = await kvGetJSON(
-    env,
-    collection,
-    []
-  );
+  const list =
+    await kvGetJSON(
+      env,
+      collection,
+      []
+    );
 
-  const index = list.findIndex(
-    item => item.id === body.id
-  );
+  const index =
+    list.findIndex(
+      item =>
+        item.id ===
+        body.id
+    );
 
   if (index === -1) {
     return notFound(
@@ -525,6 +706,7 @@ async function handleCollectionUpdate(
   list[index] = {
     ...list[index],
     ...body,
+    id: list[index].id,
   };
 
   await kvPutJSON(
@@ -533,7 +715,9 @@ async function handleCollectionUpdate(
     list
   );
 
-  return json(list[index]);
+  return json(
+    list[index]
+  );
 }
 
 async function handleCollectionDelete(
@@ -548,17 +732,23 @@ async function handleCollectionDelete(
     );
   }
 
-  const list = await kvGetJSON(
-    env,
-    collection,
-    []
-  );
+  const list =
+    await kvGetJSON(
+      env,
+      collection,
+      []
+    );
 
-  const filtered = list.filter(
-    item => item.id !== id
-  );
+  const filtered =
+    list.filter(
+      item =>
+        item.id !== id
+    );
 
-  if (filtered.length === list.length) {
+  if (
+    filtered.length ===
+    list.length
+  ) {
     return notFound(
       "Item não encontrado"
     );
@@ -576,16 +766,14 @@ async function handleCollectionDelete(
 }
 
 // ============================================================
-// PROJETO PADRÃO
+// PROJETO
 // ============================================================
 
 function defaultProjectShape() {
   return {
-    id: null,
-
     name: "",
-
-    status: "Em desenvolvimento",
+    status:
+      "Em desenvolvimento",
 
     tracking: {
       pixel: "",
@@ -608,8 +796,6 @@ function defaultProjectShape() {
     },
 
     formspree: "",
-
-    createdAt: Date.now(),
   };
 }
 
@@ -621,13 +807,18 @@ async function handleGetLeads(
   env,
   projectId
 ) {
-  const leads = await kvGetJSON(
-    env,
-    `leads:${projectId}`,
-    []
-  );
+  const leads =
+    await kvGetJSON(
+      env,
+      `leads:${projectId}`,
+      []
+    );
 
-  return json(leads);
+  return json(
+    Array.isArray(leads)
+      ? leads
+      : []
+  );
 }
 
 async function handlePublicCreateLead(
@@ -635,15 +826,19 @@ async function handlePublicCreateLead(
   env,
   projectId
 ) {
-  const projects = await kvGetJSON(
-    env,
-    "projects",
-    []
-  );
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
 
-  const project = projects.find(
-    p => p.id === projectId
-  );
+  const project =
+    projects.find(
+      p =>
+        p.id ===
+        projectId
+    );
 
   if (!project) {
     return notFound(
@@ -654,13 +849,15 @@ async function handlePublicCreateLead(
   let body;
 
   try {
-    body = await request.json();
+    body =
+      await request.json();
   } catch {
     return badRequest(
       "JSON inválido"
     );
   }
 
+  // Honeypot
   if (body?.website) {
     return json({
       ok: true,
@@ -669,17 +866,31 @@ async function handlePublicCreateLead(
 
   const lead = {
     id: uuid(),
-    name: body?.name || "",
-    email: body?.email || "",
-    message: body?.message || "",
-    createdAt: Date.now(),
+    name:
+      typeof body?.name ===
+      "string"
+        ? body.name.trim()
+        : "",
+    email:
+      typeof body?.email ===
+      "string"
+        ? body.email.trim()
+        : "",
+    message:
+      typeof body?.message ===
+      "string"
+        ? body.message.trim()
+        : "",
+    createdAt:
+      Date.now(),
   };
 
-  const leads = await kvGetJSON(
-    env,
-    `leads:${projectId}`,
-    []
-  );
+  const leads =
+    await kvGetJSON(
+      env,
+      `leads:${projectId}`,
+      []
+    );
 
   leads.unshift(lead);
 
@@ -692,6 +903,7 @@ async function handlePublicCreateLead(
   return json(
     {
       ok: true,
+      leadId: lead.id,
     },
     201
   );
@@ -705,15 +917,19 @@ async function handlePublicConfig(
   env,
   projectId
 ) {
-  const projects = await kvGetJSON(
-    env,
-    "projects",
-    []
-  );
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
 
-  const project = projects.find(
-    p => p.id === projectId
-  );
+  const project =
+    projects.find(
+      p =>
+        p.id ===
+        projectId
+    );
 
   if (!project) {
     return notFound(
@@ -722,95 +938,632 @@ async function handlePublicConfig(
   }
 
   return json({
-    tracking: project.tracking || {},
-    contact: project.contact || {},
-    social: project.social || {},
-    formspree: project.formspree || "",
+    tracking:
+      project.tracking ||
+      {},
+    contact:
+      project.contact ||
+      {},
+    social:
+      project.social ||
+      {},
+    formspree:
+      project.formspree ||
+      "",
   });
 }
 
 // ============================================================
-// DASHBOARD
+// DASHBOARD STATS
 // ============================================================
 
-async function handleDashboardStats(env) {
-  const [
-    clients,
-    projects,
-  ] = await Promise.all([
-    kvGetJSON(env, "clients", []),
-    kvGetJSON(env, "projects", []),
-  ]);
-
-  let totalLeads = 0;
-
-  const recentLeads = [];
-
-  for (const project of projects) {
-    const leads = await kvGetJSON(
+async function handleDashboardStats(
+  env
+) {
+  const clients =
+    await kvGetJSON(
       env,
-      `leads:${project.id}`,
+      "clients",
       []
     );
 
-    totalLeads += leads.length;
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
 
-    for (const lead of leads.slice(0, 5)) {
+  let totalLeads = 0;
+  const recentLeads = [];
+
+  for (
+    const project of projects
+  ) {
+    const leads =
+      await kvGetJSON(
+        env,
+        `leads:${project.id}`,
+        []
+      );
+
+    totalLeads +=
+      leads.length;
+
+    for (
+      const lead of
+        leads.slice(0, 10)
+    ) {
       recentLeads.push({
         ...lead,
-        projectName: project.name,
+        projectName:
+          project.name ||
+          "Projeto",
       });
     }
   }
 
   recentLeads.sort(
     (a, b) =>
-      b.createdAt - a.createdAt
+      (b.createdAt || 0) -
+      (a.createdAt || 0)
   );
 
   return json({
-    totalClients: clients.length,
-    totalProjects: projects.length,
+    totalClients:
+      clients.length,
+
+    totalProjects:
+      projects.length,
+
     totalLeads,
+
     recentLeads:
-      recentLeads.slice(0, 5),
+      recentLeads.slice(
+        0,
+        5
+      ),
   });
 }
 
 // ============================================================
-// ROUTER PRINCIPAL
+// CLIENT LINKS
+// ============================================================
+
+const ALLOWED_CLIENT_FIELDS = [
+  "tracking.pixel",
+  "tracking.tag",
+  "tracking.analytics",
+
+  "contact.whatsapp",
+  "contact.email",
+  "contact.phone",
+
+  "social.facebook",
+  "social.instagram",
+  "social.tiktok",
+  "social.youtube",
+  "social.linkedin",
+
+  "formspree",
+];
+
+async function handleClientLinksGet(
+  env,
+  projectId
+) {
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
+
+  const project =
+    projects.find(
+      p =>
+        p.id ===
+        projectId
+    );
+
+  if (!project) {
+    return notFound(
+      "Projeto não encontrado"
+    );
+  }
+
+  const links =
+    await kvGetJSON(
+      env,
+      `client_links:${projectId}`,
+      []
+    );
+
+  return json(
+    Array.isArray(links)
+      ? links
+      : []
+  );
+}
+
+async function handleClientLinkCreate(
+  request,
+  env,
+  projectId
+) {
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
+
+  const project =
+    projects.find(
+      p =>
+        p.id ===
+        projectId
+    );
+
+  if (!project) {
+    return notFound(
+      "Projeto não encontrado"
+    );
+  }
+
+  let body;
+
+  try {
+    body =
+      await request.json();
+  } catch {
+    return badRequest(
+      "JSON inválido"
+    );
+  }
+
+  const requested =
+    Array.isArray(
+      body?.fields
+    )
+      ? body.fields
+      : [];
+
+  const fields =
+    requested.filter(
+      field =>
+        ALLOWED_CLIENT_FIELDS.includes(
+          field
+        )
+    );
+
+  if (!fields.length) {
+    return badRequest(
+      "Nenhum campo válido foi selecionado"
+    );
+  }
+
+  const jti = uuid();
+
+  const now =
+    Math.floor(
+      Date.now() / 1000
+    );
+
+  const exp =
+    now +
+    60 * 60 * 24 * 30;
+
+  const token =
+    await signToken(
+      {
+        role: "client",
+        jti,
+        projectId,
+        iat: now,
+        exp,
+      },
+      env.TOKEN_SECRET
+    );
+
+  await kvPutJSON(
+    env,
+    `client_token:${jti}`,
+    {
+      jti,
+      projectId,
+      fields,
+      revoked: false,
+      createdAt:
+        Date.now(),
+      expiresAt:
+        exp * 1000,
+    }
+  );
+
+  const links =
+    await kvGetJSON(
+      env,
+      `client_links:${projectId}`,
+      []
+    );
+
+  links.unshift({
+    jti,
+    projectId,
+    fields,
+    revoked: false,
+    createdAt:
+      Date.now(),
+    expiresAt:
+      exp * 1000,
+  });
+
+  await kvPutJSON(
+    env,
+    `client_links:${projectId}`,
+    links.slice(0, 100)
+  );
+
+  return json(
+    {
+      ok: true,
+      token,
+      jti,
+      projectId,
+      fields,
+      expiresAt:
+        exp * 1000,
+    },
+    201
+  );
+}
+
+async function handleClientLinkRevoke(
+  env,
+  jti
+) {
+  if (!jti) {
+    return badRequest(
+      "JTI obrigatório"
+    );
+  }
+
+  const record =
+    await kvGetJSON(
+      env,
+      `client_token:${jti}`,
+      null
+    );
+
+  if (!record) {
+    return notFound(
+      "Link não encontrado"
+    );
+  }
+
+  record.revoked = true;
+
+  await kvPutJSON(
+    env,
+    `client_token:${jti}`,
+    record
+  );
+
+  const links =
+    await kvGetJSON(
+      env,
+      `client_links:${record.projectId}`,
+      []
+    );
+
+  const updated =
+    links.map(
+      link =>
+        link.jti === jti
+          ? {
+              ...link,
+              revoked: true,
+            }
+          : link
+    );
+
+  await kvPutJSON(
+    env,
+    `client_links:${record.projectId}`,
+    updated
+  );
+
+  return json({
+    ok: true,
+    revoked: true,
+  });
+}
+
+// ============================================================
+// CLIENTE
+// ============================================================
+
+async function requireClientToken(
+  token,
+  env
+) {
+  const payload =
+    await verifyToken(
+      token,
+      env.TOKEN_SECRET
+    );
+
+  if (
+    !payload ||
+    payload.role !==
+      "client"
+  ) {
+    return null;
+  }
+
+  if (!payload.jti) {
+    return null;
+  }
+
+  const record =
+    await kvGetJSON(
+      env,
+      `client_token:${payload.jti}`,
+      null
+    );
+
+  if (!record) {
+    return null;
+  }
+
+  if (record.revoked) {
+    return null;
+  }
+
+  if (
+    record.expiresAt &&
+    Date.now() >
+      record.expiresAt
+  ) {
+    return null;
+  }
+
+  return {
+    ...payload,
+    fields:
+      record.fields || [],
+    projectId:
+      record.projectId,
+  };
+}
+
+async function handleClientGet(
+  env,
+  token
+) {
+  const auth =
+    await requireClientToken(
+      token,
+      env
+    );
+
+  if (!auth) {
+    return unauthorized(
+      "Link inválido, expirado ou revogado"
+    );
+  }
+
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
+
+  const project =
+    projects.find(
+      p =>
+        p.id ===
+        auth.projectId
+    );
+
+  if (!project) {
+    return notFound(
+      "Projeto não encontrado"
+    );
+  }
+
+  return json({
+    projectName:
+      project.name,
+    fields:
+      auth.fields,
+    data: project,
+  });
+}
+
+async function handleClientUpdate(
+  request,
+  env,
+  token
+) {
+  const auth =
+    await requireClientToken(
+      token,
+      env
+    );
+
+  if (!auth) {
+    return unauthorized(
+      "Link inválido, expirado ou revogado"
+    );
+  }
+
+  let body;
+
+  try {
+    body =
+      await request.json();
+  } catch {
+    return badRequest(
+      "JSON inválido"
+    );
+  }
+
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
+
+  const index =
+    projects.findIndex(
+      p =>
+        p.id ===
+        auth.projectId
+    );
+
+  if (index === -1) {
+    return notFound(
+      "Projeto não encontrado"
+    );
+  }
+
+  for (
+    const path of
+      auth.fields
+  ) {
+    const value =
+      getByPath(
+        body,
+        path
+      );
+
+    if (
+      value !==
+      undefined
+    ) {
+      setByPath(
+        projects[index],
+        path,
+        value
+      );
+    }
+  }
+
+  await kvPutJSON(
+    env,
+    "projects",
+    projects
+  );
+
+  return json({
+    ok: true,
+  });
+}
+
+// ============================================================
+// GET / SET BY PATH
+// ============================================================
+
+function getByPath(
+  obj,
+  path
+) {
+  return path
+    .split(".")
+    .reduce(
+      (current, key) =>
+        current
+          ? current[key]
+          : undefined,
+      obj
+    );
+}
+
+function setByPath(
+  obj,
+  path,
+  value
+) {
+  const keys =
+    path.split(".");
+
+  let current = obj;
+
+  for (
+    let i = 0;
+    i <
+    keys.length - 1;
+    i++
+  ) {
+    if (
+      typeof current[
+        keys[i]
+      ] !== "object" ||
+      current[
+        keys[i]
+      ] === null
+    ) {
+      current[keys[i]] = {};
+    }
+
+    current =
+      current[keys[i]];
+  }
+
+  current[
+    keys[
+      keys.length - 1
+    ]
+  ] = value;
+}
+
+// ============================================================
+// ROUTER
 // ============================================================
 
 export default {
-  async fetch(request, env) {
-    // --------------------------------------------------------
-    // CORS
-    // --------------------------------------------------------
-
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: CORS_HEADERS,
-      });
+  async fetch(
+    request,
+    env
+  ) {
+    if (
+      request.method ===
+      "OPTIONS"
+    ) {
+      return new Response(
+        null,
+        {
+          status: 204,
+          headers:
+            CORS_HEADERS,
+        }
+      );
     }
 
-    const url = new URL(request.url);
+    const url =
+      new URL(
+        request.url
+      );
 
-    // Remove "/" final para evitar:
-    // /api/login/
-    // não encontrar /api/login
     const path =
       url.pathname.length > 1
-        ? url.pathname.replace(/\/+$/, "")
+        ? url.pathname.replace(
+            /\/+$/,
+            ""
+          )
         : "/";
 
     const method =
       request.method.toUpperCase();
 
     try {
-      // ======================================================
-      // TESTE PRINCIPAL
-      // ======================================================
+      // ------------------------------------------------------
+      // HOME
+      // ------------------------------------------------------
 
       if (
         path === "/" &&
@@ -818,42 +1571,56 @@ export default {
       ) {
         return json({
           ok: true,
-          worker: "v8adminuniversal",
-          status: "online",
+          worker:
+            "v8adminuniversal",
+          status:
+            "online",
           api: true,
-          time: new Date().toISOString(),
+          time:
+            new Date().toISOString(),
         });
       }
 
-      // ======================================================
-      // HEALTH CHECK
-      // ======================================================
+      // ------------------------------------------------------
+      // HEALTH
+      // ------------------------------------------------------
 
       if (
-        path === "/api/health" &&
+        path ===
+          "/api/health" &&
         method === "GET"
       ) {
         return json({
           ok: true,
-          worker: "v8adminuniversal",
-          status: "online",
-          kv: !!env.V8_KV,
+          worker:
+            "v8adminuniversal",
+          status:
+            "online",
+
+          kv:
+            !!env.V8_KV,
+
           adminEmail:
             !!env.ADMIN_EMAIL,
+
           adminPass:
             !!env.ADMIN_PASS,
+
           tokenSecret:
             !!env.TOKEN_SECRET,
-          time: new Date().toISOString(),
+
+          time:
+            new Date().toISOString(),
         });
       }
 
-      // ======================================================
+      // ------------------------------------------------------
       // LOGIN
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
-        path === "/api/login" &&
+        path ===
+          "/api/login" &&
         method === "POST"
       ) {
         return handleLogin(
@@ -862,9 +1629,9 @@ export default {
         );
       }
 
-      // ======================================================
-      // CONFIG PÚBLICA
-      // ======================================================
+      // ------------------------------------------------------
+      // PUBLIC CONFIG
+      // ------------------------------------------------------
 
       if (
         path.startsWith(
@@ -886,9 +1653,9 @@ export default {
         );
       }
 
-      // ======================================================
-      // LEADS PÚBLICOS
-      // ======================================================
+      // ------------------------------------------------------
+      // PUBLIC LEADS
+      // ------------------------------------------------------
 
       if (
         path.startsWith(
@@ -911,9 +1678,9 @@ export default {
         );
       }
 
-      // ======================================================
-      // CLIENTE
-      // ======================================================
+      // ------------------------------------------------------
+      // CLIENT LINK ACCESS
+      // ------------------------------------------------------
 
       if (
         path.startsWith(
@@ -946,11 +1713,15 @@ export default {
             token
           );
         }
+
+        return notFound(
+          "Método não permitido"
+        );
       }
 
-      // ======================================================
-      // ADMIN
-      // ======================================================
+      // ------------------------------------------------------
+      // ADMIN AUTH
+      // ------------------------------------------------------
 
       const admin =
         await requireAdmin(
@@ -964,9 +1735,9 @@ export default {
         );
       }
 
-      // ======================================================
+      // ------------------------------------------------------
       // DASHBOARD
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
         path ===
@@ -978,12 +1749,13 @@ export default {
         );
       }
 
-      // ======================================================
+      // ------------------------------------------------------
       // CLIENTS
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
-        path === "/api/data/clients"
+        path ===
+        "/api/data/clients"
       ) {
         if (
           method === "GET"
@@ -1015,7 +1787,8 @@ export default {
         }
 
         if (
-          method === "DELETE"
+          method ===
+          "DELETE"
         ) {
           return handleCollectionDelete(
             request,
@@ -1026,11 +1799,15 @@ export default {
             )
           );
         }
+
+        return badRequest(
+          "Método não permitido"
+        );
       }
 
-      // ======================================================
+      // ------------------------------------------------------
       // PROJECTS
-      // ======================================================
+      // ------------------------------------------------------
 
       if (
         path ===
@@ -1067,7 +1844,8 @@ export default {
         }
 
         if (
-          method === "DELETE"
+          method ===
+          "DELETE"
         ) {
           return handleCollectionDelete(
             request,
@@ -1078,11 +1856,15 @@ export default {
             )
           );
         }
+
+        return badRequest(
+          "Método não permitido"
+        );
       }
 
-      // ======================================================
-      // LEADS ADMIN
-      // ======================================================
+      // ------------------------------------------------------
+      // ADMIN LEADS
+      // ------------------------------------------------------
 
       if (
         path.startsWith(
@@ -1104,9 +1886,83 @@ export default {
         );
       }
 
-      // ======================================================
-      // ROTA NÃO ENCONTRADA
-      // ======================================================
+      // ------------------------------------------------------
+      // CLIENT LINKS
+      // ------------------------------------------------------
+
+      if (
+        path.startsWith(
+          "/api/client-link/"
+        )
+      ) {
+        const rest =
+          path.substring(
+            "/api/client-link/"
+              .length
+          );
+
+        // ----------------------------------------------
+        // REVOKE
+        // /api/client-link/:jti/revoke
+        // ----------------------------------------------
+
+        if (
+          rest.endsWith(
+            "/revoke"
+          ) &&
+          method === "POST"
+        ) {
+          const jti =
+            decodeURIComponent(
+              rest.replace(
+                /\/revoke$/,
+                ""
+              )
+            );
+
+          return handleClientLinkRevoke(
+            env,
+            jti
+          );
+        }
+
+        // ----------------------------------------------
+        // PROJECT LINK
+        // /api/client-link/:projectId
+        // ----------------------------------------------
+
+        const projectId =
+          decodeURIComponent(
+            rest
+          );
+
+        if (
+          method === "GET"
+        ) {
+          return handleClientLinksGet(
+            env,
+            projectId
+          );
+        }
+
+        if (
+          method === "POST"
+        ) {
+          return handleClientLinkCreate(
+            request,
+            env,
+            projectId
+          );
+        }
+
+        return badRequest(
+          "Método não permitido"
+        );
+      }
+
+      // ------------------------------------------------------
+      // NOT FOUND
+      // ------------------------------------------------------
 
       return notFound(
         `Rota não encontrada: ${method} ${path}`
@@ -1123,209 +1979,11 @@ export default {
           error: true,
           message:
             "Erro interno no Worker",
-          detail: String(error),
+          detail:
+            String(error),
         },
         500
       );
     }
   },
 };
-
-// ============================================================
-// FUNÇÕES DE CLIENTE
-// ============================================================
-
-async function requireClientToken(
-  token,
-  env
-) {
-  const payload =
-    await verifyToken(
-      token,
-      env.TOKEN_SECRET
-    );
-
-  if (
-    !payload ||
-    payload.role !== "client"
-  ) {
-    return null;
-  }
-
-  const record =
-    await kvGetJSON(
-      env,
-      `client_token:${payload.jti}`
-    );
-
-  if (
-    !record ||
-    record.revoked
-  ) {
-    return null;
-  }
-
-  return {
-    ...payload,
-    fields: record.fields,
-    projectId: record.projectId,
-  };
-}
-
-async function handleClientGet(
-  env,
-  token
-) {
-  const auth =
-    await requireClientToken(
-      token,
-      env
-    );
-
-  if (!auth) {
-    return unauthorized(
-      "Link inválido ou revogado"
-    );
-  }
-
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
-  const project =
-    projects.find(
-      p => p.id === auth.projectId
-    );
-
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  return json({
-    projectName: project.name,
-    fields: auth.fields,
-    data: project,
-  });
-}
-
-async function handleClientUpdate(
-  request,
-  env,
-  token
-) {
-  const auth =
-    await requireClientToken(
-      token,
-      env
-    );
-
-  if (!auth) {
-    return unauthorized(
-      "Link inválido ou revogado"
-    );
-  }
-
-  let body;
-
-  try {
-    body = await request.json();
-  } catch {
-    return badRequest(
-      "JSON inválido"
-    );
-  }
-
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
-  const index =
-    projects.findIndex(
-      p => p.id === auth.projectId
-    );
-
-  if (index === -1) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  for (
-    const path of auth.fields
-  ) {
-    setByPath(
-      projects[index],
-      path,
-      getByPath(body, path)
-    );
-  }
-
-  await kvPutJSON(
-    env,
-    "projects",
-    projects
-  );
-
-  return json({
-    ok: true,
-  });
-}
-
-// ============================================================
-// CAMPOS
-// ============================================================
-
-function getByPath(
-  obj,
-  path
-) {
-  return path
-    .split(".")
-    .reduce(
-      (current, key) =>
-        current
-          ? current[key]
-          : undefined,
-      obj
-    );
-}
-
-function setByPath(
-  obj,
-  path,
-  value
-) {
-  const keys =
-    path.split(".");
-
-  let current = obj;
-
-  for (
-    let i = 0;
-    i < keys.length - 1;
-    i++
-  ) {
-    if (
-      typeof current[keys[i]] !==
-        "object" ||
-      current[keys[i]] === null
-    ) {
-      current[keys[i]] = {};
-    }
-
-    current =
-      current[keys[i]];
-  }
-
-  current[
-    keys[keys.length - 1]
-  ] = value;
-}
