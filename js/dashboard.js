@@ -253,7 +253,14 @@ function renderProjects() {
 
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Projeto</th><th>Status</th><th></th></tr></thead>
+      <thead>
+  <tr>
+    <th>Projeto</th>
+    <th>ID do projeto</th>
+    <th>Status</th>
+    <th></th>
+  </tr>
+</thead>
       <tbody>
         ${state.projects.map((p) => `
           <tr>
