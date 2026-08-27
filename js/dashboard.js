@@ -1,6 +1,4 @@
-// V8 ADMIN — Universal
-// Dashboard completo + Clientes + Projetos + IDs + Leads + Links
-// ================================================================
+// V8 ADMIN — Universal | Lógica completa do painel
 
 const CLIENT_FIELD_LABELS = {
   "tracking.pixel": "Meta Pixel",
@@ -19,28 +17,22 @@ const CLIENT_FIELD_LABELS = {
 
 const state = {
   section: "dashboard",
-
   clients: [],
   projects: [],
-
   editingClientId: null,
   editingProjectId: null,
-
   projectTab: "geral",
-
   _editingProjectDraft: null,
   _lastGeneratedToken: null,
 };
-
-
-// ================================================================
-// UTILITÁRIOS
-// ================================================================
 
 function $(id) {
   return document.getElementById(id);
 }
 
+// ================================================================
+// UTILITÁRIOS
+// ================================================================
 
 function toast(message, type = "success") {
   const el = document.createElement("div");
@@ -55,13 +47,23 @@ function toast(message, type = "success") {
   }, 3200);
 }
 
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
 
-function getByPath(obj, path) {
-  return path
-    .split(".")
-    .reduce((o, k) => (o ? o[k] : undefined), obj);
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
+function getByPath(obj, path) {
+  return path.split(".").reduce(
+    (o, k) => (o ? o[k] : undefined),
+    obj
+  );
+}
 
 function setByPath(obj, path, value) {
   const keys = path.split(".");
@@ -81,80 +83,35 @@ function setByPath(obj, path, value) {
   cur[keys[keys.length - 1]] = value;
 }
 
-
-function escapeHtml(str) {
-  if (str === null || str === undefined) {
-    return "";
-  }
-
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-
 // ================================================================
-// NORMALIZA RESPOSTAS DA API
-// ================================================================
-
-function normalizeArray(response) {
-  if (Array.isArray(response)) {
-    return response;
-  }
-
-  if (!response || typeof response !== "object") {
-    return [];
-  }
-
-  if (Array.isArray(response.data)) {
-    return response.data;
-  }
-
-  if (Array.isArray(response.items)) {
-    return response.items;
-  }
-
-  if (Array.isArray(response.results)) {
-    return response.results;
-  }
-
-  return [];
-}
-
-
-// ================================================================
-// INIT
+// INICIALIZAÇÃO
 // ================================================================
 
 document.addEventListener("DOMContentLoaded", async () => {
-
   try {
     if (typeof Auth !== "undefined") {
       Auth.requireAuth();
     }
+
+    applyStoredTheme();
+    setupNav();
+    setupThemeToggle();
+
+    switchSection("dashboard");
+
+    await refreshAllData();
+
   } catch (error) {
-    console.error("Erro na autenticação:", error);
+    console.error("Erro ao inicializar painel:", error);
+    toast("Erro ao carregar o painel.", "error");
   }
-
-  applyStoredTheme();
-  setupNav();
-  setupThemeToggle();
-
-  await refreshAllData();
-
-  switchSection("dashboard");
 });
-
 
 // ================================================================
 // NAVEGAÇÃO
 // ================================================================
 
 function setupNav() {
-
   document
     .querySelectorAll(".nav-item[data-section]")
     .forEach((btn) => {
@@ -165,23 +122,18 @@ function setupNav() {
 
     });
 
-
   const logoutBtn = $("logout-btn");
 
   if (logoutBtn) {
     logoutBtn.addEventListener("click", () => {
-
       if (typeof Auth !== "undefined") {
         Auth.logout();
       }
-
     });
   }
 }
 
-
 function switchSection(name) {
-
   state.section = name;
 
   document
@@ -195,7 +147,6 @@ function switchSection(name) {
 
     });
 
-
   document
     .querySelectorAll(".section")
     .forEach((sec) => {
@@ -206,7 +157,6 @@ function switchSection(name) {
       );
 
     });
-
 
   if (name === "dashboard") {
     renderDashboard();
@@ -221,38 +171,29 @@ function switchSection(name) {
   }
 }
 
-
 // ================================================================
-// CARREGAMENTO GERAL
+// CARREGAR DADOS
 // ================================================================
 
 async function refreshAllData() {
-
   try {
-
     const [clientsRes, projectsRes] = await Promise.all([
       API.get("/api/data/clients"),
       API.get("/api/data/projects"),
     ]);
 
+    state.clients = Array.isArray(clientsRes)
+      ? clientsRes
+      : [];
 
-    console.log("Clientes API:", clientsRes);
-    console.log("Projetos API:", projectsRes);
-
-
-    state.clients = normalizeArray(clientsRes);
-    state.projects = normalizeArray(projectsRes);
-
-
-    console.log("Clientes carregados:", state.clients);
-    console.log("Projetos carregados:", state.projects);
-
+    state.projects = Array.isArray(projectsRes)
+      ? projectsRes
+      : [];
 
     switchSection(state.section);
 
   } catch (error) {
-
-    console.error("Erro carregando dados:", error);
+    console.error("Erro ao carregar dados:", error);
 
     state.clients = [];
     state.projects = [];
@@ -261,17 +202,14 @@ async function refreshAllData() {
       "Não foi possível carregar os dados.",
       "error"
     );
-
   }
 }
-
 
 // ================================================================
 // TEMA
 // ================================================================
 
 function applyStoredTheme() {
-
   const saved =
     localStorage.getItem("v8_theme") || "dark";
 
@@ -281,25 +219,21 @@ function applyStoredTheme() {
   );
 }
 
-
 function setupThemeToggle() {
-
   const toggle = $("theme-toggle");
 
-  if (!toggle) {
-    return;
-  }
+  if (!toggle) return;
 
   toggle.checked =
     document.documentElement.getAttribute(
       "data-theme"
     ) === "light";
 
-
   toggle.addEventListener("change", () => {
 
-    const theme =
-      toggle.checked ? "light" : "dark";
+    const theme = toggle.checked
+      ? "light"
+      : "dark";
 
     document.documentElement.setAttribute(
       "data-theme",
@@ -310,10 +244,8 @@ function setupThemeToggle() {
       "v8_theme",
       theme
     );
-
   });
 }
-
 
 // ================================================================
 // DASHBOARD
@@ -323,11 +255,7 @@ async function renderDashboard() {
 
   const wrap = $("dashboard-stats");
 
-  if (!wrap) {
-    console.warn("Elemento dashboard-stats não encontrado.");
-    return;
-  }
-
+  if (!wrap) return;
 
   wrap.innerHTML = `
     <div class="stat-card">
@@ -346,160 +274,132 @@ async function renderDashboard() {
     </div>
   `;
 
+  let stats;
 
   try {
 
-    const response =
-      await API.get("/api/dashboard/stats");
-
-    console.log(
-      "Dashboard stats:",
-      response
+    stats = await API.get(
+      "/api/dashboard/stats"
     );
 
+  } catch (error) {
 
-    if (
-      !response ||
-      response.error
-    ) {
+    console.error(
+      "Erro ao buscar estatísticas:",
+      error
+    );
 
-      wrap.innerHTML = `
-        <div class="empty-state">
-          Não foi possível carregar as estatísticas.
-        </div>
-      `;
+    stats = {
+      error: true
+    };
+  }
 
-      renderRecentLeads([]);
-      return;
-    }
+  // ============================================================
+  // Se a API de estatísticas estiver funcionando
+  // ============================================================
 
-
-    const stats = response.data || response;
-
-
-    const totalProjects =
-      Number(
-        stats.totalProjects ??
-        stats.projects ??
-        state.projects.length ??
-        0
-      );
-
-
-    const totalClients =
-      Number(
-        stats.totalClients ??
-        stats.clients ??
-        state.clients.length ??
-        0
-      );
-
-
-    const totalLeads =
-      Number(
-        stats.totalLeads ??
-        stats.leads ??
-        0
-      );
-
+  if (
+    stats &&
+    !stats.error
+  ) {
 
     wrap.innerHTML = `
-
       <div class="stat-card">
-
         <div class="value">
-          ${totalProjects}
+          ${Number(stats.totalProjects || 0)}
         </div>
 
         <div class="label">
           Projetos
         </div>
-
       </div>
 
-
       <div class="stat-card">
-
         <div class="value">
-          ${totalClients}
+          ${Number(stats.totalClients || 0)}
         </div>
 
         <div class="label">
           Clientes
         </div>
-
       </div>
 
-
       <div class="stat-card">
-
         <div class="value">
-          ${totalLeads}
+          ${Number(stats.totalLeads || 0)}
         </div>
 
         <div class="label">
           Leads recebidos
         </div>
-
       </div>
-
     `;
 
+  } else {
 
-    renderRecentLeads(
-      Array.isArray(stats.recentLeads)
-        ? stats.recentLeads
-        : []
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      "Erro nas estatísticas:",
-      error
-    );
-
+    // ==========================================================
+    // Fallback
+    // Se /api/dashboard/stats falhar,
+    // pelo menos projetos e clientes continuam aparecendo.
+    // ==========================================================
 
     wrap.innerHTML = `
-      <div class="empty-state">
-        Erro ao carregar estatísticas.
+      <div class="stat-card">
+        <div class="value">
+          ${state.projects.length}
+        </div>
+
+        <div class="label">
+          Projetos
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="value">
+          ${state.clients.length}
+        </div>
+
+        <div class="label">
+          Clientes
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="value">
+          —
+        </div>
+
+        <div class="label">
+          Leads recebidos
+        </div>
       </div>
     `;
-
-    renderRecentLeads([]);
   }
-}
 
-
-// ================================================================
-// LEADS RECENTES DO DASHBOARD
-// ================================================================
-
-function renderRecentLeads(leads) {
+  // ============================================================
+  // LEADS RECENTES
+  // ============================================================
 
   const leadsWrap =
     $("dashboard-recent-leads");
 
-  if (!leadsWrap) {
-    return;
-  }
-
+  if (!leadsWrap) return;
 
   if (
-    !Array.isArray(leads) ||
-    leads.length === 0
+    !stats ||
+    stats.error ||
+    !Array.isArray(stats.recentLeads) ||
+    stats.recentLeads.length === 0
   ) {
 
     leadsWrap.innerHTML = `
       <div class="empty-state">
 
-        <strong>
-          Nenhum lead ainda
-        </strong>
+        <strong>Nenhum lead ainda</strong>
 
-        Assim que o formulário de algum projeto
-        receber uma mensagem, ela aparece aqui.
+        Assim que o formulário de algum
+        projeto receber uma mensagem,
+        ela aparece aqui.
 
       </div>
     `;
@@ -507,25 +407,15 @@ function renderRecentLeads(leads) {
     return;
   }
 
-
   leadsWrap.innerHTML =
-    leads.map((l) => {
-
-      const date =
-        l.createdAt
-          ? new Date(l.createdAt)
-              .toLocaleDateString("pt-BR")
-          : "—";
-
-
-      return `
+    stats.recentLeads
+      .map((l) => `
 
         <div class="link-row">
 
           <div>
 
             <div>
-
               ${escapeHtml(
                 l.name || "Sem nome"
               )}
@@ -533,35 +423,36 @@ function renderRecentLeads(leads) {
               <span class="meta">
                 —
                 ${escapeHtml(
-                  l.projectName || "Projeto"
+                  l.projectName || ""
                 )}
               </span>
-
             </div>
 
-
             <div class="meta">
-
               ${escapeHtml(
                 l.email || ""
               )}
-
             </div>
 
           </div>
 
-
           <div class="meta">
-            ${date}
+            ${
+              l.createdAt
+                ? new Date(
+                    l.createdAt
+                  ).toLocaleDateString(
+                    "pt-BR"
+                  )
+                : ""
+            }
           </div>
 
         </div>
 
-      `;
-
-    }).join("");
+      `)
+      .join("");
 }
-
 
 // ================================================================
 // CLIENTES
@@ -572,22 +463,11 @@ function renderClients() {
   const wrap =
     $("clients-table-wrap");
 
-  if (!wrap) {
-    console.warn(
-      "Elemento clients-table-wrap não encontrado."
-    );
+  if (!wrap) return;
 
-    return;
-  }
-
-
-  if (
-    !Array.isArray(state.clients) ||
-    state.clients.length === 0
-  ) {
+  if (state.clients.length === 0) {
 
     wrap.innerHTML = `
-
       <div class="empty-state">
 
         <strong>
@@ -598,12 +478,10 @@ function renderClients() {
         para vincular a um projeto.
 
       </div>
-
     `;
 
     return;
   }
-
 
   wrap.innerHTML = `
 
@@ -619,22 +497,16 @@ function renderClients() {
 
           <th>Projeto vinculado</th>
 
-          <th></th>
+          <th>Ações</th>
 
         </tr>
 
       </thead>
 
-
       <tbody>
 
-        ${state.clients.map((c) => {
-
-          const clientId =
-            c.id || c._id || "";
-
-
-          return `
+        ${state.clients
+          .map((c) => `
 
             <tr>
 
@@ -644,7 +516,6 @@ function renderClients() {
                 )}
               </td>
 
-
               <td>
                 ${escapeHtml(
                   c.email ||
@@ -652,7 +523,6 @@ function renderClients() {
                   "—"
                 )}
               </td>
-
 
               <td>
                 ${escapeHtml(
@@ -662,21 +532,19 @@ function renderClients() {
                 )}
               </td>
 
-
               <td class="row-actions">
 
                 <button
                   class="icon-btn"
-                  onclick="openClientModal('${escapeHtml(clientId)}')"
+                  onclick="openClientModal('${escapeHtml(c.id)}')"
                   title="Editar"
                 >
                   ✏️
                 </button>
 
-
                 <button
                   class="icon-btn"
-                  onclick="deleteClient('${escapeHtml(clientId)}')"
+                  onclick="deleteClient('${escapeHtml(c.id)}')"
                   title="Excluir"
                 >
                   🗑️
@@ -686,42 +554,26 @@ function renderClients() {
 
             </tr>
 
-          `;
-
-        }).join("")}
+          `)
+          .join("")}
 
       </tbody>
 
     </table>
-
   `;
 }
 
-
-// ================================================================
-// ENCONTRAR PROJETO
-// ================================================================
-
 function projectNameById(id) {
-
-  if (!id) {
-    return null;
-  }
-
 
   const project =
     state.projects.find(
-      (p) =>
-        p.id === id ||
-        p._id === id
+      (p) => p.id === id
     );
-
 
   return project
     ? project.name
     : null;
 }
-
 
 // ================================================================
 // MODAL CLIENTE
@@ -731,24 +583,18 @@ function openClientModal(id = null) {
 
   state.editingClientId = id;
 
-
-  const client =
-    id
-      ? state.clients.find(
-          (c) =>
-            c.id === id ||
-            c._id === id
-        )
-      : {
-          name: "",
-          email: "",
-          phone: "",
-          projectId: "",
-        };
-
+  const client = id
+    ? state.clients.find(
+        (c) => c.id === id
+      )
+    : {
+        name: "",
+        email: "",
+        phone: "",
+        projectId: "",
+      };
 
   if (!client) {
-
     toast(
       "Cliente não encontrado.",
       "error"
@@ -757,32 +603,23 @@ function openClientModal(id = null) {
     return;
   }
 
-
   const projectOptions =
     state.projects
-      .map((p) => {
-
-        const pid =
-          p.id || p._id || "";
-
-        return `
+      .map(
+        (p) => `
           <option
-            value="${escapeHtml(pid)}"
+            value="${escapeHtml(p.id)}"
             ${
-              pid === client.projectId
+              p.id === client.projectId
                 ? "selected"
                 : ""
             }
           >
-            ${escapeHtml(
-              p.name || "Projeto"
-            )}
+            ${escapeHtml(p.name)}
           </option>
-        `;
-
-      })
+        `
+      )
       .join("");
-
 
   showModal(`
 
@@ -805,12 +642,26 @@ function openClientModal(id = null) {
 
     </div>
 
+    ${
+      id
+        ? `
+          <div class="field">
+
+            <label>ID do cliente</label>
+
+            <input
+              value="${escapeHtml(id)}"
+              readonly
+            >
+
+          </div>
+        `
+        : ""
+    }
 
     <div class="field">
 
-      <label>
-        Nome
-      </label>
+      <label>Nome</label>
 
       <input
         id="client-name"
@@ -821,14 +672,11 @@ function openClientModal(id = null) {
 
     </div>
 
-
     <div class="field-row">
 
       <div class="field">
 
-        <label>
-          E-mail
-        </label>
+        <label>E-mail</label>
 
         <input
           id="client-email"
@@ -839,12 +687,9 @@ function openClientModal(id = null) {
 
       </div>
 
-
       <div class="field">
 
-        <label>
-          Telefone
-        </label>
+        <label>Telefone</label>
 
         <input
           id="client-phone"
@@ -856,7 +701,6 @@ function openClientModal(id = null) {
       </div>
 
     </div>
-
 
     <div class="field">
 
@@ -876,10 +720,12 @@ function openClientModal(id = null) {
 
     </div>
 
-
     <button
       class="btn btn-primary"
-      style="width:100%;justify-content:center"
+      style="
+        width:100%;
+        justify-content:center
+      "
       onclick="saveClient()"
     >
       Salvar cliente
@@ -888,99 +734,73 @@ function openClientModal(id = null) {
   `);
 }
 
-
-// ================================================================
-// SALVAR CLIENTE
-// ================================================================
-
 async function saveClient() {
 
-  const name =
-    $("client-name")?.value.trim() || "";
-
-  const email =
-    $("client-email")?.value.trim() || "";
-
-  const phone =
-    $("client-phone")?.value.trim() || "";
-
-  const projectId =
-    $("client-project")?.value || "";
-
-
   const body = {
-    name,
-    email,
-    phone,
-    projectId,
-  };
 
+    name:
+      $("client-name")
+        .value
+        .trim(),
+
+    email:
+      $("client-email")
+        .value
+        .trim(),
+
+    phone:
+      $("client-phone")
+        .value
+        .trim(),
+
+    projectId:
+      $("client-project")
+        .value,
+
+  };
 
   if (!body.name) {
 
-    toast(
-      "Informe o nome do cliente.",
+    return toast(
+      "Informe o nome do cliente",
       "error"
     );
-
-    return;
   }
 
+  const res =
+    state.editingClientId
 
-  try {
+      ? await API.put(
+          "/api/data/clients",
+          {
+            id:
+              state.editingClientId,
+            ...body,
+          }
+        )
 
-    const res =
-      state.editingClientId
+      : await API.post(
+          "/api/data/clients",
+          body
+        );
 
-        ? await API.put(
-            "/api/data/clients",
-            {
-              id: state.editingClientId,
-              ...body,
-            }
-          )
+  if (res.error) {
 
-        : await API.post(
-            "/api/data/clients",
-            body
-          );
-
-
-    if (res.error) {
-
-      toast(
-        res.message ||
-        "Erro ao salvar cliente.",
-        "error"
-      );
-
-      return;
-    }
-
-
-    closeModal();
-
-    toast("Cliente salvo.");
-
-    await refreshAllData();
-
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
-      "Erro ao salvar cliente.",
+    return toast(
+      res.message ||
+      "Erro ao salvar cliente",
       "error"
     );
-
   }
+
+  closeModal();
+
+  toast(
+    "Cliente salvo com sucesso."
+  );
+
+  await refreshAllData();
 }
-
-
-// ================================================================
-// EXCLUIR CLIENTE
-// ================================================================
 
 async function deleteClient(id) {
 
@@ -992,46 +812,26 @@ async function deleteClient(id) {
     return;
   }
 
-
-  try {
-
-    const res =
-      await API.del(
-        `/api/data/clients?id=${encodeURIComponent(id)}`
-      );
-
-
-    if (res.error) {
-
-      toast(
-        res.message ||
-        "Erro ao excluir cliente.",
-        "error"
-      );
-
-      return;
-    }
-
-
-    toast(
-      "Cliente excluído."
+  const res =
+    await API.del(
+      `/api/data/clients?id=${encodeURIComponent(id)}`
     );
 
-    await refreshAllData();
+  if (res.error) {
 
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
-      "Erro ao excluir cliente.",
+    return toast(
+      res.message ||
+      "Erro ao excluir cliente",
       "error"
     );
-
   }
-}
 
+  toast(
+    "Cliente excluído."
+  );
+
+  await refreshAllData();
+}
 
 // ================================================================
 // PROJETOS
@@ -1050,28 +850,16 @@ const STATUS_BADGE = {
 
 };
 
-
 function renderProjects() {
 
   const wrap =
     $("projects-table-wrap");
 
-  if (!wrap) {
-    console.warn(
-      "Elemento projects-table-wrap não encontrado."
-    );
+  if (!wrap) return;
 
-    return;
-  }
-
-
-  if (
-    !Array.isArray(state.projects) ||
-    state.projects.length === 0
-  ) {
+  if (state.projects.length === 0) {
 
     wrap.innerHTML = `
-
       <div class="empty-state">
 
         <strong>
@@ -1083,12 +871,15 @@ function renderProjects() {
         contato e redes sociais.
 
       </div>
-
     `;
 
     return;
   }
 
+  // ============================================================
+  // AQUI ESTÁ A CORREÇÃO PRINCIPAL:
+  // ID DO PROJETO AGORA TEM TH E TD.
+  // ============================================================
 
   wrap.innerHTML = `
 
@@ -1098,82 +889,58 @@ function renderProjects() {
 
         <tr>
 
-          <th>
-            Projeto
-          </th>
+          <th>Projeto</th>
 
-          <th>
-            ID do projeto
-          </th>
+          <th>ID do projeto</th>
 
-          <th>
-            Status
-          </th>
+          <th>Status</th>
 
-          <th>
-          </th>
+          <th>Ações</th>
 
         </tr>
 
       </thead>
 
-
       <tbody>
 
-        ${state.projects.map((p) => {
-
-          const projectId =
-            p.id ||
-            p._id ||
-            p.projectId ||
-            "";
-
-
-          const statusClass =
-            STATUS_BADGE[p.status] ||
-            "badge-muted";
-
-
-          return `
+        ${state.projects
+          .map((p) => `
 
             <tr>
 
               <td>
-
-                <strong>
-                  ${escapeHtml(
-                    p.name ||
-                    "Sem nome"
-                  )}
-                </strong>
-
+                ${escapeHtml(
+                  p.name || ""
+                )}
               </td>
-
 
               <td>
 
                 <span
-                  class="badge badge-muted"
+                  class="meta"
+                  title="${escapeHtml(
+                    p.id || ""
+                  )}"
                   style="
                     font-family:monospace;
-                    user-select:text;
-                    cursor:text;
+                    font-size:11px;
+                    word-break:break-all;
                   "
-                  title="ID do projeto"
                 >
                   ${escapeHtml(
-                    projectId ||
-                    "Sem ID"
+                    p.id || "—"
                   )}
                 </span>
 
               </td>
 
-
               <td>
 
                 <span
-                  class="badge ${statusClass}"
+                  class="badge ${
+                    STATUS_BADGE[p.status] ||
+                    "badge-muted"
+                  }"
                 >
                   ${escapeHtml(
                     p.status ||
@@ -1183,21 +950,19 @@ function renderProjects() {
 
               </td>
 
-
               <td class="row-actions">
 
                 <button
                   class="icon-btn"
-                  onclick="openProjectModal('${escapeHtml(projectId)}')"
+                  onclick="openProjectModal('${escapeHtml(p.id)}')"
                   title="Editar"
                 >
                   ✏️
                 </button>
 
-
                 <button
                   class="icon-btn"
-                  onclick="deleteProject('${escapeHtml(projectId)}')"
+                  onclick="deleteProject('${escapeHtml(p.id)}')"
                   title="Excluir"
                 >
                   🗑️
@@ -1207,9 +972,8 @@ function renderProjects() {
 
             </tr>
 
-          `;
-
-        }).join("")}
+          `)
+          .join("")}
 
       </tbody>
 
@@ -1217,7 +981,6 @@ function renderProjects() {
 
   `;
 }
-
 
 // ================================================================
 // PROJETO PADRÃO
@@ -1233,30 +996,35 @@ function defaultProject() {
       "Em desenvolvimento",
 
     tracking: {
+
       pixel: "",
       tag: "",
       analytics: "",
+
     },
 
     contact: {
+
       whatsapp: "",
       email: "",
       phone: "",
+
     },
 
     social: {
+
       facebook: "",
       instagram: "",
       tiktok: "",
       youtube: "",
       linkedin: "",
+
     },
 
     formspree: "",
 
   };
 }
-
 
 // ================================================================
 // MODAL PROJETO
@@ -1265,35 +1033,51 @@ function defaultProject() {
 function openProjectModal(id = null) {
 
   state.editingProjectId = id;
+
   state.projectTab = "geral";
 
+  let project;
 
-  const project =
-    id
-      ? state.projects.find(
-          (p) =>
-            p.id === id ||
-            p._id === id
-        )
-      : defaultProject();
+  if (id) {
 
+    project =
+      state.projects.find(
+        (p) => p.id === id
+      );
 
-  if (!project) {
+    if (!project) {
 
-    toast(
-      "Projeto não encontrado.",
-      "error"
-    );
+      toast(
+        "Projeto não encontrado.",
+        "error"
+      );
 
-    return;
+      return;
+    }
+
+  } else {
+
+    project =
+      defaultProject();
+
   }
 
+  // Garante que objetos antigos
+  // não quebrem o painel.
+
+  project.tracking =
+    project.tracking || {};
+
+  project.contact =
+    project.contact || {};
+
+  project.social =
+    project.social || {};
 
   state._editingProjectDraft =
     JSON.parse(
       JSON.stringify(project)
     );
-
 
   showModal(`
 
@@ -1316,6 +1100,25 @@ function openProjectModal(id = null) {
 
     </div>
 
+    ${
+      id
+        ? `
+          <div
+            style="
+              font-size:11px;
+              color:var(--text-muted);
+              margin-bottom:12px;
+              word-break:break-all;
+            "
+          >
+            ID:
+            <strong>
+              ${escapeHtml(id)}
+            </strong>
+          </div>
+        `
+        : ""
+    }
 
     <div
       class="tabs"
@@ -1329,14 +1132,12 @@ function openProjectModal(id = null) {
         Geral
       </button>
 
-
       <button
         class="tab"
         data-tab="config"
       >
-        Config &amp; redes
+        Config & redes
       </button>
-
 
       ${
         id
@@ -1350,7 +1151,6 @@ function openProjectModal(id = null) {
           `
           : ""
       }
-
 
       ${
         id
@@ -1367,11 +1167,11 @@ function openProjectModal(id = null) {
 
     </div>
 
-
-    <div id="project-tab-content"></div>
+    <div
+      id="project-tab-content"
+    ></div>
 
   `, "560px");
-
 
   document
     .querySelectorAll(
@@ -1387,21 +1187,19 @@ function openProjectModal(id = null) {
             .querySelectorAll(
               "#project-tabs .tab"
             )
-            .forEach((b) =>
-              b.classList.remove(
-                "active"
-              )
+            .forEach(
+              (b) =>
+                b.classList.remove(
+                  "active"
+                )
             );
-
 
           btn.classList.add(
             "active"
           );
 
-
           state.projectTab =
             btn.dataset.tab;
-
 
           renderProjectTab();
 
@@ -1410,13 +1208,11 @@ function openProjectModal(id = null) {
 
     });
 
-
   renderProjectTab();
 }
 
-
 // ================================================================
-// ABA DO PROJETO
+// ABAS DO PROJETO
 // ================================================================
 
 function renderProjectTab() {
@@ -1424,60 +1220,31 @@ function renderProjectTab() {
   const el =
     $("project-tab-content");
 
-  if (!el) {
-    return;
-  }
-
+  if (!el) return;
 
   const draft =
     state._editingProjectDraft;
 
+  if (!draft) return;
 
-  if (!draft) {
-    return;
-  }
+  draft.tracking =
+    draft.tracking || {};
 
+  draft.contact =
+    draft.contact || {};
 
-  // --------------------------------------------------------------
+  draft.social =
+    draft.social || {};
+
+  // ============================================================
   // GERAL
-  // --------------------------------------------------------------
+  // ============================================================
 
   if (
     state.projectTab === "geral"
   ) {
 
     el.innerHTML = `
-
-      ${
-        state.editingProjectId
-          ? `
-            <div
-              class="field"
-              style="margin-bottom:14px"
-            >
-
-              <label>
-                ID do projeto
-              </label>
-
-              <input
-                value="${escapeHtml(
-                  draft.id ||
-                  draft._id ||
-                  ""
-                )}"
-                readonly
-                style="
-                  font-family:monospace;
-                  opacity:.8;
-                "
-              >
-
-            </div>
-          `
-          : ""
-      }
-
 
       <div class="field">
 
@@ -1494,7 +1261,6 @@ function renderProjectTab() {
 
       </div>
 
-
       <div class="field">
 
         <label>
@@ -1503,33 +1269,30 @@ function renderProjectTab() {
 
         <select id="p-status">
 
-          ${
-            [
-              "Em desenvolvimento",
-              "Em produção",
-              "Pausado",
-            ]
-              .map(
-                (s) => `
-                  <option
-                    value="${s}"
-                    ${
-                      s === draft.status
-                        ? "selected"
-                        : ""
-                    }
-                  >
-                    ${s}
-                  </option>
-                `
-              )
-              .join("")
-          }
+          ${[
+            "Em desenvolvimento",
+            "Em produção",
+            "Pausado",
+          ]
+            .map(
+              (s) => `
+                <option
+                  value="${escapeHtml(s)}"
+                  ${
+                    s === draft.status
+                      ? "selected"
+                      : ""
+                  }
+                >
+                  ${escapeHtml(s)}
+                </option>
+              `
+            )
+            .join("")}
 
         </select>
 
       </div>
-
 
       <button
         class="btn btn-primary"
@@ -1546,24 +1309,13 @@ function renderProjectTab() {
 
   }
 
-
-  // --------------------------------------------------------------
+  // ============================================================
   // CONFIGURAÇÕES
-  // --------------------------------------------------------------
+  // ============================================================
 
   if (
     state.projectTab === "config"
   ) {
-
-    draft.tracking =
-      draft.tracking || {};
-
-    draft.contact =
-      draft.contact || {};
-
-    draft.social =
-      draft.social || {};
-
 
     el.innerHTML = `
 
@@ -1572,7 +1324,6 @@ function renderProjectTab() {
         <h3>
           Rastreamento
         </h3>
-
 
         <div class="field">
 
@@ -1583,12 +1334,12 @@ function renderProjectTab() {
           <input
             id="p-pixel"
             value="${escapeHtml(
-              draft.tracking.pixel || ""
+              draft.tracking.pixel ||
+              ""
             )}"
           >
 
         </div>
-
 
         <div class="field">
 
@@ -1599,12 +1350,12 @@ function renderProjectTab() {
           <input
             id="p-tag"
             value="${escapeHtml(
-              draft.tracking.tag || ""
+              draft.tracking.tag ||
+              ""
             )}"
           >
 
         </div>
-
 
         <div class="field">
 
@@ -1615,12 +1366,12 @@ function renderProjectTab() {
           <input
             id="p-analytics"
             value="${escapeHtml(
-              draft.tracking.analytics || ""
+              draft.tracking.analytics ||
+              ""
             )}"
           >
 
         </div>
-
 
         ${
           draft.tracking.pixel ||
@@ -1638,13 +1389,11 @@ function renderProjectTab() {
 
       </div>
 
-
       <div class="form-section">
 
         <h3>
           Contato
         </h3>
-
 
         <div class="field">
 
@@ -1655,13 +1404,13 @@ function renderProjectTab() {
           <input
             id="p-whatsapp"
             value="${escapeHtml(
-              draft.contact.whatsapp || ""
+              draft.contact.whatsapp ||
+              ""
             )}"
             placeholder="5511999999999"
           >
 
         </div>
-
 
         <div class="field-row">
 
@@ -1674,12 +1423,12 @@ function renderProjectTab() {
             <input
               id="p-email"
               value="${escapeHtml(
-                draft.contact.email || ""
+                draft.contact.email ||
+                ""
               )}"
             >
 
           </div>
-
 
           <div class="field">
 
@@ -1690,7 +1439,8 @@ function renderProjectTab() {
             <input
               id="p-phone"
               value="${escapeHtml(
-                draft.contact.phone || ""
+                draft.contact.phone ||
+                ""
               )}"
             >
 
@@ -1700,13 +1450,11 @@ function renderProjectTab() {
 
       </div>
 
-
       <div class="form-section">
 
         <h3>
           Redes sociais
         </h3>
-
 
         <div class="field">
 
@@ -1717,12 +1465,12 @@ function renderProjectTab() {
           <input
             id="p-facebook"
             value="${escapeHtml(
-              draft.social.facebook || ""
+              draft.social.facebook ||
+              ""
             )}"
           >
 
         </div>
-
 
         <div class="field">
 
@@ -1733,12 +1481,12 @@ function renderProjectTab() {
           <input
             id="p-instagram"
             value="${escapeHtml(
-              draft.social.instagram || ""
+              draft.social.instagram ||
+              ""
             )}"
           >
 
         </div>
-
 
         <div class="field">
 
@@ -1749,12 +1497,12 @@ function renderProjectTab() {
           <input
             id="p-tiktok"
             value="${escapeHtml(
-              draft.social.tiktok || ""
+              draft.social.tiktok ||
+              ""
             )}"
           >
 
         </div>
-
 
         <div class="field">
 
@@ -1765,12 +1513,12 @@ function renderProjectTab() {
           <input
             id="p-youtube"
             value="${escapeHtml(
-              draft.social.youtube || ""
+              draft.social.youtube ||
+              ""
             )}"
           >
 
         </div>
-
 
         <div class="field">
 
@@ -1781,7 +1529,8 @@ function renderProjectTab() {
           <input
             id="p-linkedin"
             value="${escapeHtml(
-              draft.social.linkedin || ""
+              draft.social.linkedin ||
+              ""
             )}"
           >
 
@@ -1789,13 +1538,11 @@ function renderProjectTab() {
 
       </div>
 
-
       <div class="form-section">
 
         <h3>
           Formspree
         </h3>
-
 
         <div class="field">
 
@@ -1806,7 +1553,8 @@ function renderProjectTab() {
           <input
             id="p-formspree"
             value="${escapeHtml(
-              draft.formspree || ""
+              draft.formspree ||
+              ""
             )}"
             placeholder="https://formspree.io/f/xxxxxxx"
           >
@@ -1815,17 +1563,17 @@ function renderProjectTab() {
 
       </div>
 
-
       <div class="live-preview">
 
         <div class="preview-label">
           Prévia — como aparece no site
         </div>
 
-        <div id="live-preview-content"></div>
+        <div
+          id="live-preview-content"
+        ></div>
 
       </div>
-
 
       <button
         class="btn btn-primary"
@@ -1840,7 +1588,6 @@ function renderProjectTab() {
       </button>
 
     `;
-
 
     [
       "p-whatsapp",
@@ -1866,39 +1613,31 @@ function renderProjectTab() {
 
     });
 
-
     renderLivePreview();
-
   }
 
-
-  // --------------------------------------------------------------
+  // ============================================================
   // ACESSO
-  // --------------------------------------------------------------
+  // ============================================================
 
   if (
     state.projectTab === "acesso"
   ) {
 
     renderClientAccessTab(el);
-
   }
 
-
-  // --------------------------------------------------------------
+  // ============================================================
   // LEADS
-  // --------------------------------------------------------------
+  // ============================================================
 
   if (
     state.projectTab === "leads"
   ) {
 
     renderLeadsTab(el);
-
   }
-
 }
-
 
 // ================================================================
 // PRÉVIA
@@ -1909,10 +1648,7 @@ function renderLivePreview() {
   const box =
     $("live-preview-content");
 
-  if (!box) {
-    return;
-  }
-
+  if (!box) return;
 
   const social = {
 
@@ -1933,7 +1669,6 @@ function renderLivePreview() {
 
   };
 
-
   const contactBits = [
 
     $("p-whatsapp")?.value &&
@@ -1947,19 +1682,14 @@ function renderLivePreview() {
 
   ].filter(Boolean);
 
-
   const chips =
     Object.entries(social)
-
-      .filter(([, value]) => value)
-
+      .filter(([, v]) => v)
       .map(
         ([name]) =>
-          `<span class="preview-chip">${name}</span>`
+          `<span class="preview-chip">${escapeHtml(name)}</span>`
       )
-
       .join("");
-
 
   box.innerHTML = `
 
@@ -1978,7 +1708,6 @@ function renderLivePreview() {
       }
 
     </div>
-
 
     <div
       style="
@@ -2001,61 +1730,102 @@ function renderLivePreview() {
   `;
 }
 
-
 // ================================================================
-// SNIPPET TRACKING
+// SNIPPET
 // ================================================================
 
 async function copyTrackingSnippet() {
 
   const pixel =
-    $("p-pixel")?.value.trim() || "";
+    $("p-pixel")
+      ?.value
+      .trim() || "";
 
   const analytics =
-    $("p-analytics")?.value.trim() || "";
-
+    $("p-analytics")
+      ?.value
+      .trim() || "";
 
   let snippet = "";
 
-
   if (pixel) {
 
-    snippet += `<!-- Meta Pixel -->
+    snippet += `
+<!-- Meta Pixel -->
+
 <script>
-!function(f,b,e,v,n,t,s){...}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+!function(f,b,e,v,n,t,s){
+if(f.fbq)return;
+n=f.fbq=function(){
+n.callMethod ?
+n.callMethod.apply(n,arguments) :
+n.queue.push(arguments)
+};
+
+if(!f._fbq)f._fbq=n;
+
+n.push=n;
+n.loaded=!0;
+n.version='2.0';
+n.queue=[];
+
+t=b.createElement(e);
+t.async=!0;
+t.src=v;
+
+s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)
+}
+(window, document, 'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+
 fbq('init', '${pixel}');
 fbq('track', 'PageView');
 </script>
-
-`;
+`.trim();
 
   }
-
 
   if (analytics) {
 
-    snippet += `<!-- Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=${analytics}"></script>
+    if (snippet) {
+      snippet += "\n\n";
+    }
+
+    snippet += `
+<!-- Google Analytics -->
+
+<script
+async
+src="https://www.googletagmanager.com/gtag/js?id=${analytics}">
+</script>
+
 <script>
-window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
+window.dataLayer =
+window.dataLayer || [];
+
+function gtag(){
+dataLayer.push(arguments);
+}
+
 gtag('js', new Date());
-gtag('config', '${analytics}');
-</script>`;
+
+gtag(
+'config',
+'${analytics}'
+);
+</script>
+`.trim();
 
   }
-
 
   if (!snippet) {
 
-    toast(
+    return toast(
       "Preencha Pixel ou Analytics primeiro.",
       "error"
     );
-
-    return;
   }
-
 
   try {
 
@@ -2073,10 +1843,8 @@ gtag('config', '${analytics}');
       "Não foi possível copiar automaticamente.",
       "error"
     );
-
   }
 }
-
 
 // ================================================================
 // SALVAR PROJETO
@@ -2087,21 +1855,20 @@ async function saveProject() {
   const draft =
     state._editingProjectDraft;
 
-
-  if (!draft) {
-    return;
-  }
-
+  if (!draft) return;
 
   if (
     state.projectTab === "geral"
   ) {
 
     draft.name =
-      $("p-name")?.value.trim() || "";
+      $("p-name")
+        ?.value
+        .trim() || "";
 
     draft.status =
-      $("p-status")?.value ||
+      $("p-status")
+        ?.value ||
       "Em desenvolvimento";
 
   } else {
@@ -2109,128 +1876,152 @@ async function saveProject() {
     draft.tracking = {
 
       pixel:
-        $("p-pixel")?.value.trim() || "",
+        $("p-pixel")
+          ?.value
+          .trim() || "",
 
       tag:
-        $("p-tag")?.value.trim() || "",
+        $("p-tag")
+          ?.value
+          .trim() || "",
 
       analytics:
-        $("p-analytics")?.value.trim() || "",
+        $("p-analytics")
+          ?.value
+          .trim() || "",
 
     };
-
 
     draft.contact = {
 
       whatsapp:
-        $("p-whatsapp")?.value.trim() || "",
+        $("p-whatsapp")
+          ?.value
+          .trim() || "",
 
       email:
-        $("p-email")?.value.trim() || "",
+        $("p-email")
+          ?.value
+          .trim() || "",
 
       phone:
-        $("p-phone")?.value.trim() || "",
+        $("p-phone")
+          ?.value
+          .trim() || "",
 
     };
-
 
     draft.social = {
 
       facebook:
-        $("p-facebook")?.value.trim() || "",
+        $("p-facebook")
+          ?.value
+          .trim() || "",
 
       instagram:
-        $("p-instagram")?.value.trim() || "",
+        $("p-instagram")
+          ?.value
+          .trim() || "",
 
       tiktok:
-        $("p-tiktok")?.value.trim() || "",
+        $("p-tiktok")
+          ?.value
+          .trim() || "",
 
       youtube:
-        $("p-youtube")?.value.trim() || "",
+        $("p-youtube")
+          ?.value
+          .trim() || "",
 
       linkedin:
-        $("p-linkedin")?.value.trim() || "",
+        $("p-linkedin")
+          ?.value
+          .trim() || "",
 
     };
 
-
     draft.formspree =
-      $("p-formspree")?.value.trim() || "";
-
+      $("p-formspree")
+        ?.value
+        .trim() || "";
   }
-
 
   if (!draft.name) {
 
-    toast(
+    return toast(
       "Informe o nome do projeto.",
       "error"
     );
-
-    return;
   }
 
+  let res;
 
-  try {
+  if (
+    state.editingProjectId
+  ) {
 
-    const res =
-      state.editingProjectId
-
-        ? await API.put(
-            "/api/data/projects",
-            {
-              id:
-                state.editingProjectId,
-
-              ...draft,
-            }
-          )
-
-        : await API.post(
-            "/api/data/projects",
-            draft
-          );
-
-
-    if (res.error) {
-
-      toast(
-        res.message ||
-        "Erro ao salvar projeto.",
-        "error"
+    res =
+      await API.put(
+        "/api/data/projects",
+        {
+          id:
+            state.editingProjectId,
+          ...draft,
+        }
       );
 
-      return;
-    }
+  } else {
 
+    res =
+      await API.post(
+        "/api/data/projects",
+        draft
+      );
+  }
 
-    toast(
-      "Projeto salvo."
-    );
+  if (res.error) {
 
-
-    if (!state.editingProjectId) {
-
-      closeModal();
-
-    }
-
-
-    await refreshAllData();
-
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
+    return toast(
+      res.message ||
       "Erro ao salvar projeto.",
       "error"
     );
-
   }
-}
 
+  toast(
+    "Projeto salvo com sucesso."
+  );
+
+  if (
+    !state.editingProjectId
+  ) {
+
+    closeModal();
+
+  } else {
+
+    // Atualiza o projeto local
+    // sem fechar o modal.
+
+    const index =
+      state.projects.findIndex(
+        (p) =>
+          p.id ===
+          state.editingProjectId
+      );
+
+    if (index !== -1) {
+
+      state.projects[index] = {
+        ...state.projects[index],
+        ...draft,
+      };
+
+    }
+  }
+
+  await refreshAllData();
+}
 
 // ================================================================
 // EXCLUIR PROJETO
@@ -2240,53 +2031,35 @@ async function deleteProject(id) {
 
   if (
     !confirm(
-      "Excluir este projeto? Isso também remove leads e links de cliente associados."
+      "Excluir este projeto?\n\n" +
+      "Isso também remove leads " +
+      "e links de cliente associados."
     )
   ) {
+
     return;
   }
 
-
-  try {
-
-    const res =
-      await API.del(
-        `/api/data/projects?id=${encodeURIComponent(id)}`
-      );
-
-
-    if (res.error) {
-
-      toast(
-        res.message ||
-        "Erro ao excluir projeto.",
-        "error"
-      );
-
-      return;
-    }
-
-
-    toast(
-      "Projeto excluído."
+  const res =
+    await API.del(
+      `/api/data/projects?id=${encodeURIComponent(id)}`
     );
 
+  if (res.error) {
 
-    await refreshAllData();
-
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
+    return toast(
+      res.message ||
       "Erro ao excluir projeto.",
       "error"
     );
-
   }
-}
 
+  toast(
+    "Projeto excluído."
+  );
+
+  await refreshAllData();
+}
 
 // ================================================================
 // ACESSO DO CLIENTE
@@ -2300,159 +2073,120 @@ async function renderClientAccessTab(el) {
     </div>
   `;
 
-
   const projectId =
     state.editingProjectId;
 
+  const links =
+    await API.get(
+      `/api/client-link/${encodeURIComponent(projectId)}`
+    );
 
-  if (!projectId) {
+  el.innerHTML = `
 
-    el.innerHTML = `
-      <div class="empty-state">
-        Salve o projeto primeiro.
-      </div>
-    `;
+    <div class="form-section">
 
-    return;
-  }
+      <h3>
+        Liberar campos para o cliente
+      </h3>
 
+      <p
+        style="
+          color:var(--text-muted);
+          font-size:12.5px;
+          margin-bottom:10px
+        "
+      >
+        Marque exatamente o que
+        esse cliente pode editar.
+        Você pode gerar mais de um
+        link com combinações diferentes.
+      </p>
 
-  try {
+      <div
+        class="checkbox-grid"
+        id="client-fields-checkboxes"
+      >
 
-    const links =
-      await API.get(
-        `/api/client-link/${encodeURIComponent(projectId)}`
-      );
+        ${Object.entries(
+          CLIENT_FIELD_LABELS
+        )
+          .map(
+            ([path, label]) => `
 
+              <div
+                class="checkbox-row"
+              >
 
-    const linksArray =
-      normalizeArray(links);
+                <input
+                  type="checkbox"
+                  value="${escapeHtml(path)}"
+                  id="cf-${escapeHtml(path)}"
+                >
 
+                <label
+                  for="cf-${escapeHtml(path)}"
+                  style="
+                    margin:0;
+                    font-weight:400;
+                    color:var(--text-main)
+                  "
+                >
+                  ${escapeHtml(label)}
+                </label>
 
-    el.innerHTML = `
+              </div>
 
-      <div class="form-section">
-
-        <h3>
-          Liberar campos para o cliente
-        </h3>
-
-
-        <p
-          style="
-            color:var(--text-muted);
-            font-size:12.5px;
-            margin-bottom:10px
-          "
-        >
-          Marque exatamente o que esse cliente
-          pode editar.
-        </p>
-
-
-        <div
-          class="checkbox-grid"
-          id="client-fields-checkboxes"
-        >
-
-          ${
-            Object.entries(
-              CLIENT_FIELD_LABELS
-            )
-              .map(
-                ([path, label]) => `
-
-                  <div class="checkbox-row">
-
-                    <input
-                      type="checkbox"
-                      value="${escapeHtml(path)}"
-                      id="cf-${escapeHtml(path)}"
-                    >
-
-                    <label
-                      for="cf-${escapeHtml(path)}"
-                      style="
-                        margin:0;
-                        font-weight:400;
-                        color:var(--text-main)
-                      "
-                    >
-                      ${escapeHtml(label)}
-                    </label>
-
-                  </div>
-
-                `
-              )
-              .join("")
-          }
-
-        </div>
-
-
-        <button
-          class="btn btn-primary btn-sm"
-          style="margin-top:12px"
-          onclick="generateClientLink()"
-        >
-          Gerar link do cliente
-        </button>
+            `
+          )
+          .join("")}
 
       </div>
 
+      <button
+        class="btn btn-primary btn-sm"
+        style="margin-top:12px"
+        onclick="generateClientLink()"
+      >
+        Gerar link do cliente
+      </button>
 
-      <div class="form-section">
+    </div>
 
-        <h3>
-          Links ativos
-        </h3>
+    <div class="form-section">
 
+      <h3>
+        Links ativos
+      </h3>
 
-        <div id="client-links-list">
+      <div id="client-links-list">
 
-          ${
-            linksArray.length
-              ? linksArray
-                  .filter(
-                    (l) => !l.revoked
-                  )
-                  .map(
-                    renderClientLinkRow
-                  )
-                  .join("")
-              : `
-                <div class="empty-state">
-                  Nenhum link gerado ainda
-                  para este projeto.
-                </div>
-              `
-          }
+        ${
+          Array.isArray(links) &&
+          links.length
 
-        </div>
+            ? links
+                .filter(
+                  (l) => !l.revoked
+                )
+                .map(
+                  renderClientLinkRow
+                )
+                .join("")
+
+            : `
+              <div class="empty-state">
+                Nenhum link gerado ainda
+                para este projeto.
+              </div>
+            `
+        }
 
       </div>
 
-    `;
+    </div>
 
-
-  } catch (error) {
-
-    console.error(error);
-
-    el.innerHTML = `
-      <div class="empty-state">
-        Não foi possível carregar os links.
-      </div>
-    `;
-
-  }
+  `;
 }
-
-
-// ================================================================
-// LINHA DO LINK
-// ================================================================
 
 function renderClientLinkRow(l) {
 
@@ -2460,7 +2194,6 @@ function renderClientLinkRow(l) {
     Array.isArray(l.fields)
       ? l.fields
       : [];
-
 
   const fieldsLabel =
     fields
@@ -2470,21 +2203,6 @@ function renderClientLinkRow(l) {
           f
       )
       .join(", ");
-
-
-  const jti =
-    l.jti || "";
-
-
-  const date =
-    l.createdAt
-      ? new Date(
-          l.createdAt
-        ).toLocaleDateString(
-          "pt-BR"
-        )
-      : "—";
-
 
   return `
 
@@ -2500,16 +2218,23 @@ function renderClientLinkRow(l) {
           )}
         </div>
 
-
         <div class="meta">
 
           criado em
-          ${date}
+
+          ${
+            l.createdAt
+              ? new Date(
+                  l.createdAt
+                ).toLocaleDateString(
+                  "pt-BR"
+                )
+              : "—"
+          }
 
         </div>
 
       </div>
-
 
       <div
         style="
@@ -2520,15 +2245,14 @@ function renderClientLinkRow(l) {
 
         <button
           class="btn btn-ghost btn-sm"
-          onclick="copyClientLink('${escapeHtml(jti)}', this)"
+          onclick="copyClientLink('${escapeHtml(l.jti)}', this)"
         >
           Copiar link
         </button>
 
-
         <button
           class="btn btn-danger btn-sm"
-          onclick="revokeClientLink('${escapeHtml(jti)}')"
+          onclick="revokeClientLink('${escapeHtml(l.jti)}')"
         >
           Revogar
         </button>
@@ -2540,9 +2264,8 @@ function renderClientLinkRow(l) {
   `;
 }
 
-
 // ================================================================
-// GERAR LINK DO CLIENTE
+// GERAR LINK
 // ================================================================
 
 async function generateClientLink() {
@@ -2552,89 +2275,57 @@ async function generateClientLink() {
       document.querySelectorAll(
         "#client-fields-checkboxes input:checked"
       )
-    )
-    .map(
+    ).map(
       (i) => i.value
     );
 
-
   if (fields.length === 0) {
 
-    toast(
+    return toast(
       "Marque ao menos um campo.",
       "error"
     );
-
-    return;
   }
 
-
-  try {
-
-    const res =
-      await API.post(
-        `/api/client-link/${encodeURIComponent(
-          state.editingProjectId
-        )}`,
-        {
-          fields,
-        }
-      );
-
-
-    if (res.error) {
-
-      toast(
-        res.message ||
-        "Erro ao gerar link.",
-        "error"
-      );
-
-      return;
-    }
-
-
-    state._lastGeneratedToken =
-      res.token;
-
-
-    toast(
-      "Link gerado."
+  const res =
+    await API.post(
+      `/api/client-link/${encodeURIComponent(
+        state.editingProjectId
+      )}`,
+      {
+        fields,
+      }
     );
 
+  if (res.error) {
 
-    renderProjectTab();
-
-
-    if (res.token) {
-
-      setTimeout(
-        () => {
-          copyClientLinkByToken(
-            res.token
-          );
-        },
-        100
-      );
-
-    }
-
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
+    return toast(
+      res.message ||
       "Erro ao gerar link.",
       "error"
     );
-
   }
+
+  state._lastGeneratedToken =
+    res.token;
+
+  toast(
+    "Link gerado."
+  );
+
+  renderProjectTab();
+
+  setTimeout(
+    () =>
+      copyClientLinkByToken(
+        res.token
+      ),
+    100
+  );
 }
 
-
 // ================================================================
-// URL DE EDIÇÃO DO CLIENTE
+// URL DO CLIENTE
 // ================================================================
 
 function buildClientEditUrl(token) {
@@ -2650,20 +2341,15 @@ function buildClientEditUrl(token) {
         ""
       );
 
-
   return `${base}/editar.html?token=${encodeURIComponent(token)}`;
 }
 
-
-// ================================================================
-// COPIAR LINK GERADO
-// ================================================================
-
-async function copyClientLinkByToken(token) {
+async function copyClientLinkByToken(
+  token
+) {
 
   const url =
     buildClientEditUrl(token);
-
 
   try {
 
@@ -2681,16 +2367,17 @@ async function copyClientLinkByToken(token) {
       url,
       "success"
     );
-
   }
 }
 
-
 // ================================================================
-// COPIAR LINK EXISTENTE
+// COPIAR LINK ANTIGO
 // ================================================================
 
-async function copyClientLink(jti, btn) {
+async function copyClientLink(
+  jti,
+  btn
+) {
 
   toast(
     "Por segurança, o link completo só é mostrado no momento em que é gerado. Se foi perdido, revogue e gere um novo.",
@@ -2698,68 +2385,50 @@ async function copyClientLink(jti, btn) {
   );
 }
 
-
 // ================================================================
 // REVOGAR LINK
 // ================================================================
 
-async function revokeClientLink(jti) {
+async function revokeClientLink(
+  jti
+) {
 
   if (
     !confirm(
-      "Revogar este link? O cliente perderá o acesso imediatamente."
+      "Revogar este link?\n\n" +
+      "O cliente perderá o acesso imediatamente."
     )
   ) {
+
     return;
   }
 
-
-  try {
-
-    const res =
-      await API.post(
-        `/api/client-link/${encodeURIComponent(
-          jti
-        )}/revoke`,
-        {}
-      );
-
-
-    if (res.error) {
-
-      toast(
-        res.message ||
-        "Erro ao revogar",
-        "error"
-      );
-
-      return;
-    }
-
-
-    toast(
-      "Link revogado."
+  const res =
+    await API.post(
+      `/api/client-link/${encodeURIComponent(
+        jti
+      )}/revoke`,
+      {}
     );
 
+  if (res.error) {
 
-    renderProjectTab();
-
-
-  } catch (error) {
-
-    console.error(error);
-
-    toast(
+    return toast(
+      res.message ||
       "Erro ao revogar link.",
       "error"
     );
-
   }
+
+  toast(
+    "Link revogado."
+  );
+
+  renderProjectTab();
 }
 
-
 // ================================================================
-// LEADS DO PROJETO
+// LEADS
 // ================================================================
 
 async function renderLeadsTab(el) {
@@ -2770,56 +2439,41 @@ async function renderLeadsTab(el) {
     </div>
   `;
 
+  const leads =
+    await API.get(
+      `/api/data/leads/${encodeURIComponent(
+        state.editingProjectId
+      )}`
+    );
 
-  try {
+  if (
+    !Array.isArray(leads) ||
+    leads.length === 0
+  ) {
 
-    const response =
-      await API.get(
-        `/api/data/leads/${encodeURIComponent(
-          state.editingProjectId
-        )}`
-      );
+    el.innerHTML = `
 
+      <div class="empty-state">
 
-    const leads =
-      normalizeArray(response);
+        <strong>
+          Nenhum lead ainda
+        </strong>
 
+        As mensagens enviadas
+        pelo formulário deste projeto
+        aparecem aqui.
 
-    if (
-      leads.length === 0
-    ) {
+      </div>
 
-      el.innerHTML = `
-        <div class="empty-state">
+    `;
 
-          <strong>
-            Nenhum lead ainda
-          </strong>
+    return;
+  }
 
-          As mensagens enviadas pelo formulário
-          deste projeto aparecem aqui.
-
-        </div>
-      `;
-
-      return;
-    }
-
-
-    el.innerHTML =
-      leads.map((l) => {
-
-        const date =
-          l.createdAt
-            ? new Date(
-                l.createdAt
-              ).toLocaleDateString(
-                "pt-BR"
-              )
-            : "—";
-
-
-        return `
+  el.innerHTML =
+    leads
+      .map(
+        (l) => `
 
           <div class="link-row">
 
@@ -2832,14 +2486,11 @@ async function renderLeadsTab(el) {
                 )}
               </div>
 
-
               <div class="meta">
                 ${escapeHtml(
-                  l.email ||
-                  ""
+                  l.email || ""
                 )}
               </div>
-
 
               ${
                 l.message
@@ -2858,34 +2509,29 @@ async function renderLeadsTab(el) {
 
             </div>
 
-
             <div class="meta">
-              ${date}
+
+              ${
+                l.createdAt
+                  ? new Date(
+                      l.createdAt
+                    ).toLocaleDateString(
+                      "pt-BR"
+                    )
+                  : "—"
+              }
+
             </div>
 
           </div>
 
-        `;
-
-      }).join("");
-
-
-  } catch (error) {
-
-    console.error(error);
-
-    el.innerHTML = `
-      <div class="empty-state">
-        Não foi possível carregar os leads.
-      </div>
-    `;
-
-  }
+        `
+      )
+      .join("");
 }
 
-
 // ================================================================
-// MODAL GENÉRICO
+// MODAL
 // ================================================================
 
 function showModal(
@@ -2895,20 +2541,16 @@ function showModal(
 
   closeModal();
 
-
   const overlay =
     document.createElement(
       "div"
     );
 
-
   overlay.className =
     "modal-overlay";
 
-
   overlay.id =
     "modal-overlay";
-
 
   overlay.addEventListener(
     "click",
@@ -2917,12 +2559,13 @@ function showModal(
       if (
         e.target === overlay
       ) {
+
         closeModal();
+
       }
 
     }
   );
-
 
   overlay.innerHTML = `
 
@@ -2937,22 +2580,15 @@ function showModal(
 
   `;
 
-
   document.body.appendChild(
     overlay
   );
 }
 
-
-// ================================================================
-// FECHAR MODAL
-// ================================================================
-
 function closeModal() {
 
   const el =
     $("modal-overlay");
-
 
   if (el) {
     el.remove();
