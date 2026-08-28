@@ -1,21 +1,38 @@
-// V8 ADMIN — Universal | Cliente de API
+```javascript
+// ============================================================
+// V8 ADMIN — UNIVERSAL
+// Cliente de API
+// ============================================================
 
 const API_URL = "https://v8adminuniversal.aisermelk.workers.dev";
 
 const API = {
 
+  // ==========================================================
+  // REQUEST PRINCIPAL
+  // ==========================================================
+
   async request(path, method = "GET", body = null, useAuth = true) {
 
+    const url = `${API_URL}${path}`;
+
     const headers = {
-      "Content-Type": "application/json",
-      "Accept": "application/json"
+      "Accept": "application/json",
+      "Content-Type": "application/json"
     };
 
+    // --------------------------------------------------------
+    // TOKEN
+    // --------------------------------------------------------
+
     if (useAuth) {
-      const token = localStorage.getItem("v8_admin_token");
+
+      const token =
+        localStorage.getItem("v8_admin_token");
 
       if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
+        headers["Authorization"] =
+          `Bearer ${token}`;
       }
     }
 
@@ -25,98 +42,159 @@ const API = {
     };
 
     if (body !== null) {
-      config.body = JSON.stringify(body);
+      config.body =
+        JSON.stringify(body);
     }
+
+    console.log("🌐 API REQUEST:", {
+      method,
+      url,
+      authenticated: useAuth
+    });
+
+    // ========================================================
+    // FETCH
+    // ========================================================
 
     let response;
 
     try {
-      response = await fetch(`${API_URL}${path}`, config);
-    } catch (err) {
 
-      console.error("Erro de conexão:", err);
+      response =
+        await fetch(url, config);
+
+    } catch (error) {
+
+      console.error(
+        "❌ ERRO DE CONEXÃO COM A API:",
+        error
+      );
 
       return {
         error: true,
-        message: "Não foi possível conectar à API."
+        message:
+          "Não foi possível conectar ao servidor."
       };
     }
 
-    /*
-     * Sessão expirada
-     */
-    if (response.status === 401 && useAuth) {
+    // ========================================================
+    // RESPOSTA
+    // ========================================================
 
-      if (typeof Auth !== "undefined") {
+    let rawText = "";
+
+    try {
+
+      rawText =
+        await response.text();
+
+    } catch (error) {
+
+      console.error(
+        "❌ ERRO AO LER RESPOSTA:",
+        error
+      );
+
+      return {
+        error: true,
+        message:
+          "Não foi possível ler a resposta do servidor."
+      };
+    }
+
+    console.log("📡 API RESPONSE:", {
+      status: response.status,
+      statusText: response.statusText,
+      url,
+      body: rawText
+    });
+
+    // ========================================================
+    // TENTA JSON
+    // ========================================================
+
+    let data = {};
+
+    if (rawText.trim()) {
+
+      try {
+
+        data =
+          JSON.parse(rawText);
+
+      } catch (error) {
+
+        console.error(
+          "❌ API NÃO RETORNOU JSON:",
+          {
+            status: response.status,
+            url,
+            response: rawText
+          }
+        );
+
+        return {
+          error: true,
+          status: response.status,
+          message:
+            `A API retornou uma resposta inválida (HTTP ${response.status}).`,
+          raw: rawText
+        };
+      }
+    }
+
+    // ========================================================
+    // 401 — NÃO AUTORIZADO
+    // ========================================================
+
+    if (
+      response.status === 401 &&
+      useAuth
+    ) {
+
+      console.warn(
+        "🔐 Sessão inválida ou expirada."
+      );
+
+      localStorage.removeItem(
+        "v8_admin_token"
+      );
+
+      if (
+        typeof Auth !== "undefined" &&
+        typeof Auth.logout === "function"
+      ) {
         Auth.logout();
       }
 
       return {
         error: true,
-        message: "Sessão expirada."
-      };
-    }
-
-    /*
-     * Lê a resposta como texto primeiro.
-     * Isso evita o erro "Resposta inválida da API"
-     * quando o Worker retorna HTML ou texto.
-     */
-
-    let rawText = "";
-
-    try {
-      rawText = await response.text();
-    } catch (err) {
-
-      console.error("Erro ao ler resposta:", err);
-
-      return {
-        error: true,
-        message: "Não foi possível ler a resposta da API."
-      };
-    }
-
-    /*
-     * Tenta converter para JSON
-     */
-
-    let data;
-
-    try {
-
-      data = rawText ? JSON.parse(rawText) : {};
-
-    } catch (err) {
-
-      console.error("Resposta não JSON da API:", {
-        status: response.status,
-        statusText: response.statusText,
-        path,
-        response: rawText
-      });
-
-      return {
-        error: true,
+        status: 401,
         message:
-          `A API retornou uma resposta inválida (HTTP ${response.status}).`
+          data?.message ||
+          "Sessão expirada. Faça login novamente."
       };
     }
 
-    /*
-     * Erro HTTP
-     */
+    // ========================================================
+    // ERROS HTTP
+    // ========================================================
 
     if (!response.ok) {
 
-      console.error("Erro HTTP da API:", {
-        status: response.status,
-        path,
-        data
-      });
+      console.error(
+        "❌ ERRO HTTP DA API:",
+        {
+          status: response.status,
+          statusText: response.statusText,
+          url,
+          data
+        }
+      );
 
       return {
         error: true,
+        status: response.status,
         message:
           data?.message ||
           data?.error ||
@@ -124,34 +202,117 @@ const API = {
       };
     }
 
+    // ========================================================
+    // SUCESSO
+    // ========================================================
+
+    console.log(
+      "✅ API OK:",
+      path
+    );
+
     return data;
   },
 
+  // ==========================================================
+  // GET
+  // ==========================================================
+
   get(path) {
-    return this.request(path, "GET");
+    return this.request(
+      path,
+      "GET",
+      null,
+      true
+    );
   },
 
-  post(path, body) {
-    return this.request(path, "POST", body);
+  // ==========================================================
+  // POST
+  // ==========================================================
+
+  post(path, body = null) {
+    return this.request(
+      path,
+      "POST",
+      body,
+      true
+    );
   },
 
-  put(path, body) {
-    return this.request(path, "PUT", body);
+  // ==========================================================
+  // PUT
+  // ==========================================================
+
+  put(path, body = null) {
+    return this.request(
+      path,
+      "PUT",
+      body,
+      true
+    );
   },
+
+  // ==========================================================
+  // DELETE
+  // ==========================================================
 
   del(path) {
-    return this.request(path, "DELETE");
+    return this.request(
+      path,
+      "DELETE",
+      null,
+      true
+    );
   },
+
+  // ==========================================================
+  // GET PÚBLICO
+  // ==========================================================
 
   getPublic(path) {
-    return this.request(path, "GET", null, false);
+    return this.request(
+      path,
+      "GET",
+      null,
+      false
+    );
   },
 
-  postPublic(path, body) {
-    return this.request(path, "POST", body, false);
+  // ==========================================================
+  // POST PÚBLICO
+  // ==========================================================
+
+  postPublic(path, body = null) {
+    return this.request(
+      path,
+      "POST",
+      body,
+      false
+    );
   },
 
-  putPublic(path, body) {
-    return this.request(path, "PUT", body, false);
+  // ==========================================================
+  // PUT PÚBLICO
+  // ==========================================================
+
+  putPublic(path, body = null) {
+    return this.request(
+      path,
+      "PUT",
+      body,
+      false
+    );
   }
 };
+
+
+// ============================================================
+// TESTE RÁPIDO
+// ============================================================
+
+console.log(
+  "🚀 V8 ADMIN API carregada:",
+  API_URL
+);
+```
