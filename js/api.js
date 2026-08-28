@@ -1,28 +1,28 @@
-```javascript
 // ============================================================
 // V8 ADMIN — UNIVERSAL
 // Cliente de API
 // ============================================================
 
-const API_URL = "https://v8adminuniversal.aisermelk.workers.dev";
+const API_URL =
+  "https://v8adminuniversal.aisermelk.workers.dev";
 
 const API = {
 
-  // ==========================================================
-  // REQUEST PRINCIPAL
-  // ==========================================================
-
-  async request(path, method = "GET", body = null, useAuth = true) {
+  async request(
+    path,
+    method = "GET",
+    body = null,
+    useAuth = true
+  ) {
 
     const url = `${API_URL}${path}`;
 
     const headers = {
-      "Accept": "application/json",
-      "Content-Type": "application/json"
+      "Accept": "application/json"
     };
 
     // --------------------------------------------------------
-    // TOKEN
+    // AUTENTICAÇÃO
     // --------------------------------------------------------
 
     if (useAuth) {
@@ -36,25 +36,33 @@ const API = {
       }
     }
 
+    // --------------------------------------------------------
+    // CONFIGURAÇÃO
+    // --------------------------------------------------------
+
     const config = {
       method,
       headers
     };
 
     if (body !== null) {
+
+      headers["Content-Type"] =
+        "application/json";
+
       config.body =
         JSON.stringify(body);
     }
 
-    console.log("🌐 API REQUEST:", {
+    console.log(
+      "🌐 V8 API:",
       method,
-      url,
-      authenticated: useAuth
-    });
+      url
+    );
 
-    // ========================================================
+    // --------------------------------------------------------
     // FETCH
-    // ========================================================
+    // --------------------------------------------------------
 
     let response;
 
@@ -66,52 +74,30 @@ const API = {
     } catch (error) {
 
       console.error(
-        "❌ ERRO DE CONEXÃO COM A API:",
+        "❌ Falha de conexão:",
         error
       );
 
       return {
         error: true,
+        status: 0,
         message:
           "Não foi possível conectar ao servidor."
       };
     }
 
-    // ========================================================
+    // --------------------------------------------------------
     // RESPOSTA
-    // ========================================================
+    // --------------------------------------------------------
 
-    let rawText = "";
+    const rawText =
+      await response.text();
 
-    try {
-
-      rawText =
-        await response.text();
-
-    } catch (error) {
-
-      console.error(
-        "❌ ERRO AO LER RESPOSTA:",
-        error
-      );
-
-      return {
-        error: true,
-        message:
-          "Não foi possível ler a resposta do servidor."
-      };
-    }
-
-    console.log("📡 API RESPONSE:", {
-      status: response.status,
-      statusText: response.statusText,
-      url,
-      body: rawText
-    });
-
-    // ========================================================
-    // TENTA JSON
-    // ========================================================
+    console.log(
+      "📡 V8 API RESPONSE:",
+      response.status,
+      rawText
+    );
 
     let data = {};
 
@@ -122,42 +108,33 @@ const API = {
         data =
           JSON.parse(rawText);
 
-      } catch (error) {
-
-        console.error(
-          "❌ API NÃO RETORNOU JSON:",
-          {
-            status: response.status,
-            url,
-            response: rawText
-          }
-        );
+      } catch {
 
         return {
           error: true,
           status: response.status,
           message:
-            `A API retornou uma resposta inválida (HTTP ${response.status}).`,
+            `Resposta inválida da API (HTTP ${response.status}).`,
           raw: rawText
         };
       }
     }
 
-    // ========================================================
-    // 401 — NÃO AUTORIZADO
-    // ========================================================
+    // --------------------------------------------------------
+    // NÃO AUTORIZADO
+    // --------------------------------------------------------
 
     if (
       response.status === 401 &&
       useAuth
     ) {
 
-      console.warn(
-        "🔐 Sessão inválida ou expirada."
+      localStorage.removeItem(
+        "v8_admin_token"
       );
 
       localStorage.removeItem(
-        "v8_admin_token"
+        "v8_admin_token_expires"
       );
 
       if (
@@ -172,21 +149,20 @@ const API = {
         status: 401,
         message:
           data?.message ||
-          "Sessão expirada. Faça login novamente."
+          "Sessão expirada."
       };
     }
 
-    // ========================================================
-    // ERROS HTTP
-    // ========================================================
+    // --------------------------------------------------------
+    // ERRO HTTP
+    // --------------------------------------------------------
 
     if (!response.ok) {
 
       console.error(
-        "❌ ERRO HTTP DA API:",
+        "❌ API ERROR:",
         {
           status: response.status,
-          statusText: response.statusText,
           url,
           data
         }
@@ -202,21 +178,12 @@ const API = {
       };
     }
 
-    // ========================================================
+    // --------------------------------------------------------
     // SUCESSO
-    // ========================================================
-
-    console.log(
-      "✅ API OK:",
-      path
-    );
+    // --------------------------------------------------------
 
     return data;
   },
-
-  // ==========================================================
-  // GET
-  // ==========================================================
 
   get(path) {
     return this.request(
@@ -227,11 +194,7 @@ const API = {
     );
   },
 
-  // ==========================================================
-  // POST
-  // ==========================================================
-
-  post(path, body = null) {
+  post(path, body) {
     return this.request(
       path,
       "POST",
@@ -240,11 +203,7 @@ const API = {
     );
   },
 
-  // ==========================================================
-  // PUT
-  // ==========================================================
-
-  put(path, body = null) {
+  put(path, body) {
     return this.request(
       path,
       "PUT",
@@ -252,10 +211,6 @@ const API = {
       true
     );
   },
-
-  // ==========================================================
-  // DELETE
-  // ==========================================================
 
   del(path) {
     return this.request(
@@ -266,10 +221,6 @@ const API = {
     );
   },
 
-  // ==========================================================
-  // GET PÚBLICO
-  // ==========================================================
-
   getPublic(path) {
     return this.request(
       path,
@@ -279,11 +230,7 @@ const API = {
     );
   },
 
-  // ==========================================================
-  // POST PÚBLICO
-  // ==========================================================
-
-  postPublic(path, body = null) {
+  postPublic(path, body) {
     return this.request(
       path,
       "POST",
@@ -292,11 +239,7 @@ const API = {
     );
   },
 
-  // ==========================================================
-  // PUT PÚBLICO
-  // ==========================================================
-
-  putPublic(path, body = null) {
+  putPublic(path, body) {
     return this.request(
       path,
       "PUT",
@@ -306,13 +249,7 @@ const API = {
   }
 };
 
-
-// ============================================================
-// TESTE RÁPIDO
-// ============================================================
-
 console.log(
   "🚀 V8 ADMIN API carregada:",
   API_URL
 );
-```
