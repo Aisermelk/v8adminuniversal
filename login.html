@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Entrar — V8 ADMIN</title>
+
+    <link
+        rel="icon"
+        type="image/png"
+        href="assets/v8p.png"
+    >
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet"
+    >
+
+    <link
+        rel="stylesheet"
+        href="css/variables.css"
+    >
+
+    <link
+        rel="stylesheet"
+        href="css/style.css"
+    >
+
+</head>
+
+<body>
+
+    <div class="auth-page">
+
+        <div class="auth-card">
+
+            <!-- LOGO -->
+
+            <div class="auth-logo">
+
+                <img
+                    src="assets/v8p.png"
+                    alt="V8 ADMIN"
+                >
+
+            </div>
+
+
+            <!-- TÍTULO -->
+
+            <h1>V8 ADMIN</h1>
+
+            <p class="sub">
+                Entre com suas credenciais de administrador
+            </p>
+
+
+            <!-- ERRO -->
+
+            <div
+                class="auth-error hidden"
+                id="auth-error"
+                role="alert"
+            ></div>
+
+
+            <!-- LOGIN -->
+
+            <form id="login-form">
+
+                <div class="field">
+
+                    <label for="email">
+                        E-mail
+                    </label>
+
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        required
+                        autocomplete="username"
+                        placeholder="seu@email.com"
+                    >
+
+                </div>
+
+
+                <div class="field">
+
+                    <label for="password">
+                        Senha
+                    </label>
+
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        required
+                        autocomplete="current-password"
+                        placeholder="Digite sua senha"
+                    >
+
+                </div>
+
+
+                <button
+                    type="submit"
+                    class="btn btn-primary"
+                    id="login-submit"
+                    style="
+                        width:100%;
+                        justify-content:center;
+                        margin-top:6px;
+                    "
+                >
+                    Entrar
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <!-- ======================================================
+         TEMA
+         ====================================================== -->
+
+    <script>
+
+        const savedTheme =
+            localStorage.getItem("v8_theme") ||
+            "dark";
+
+        document.documentElement.setAttribute(
+            "data-theme",
+            savedTheme
+        );
+
+    </script>
+
+
+    <!-- ======================================================
+         API
+         ====================================================== -->
+
+    <script src="js/api.js"></script>
+
+
+    <!-- ======================================================
+         AUTENTICAÇÃO
+         ====================================================== -->
+
+    <script src="js/auth.js"></script>
+
+
+</body>
+
+</html>
