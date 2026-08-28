@@ -2,46 +2,11 @@
  * V8 ADMIN — Universal
  * Cloudflare Worker
  *
- * Worker: v8adminuniversal
- *
- * Backend:
- * Cloudflare Workers + KV
+ * Worker:
+ * v8adminuniversal
  *
  * API:
- *
- * GET     /
- * GET     /api
- * GET     /api/health
- *
- * POST    /api/login
- *
- * GET     /api/data/clients
- * POST    /api/data/clients
- * PUT     /api/data/clients
- * DELETE  /api/data/clients?id=ID
- *
- * GET     /api/data/projects
- * POST    /api/data/projects
- * PUT     /api/data/projects
- * DELETE  /api/data/projects?id=ID
- *
- * Aliases:
- *
- * GET/POST/PUT/DELETE /api/clients
- * GET/POST/PUT/DELETE /api/projects
- *
- * GET /api/dashboard/stats
- * GET /api/data/leads/:projectId
- *
- * GET  /api/public/config/:projectId
- * POST /api/public/leads/:projectId
- *
- * GET /api/client/:token
- * PUT /api/client/:token
- *
- * GET  /api/client-link/:projectId
- * POST /api/client-link/:projectId
- * POST /api/client-link/:jti/revoke
+ * https://v8adminuniversal.aisermelk.workers.dev
  *
  * KV:
  * V8_KV
@@ -53,120 +18,58 @@
  */
 
 // ============================================================
-// CONFIG
+// CORS
 // ============================================================
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods":
-    "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization",
-  "Access-Control-Max-Age": "86400",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-// ============================================================
-// RESPONSE HELPERS
-// ============================================================
-
-function json(data, status = 200, extraHeaders = {}) {
+function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      "Content-Type":
-        "application/json; charset=UTF-8",
-
+      "Content-Type": "application/json; charset=UTF-8",
       ...CORS_HEADERS,
-      ...extraHeaders,
     },
   });
 }
 
-function badRequest(message = "Requisição inválida") {
-  return json(
-    {
-      error: true,
-      message,
-    },
-    400
-  );
+function badRequest(message) {
+  return json({
+    error: true,
+    message,
+  }, 400);
 }
 
-function unauthorized(
-  message = "Não autorizado"
-) {
-  return json(
-    {
-      error: true,
-      message,
-    },
-    401
-  );
+function unauthorized(message = "Não autorizado") {
+  return json({
+    error: true,
+    message,
+  }, 401);
 }
 
-function forbidden(
-  message = "Acesso negado"
-) {
-  return json(
-    {
-      error: true,
-      message,
-    },
-    403
-  );
+function notFound(message = "Rota não encontrada") {
+  return json({
+    error: true,
+    message,
+  }, 404);
 }
 
-function notFound(
-  message = "Rota não encontrada"
-) {
-  return json(
-    {
-      error: true,
-      message,
-    },
-    404
-  );
+function serverError(message = "Erro interno do servidor") {
+  return json({
+    error: true,
+    message,
+  }, 500);
 }
 
-function methodNotAllowed(
-  message = "Método não permitido"
-) {
-  return json(
-    {
-      error: true,
-      message,
-    },
-    405,
-    {
-      Allow:
-        "GET, POST, PUT, DELETE, OPTIONS",
-    }
-  );
-}
-
-function tooMany(
-  message =
-    "Muitas tentativas. Tente novamente em alguns minutos."
-) {
-  return json(
-    {
-      error: true,
-      message,
-    },
-    429
-  );
-}
-
-function serverError(
-  message = "Erro interno do servidor"
-) {
-  return json(
-    {
-      error: true,
-      message,
-    },
-    500
-  );
+function tooMany(message = "Muitas tentativas. Tente novamente em alguns minutos.") {
+  return json({
+    error: true,
+    message,
+  }, 429);
 }
 
 function uuid() {
@@ -207,45 +110,24 @@ function b64urlDecodeStr(str) {
     str += "=";
   }
 
-  return atob(str);
-}
-
-function base64UrlToBytes(str) {
-  str = str
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-
-  while (str.length % 4) {
-    str += "=";
-  }
-
   const binary = atob(str);
 
-  const bytes = new Uint8Array(
-    binary.length
-  );
+  const bytes = new Uint8Array(binary.length);
 
-  for (
-    let i = 0;
-    i < binary.length;
-    i++
-  ) {
-    bytes[i] =
-      binary.charCodeAt(i);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
 
-  return bytes;
+  return new TextDecoder().decode(bytes);
 }
 
 // ============================================================
-// TOKEN
+// TOKEN HMAC
 // ============================================================
 
 async function getSigningKey(secret) {
   if (!secret) {
-    throw new Error(
-      "TOKEN_SECRET não configurado"
-    );
+    throw new Error("TOKEN_SECRET não configurado");
   }
 
   return crypto.subtle.importKey(
@@ -256,13 +138,12 @@ async function getSigningKey(secret) {
       hash: "SHA-256",
     },
     false,
-    ["sign", "verify"]
+    ["sign"]
   );
 }
 
 async function signToken(payload, secret) {
-  const key =
-    await getSigningKey(secret);
+  const key = await getSigningKey(secret);
 
   const payloadStr =
     b64urlEncodeStr(
@@ -273,27 +154,14 @@ async function signToken(payload, secret) {
     await crypto.subtle.sign(
       "HMAC",
       key,
-      new TextEncoder().encode(
-        payloadStr
-      )
+      new TextEncoder().encode(payloadStr)
     );
 
-  return (
-    payloadStr +
-    "." +
-    b64urlEncode(signature)
-  );
+  return `${payloadStr}.${b64urlEncode(signature)}`;
 }
 
-async function verifyToken(
-  token,
-  secret
-) {
-  if (
-    !token ||
-    typeof token !== "string" ||
-    !secret
-  ) {
+async function verifyToken(token, secret) {
+  if (!token || typeof token !== "string") {
     return null;
   }
 
@@ -303,28 +171,23 @@ async function verifyToken(
     return null;
   }
 
-  const payloadStr = parts[0];
-  const signature = parts[1];
-
-  if (!payloadStr || !signature) {
-    return null;
-  }
-
   try {
-    const key =
-      await getSigningKey(secret);
+    const payloadStr = parts[0];
+    const signature = parts[1];
 
-    const valid =
-      await crypto.subtle.verify(
+    const key = await getSigningKey(secret);
+
+    const expected =
+      await crypto.subtle.sign(
         "HMAC",
         key,
-        base64UrlToBytes(signature),
-        new TextEncoder().encode(
-          payloadStr
-        )
+        new TextEncoder().encode(payloadStr)
       );
 
-    if (!valid) {
+    const expectedSig =
+      b64urlEncode(expected);
+
+    if (signature !== expectedSig) {
       return null;
     }
 
@@ -345,20 +208,19 @@ async function verifyToken(
     }
 
     return payload;
+
   } catch {
     return null;
   }
 }
 
 // ============================================================
-// AUTH
+// AUTORIZAÇÃO ADMIN
 // ============================================================
 
 function getBearerToken(request) {
   const authorization =
-    request.headers.get(
-      "Authorization"
-    ) || "";
+    request.headers.get("Authorization") || "";
 
   const match =
     authorization.match(
@@ -366,14 +228,11 @@ function getBearerToken(request) {
     );
 
   return match
-    ? match[1].trim()
+    ? match[1]
     : null;
 }
 
-async function requireAdmin(
-  request,
-  env
-) {
+async function requireAdmin(request, env) {
   const token =
     getBearerToken(request);
 
@@ -391,9 +250,7 @@ async function requireAdmin(
     return null;
   }
 
-  if (
-    payload.role !== "admin"
-  ) {
+  if (payload.role !== "admin") {
     return null;
   }
 
@@ -418,7 +275,7 @@ async function kvGetJSON(
   const raw =
     await env.V8_KV.get(key);
 
-  if (raw === null) {
+  if (!raw) {
     return fallback;
   }
 
@@ -449,13 +306,11 @@ async function kvPutJSON(
 }
 
 // ============================================================
-// RATE LIMIT
+// LOGIN RATE LIMIT
 // ============================================================
 
 const LOGIN_MAX_ATTEMPTS = 5;
-
-const LOGIN_WINDOW_SECONDS =
-  15 * 60;
+const LOGIN_WINDOW_SECONDS = 15 * 60;
 
 async function checkLoginRateLimit(
   env,
@@ -468,13 +323,11 @@ async function checkLoginRateLimit(
     await kvGetJSON(
       env,
       key,
-      {
-        count: 0,
-      }
+      { count: 0 }
     );
 
   return (
-    Number(record?.count || 0) <
+    record.count <
     LOGIN_MAX_ATTEMPTS
   );
 }
@@ -490,13 +343,10 @@ async function registerLoginFailure(
     await kvGetJSON(
       env,
       key,
-      {
-        count: 0,
-      }
+      { count: 0 }
     );
 
-  record.count =
-    Number(record.count || 0) + 1;
+  record.count += 1;
 
   await kvPutJSON(
     env,
@@ -513,10 +363,6 @@ async function clearLoginRateLimit(
   env,
   ip
 ) {
-  if (!env.V8_KV) {
-    return;
-  }
-
   await env.V8_KV.delete(
     `ratelimit:login:${ip}`
   );
@@ -532,19 +378,19 @@ async function handleLogin(
 ) {
   if (!env.ADMIN_EMAIL) {
     return serverError(
-      "ADMIN_EMAIL não configurado no Worker"
+      "ADMIN_EMAIL não configurado"
     );
   }
 
   if (!env.ADMIN_PASS) {
     return serverError(
-      "ADMIN_PASS não configurado no Worker"
+      "ADMIN_PASS não configurado"
     );
   }
 
   if (!env.TOKEN_SECRET) {
     return serverError(
-      "TOKEN_SECRET não configurado no Worker"
+      "TOKEN_SECRET não configurado"
     );
   }
 
@@ -565,8 +411,7 @@ async function handleLogin(
   let body;
 
   try {
-    body =
-      await request.json();
+    body = await request.json();
   } catch {
     return badRequest(
       "JSON inválido"
@@ -614,8 +459,7 @@ async function handleLogin(
     );
 
   const exp =
-    now +
-    60 * 60 * 12;
+    now + 60 * 60 * 12;
 
   const token =
     await signToken(
@@ -630,13 +474,12 @@ async function handleLogin(
   return json({
     success: true,
     token,
-    expiresAt:
-      exp * 1000,
+    expiresAt: exp * 1000,
   });
 }
 
 // ============================================================
-// COLLECTIONS
+// CLIENTES / PROJETOS
 // ============================================================
 
 async function handleCollectionGet(
@@ -666,21 +509,10 @@ async function handleCollectionCreate(
   let body;
 
   try {
-    body =
-      await request.json();
+    body = await request.json();
   } catch {
     return badRequest(
       "JSON inválido"
-    );
-  }
-
-  if (
-    !body ||
-    typeof body !== "object" ||
-    Array.isArray(body)
-  ) {
-    return badRequest(
-      "O corpo da requisição deve ser um objeto JSON"
     );
   }
 
@@ -691,23 +523,16 @@ async function handleCollectionCreate(
       []
     );
 
-  if (!Array.isArray(list)) {
-    return serverError(
-      `Coleção '${collection}' inválida`
-    );
-  }
-
-  const defaults =
-    typeof shapeFn === "function"
+  const shape =
+    shapeFn
       ? shapeFn()
       : {};
 
   const item = {
-    ...defaults,
+    ...shape,
     ...body,
     id: uuid(),
-    createdAt:
-      Date.now(),
+    createdAt: Date.now(),
   };
 
   list.push(item);
@@ -732,24 +557,14 @@ async function handleCollectionUpdate(
   let body;
 
   try {
-    body =
-      await request.json();
+    body = await request.json();
   } catch {
     return badRequest(
       "JSON inválido"
     );
   }
 
-  if (
-    !body ||
-    typeof body !== "object"
-  ) {
-    return badRequest(
-      "O corpo da requisição deve ser um objeto JSON"
-    );
-  }
-
-  if (!body.id) {
+  if (!body?.id) {
     return badRequest(
       "Campo 'id' é obrigatório"
     );
@@ -762,16 +577,10 @@ async function handleCollectionUpdate(
       []
     );
 
-  if (!Array.isArray(list)) {
-    return serverError(
-      `Coleção '${collection}' inválida`
-    );
-  }
-
   const index =
     list.findIndex(
       item =>
-        item?.id === body.id
+        item.id === body.id
     );
 
   if (index === -1) {
@@ -783,8 +592,6 @@ async function handleCollectionUpdate(
   list[index] = {
     ...list[index],
     ...body,
-    id:
-      list[index].id,
   };
 
   await kvPutJSON(
@@ -817,16 +624,10 @@ async function handleCollectionDelete(
       []
     );
 
-  if (!Array.isArray(list)) {
-    return serverError(
-      `Coleção '${collection}' inválida`
-    );
-  }
-
   const filtered =
     list.filter(
       item =>
-        item?.id !== id
+        item.id !== id
     );
 
   if (
@@ -846,20 +647,17 @@ async function handleCollectionDelete(
 
   return json({
     deleted: true,
-    id,
   });
 }
 
 // ============================================================
-// PROJECT DEFAULT
+// PROJETO PADRÃO
 // ============================================================
 
 function defaultProjectShape() {
   return {
     name: "",
-
-    status:
-      "Em desenvolvimento",
+    status: "Em desenvolvimento",
 
     tracking: {
       pixel: "",
@@ -893,12 +691,6 @@ async function handleGetLeads(
   env,
   projectId
 ) {
-  if (!projectId) {
-    return badRequest(
-      "Project ID obrigatório"
-    );
-  }
-
   const leads =
     await kvGetJSON(
       env,
@@ -918,12 +710,6 @@ async function handlePublicCreateLead(
   env,
   projectId
 ) {
-  if (!projectId) {
-    return badRequest(
-      "Project ID obrigatório"
-    );
-  }
-
   const projects =
     await kvGetJSON(
       env,
@@ -932,12 +718,10 @@ async function handlePublicCreateLead(
     );
 
   const project =
-    Array.isArray(projects)
-      ? projects.find(
-          p =>
-            p?.id === projectId
-        )
-      : null;
+    projects.find(
+      p =>
+        p.id === projectId
+    );
 
   if (!project) {
     return notFound(
@@ -956,9 +740,8 @@ async function handlePublicCreateLead(
     );
   }
 
-  if (
-    body?.website
-  ) {
+  // Honeypot
+  if (body?.website) {
     return json({
       ok: true,
     });
@@ -966,35 +749,24 @@ async function handlePublicCreateLead(
 
   const lead = {
     id: uuid(),
-
     name:
       typeof body?.name === "string"
         ? body.name.trim()
         : "",
-
     email:
       typeof body?.email === "string"
         ? body.email.trim()
         : "",
-
+    phone:
+      typeof body?.phone === "string"
+        ? body.phone.trim()
+        : "",
     message:
       typeof body?.message === "string"
         ? body.message.trim()
         : "",
-
-    createdAt:
-      Date.now(),
+    createdAt: Date.now(),
   };
-
-  if (
-    !lead.name &&
-    !lead.email &&
-    !lead.message
-  ) {
-    return badRequest(
-      "Informe pelo menos um dado do lead"
-    );
-  }
 
   const leads =
     await kvGetJSON(
@@ -1003,42 +775,27 @@ async function handlePublicCreateLead(
       []
     );
 
-  const list =
-    Array.isArray(leads)
-      ? leads
-      : [];
-
-  list.unshift(lead);
+  leads.unshift(lead);
 
   await kvPutJSON(
     env,
     `leads:${projectId}`,
-    list.slice(0, 500)
+    leads.slice(0, 500)
   );
 
-  return json(
-    {
-      ok: true,
-      leadId: lead.id,
-    },
-    201
-  );
+  return json({
+    ok: true,
+  }, 201);
 }
 
 // ============================================================
-// PUBLIC CONFIG
+// CONFIG PÚBLICA
 // ============================================================
 
 async function handlePublicConfig(
   env,
   projectId
 ) {
-  if (!projectId) {
-    return badRequest(
-      "Project ID obrigatório"
-    );
-  }
-
   const projects =
     await kvGetJSON(
       env,
@@ -1047,12 +804,10 @@ async function handlePublicConfig(
     );
 
   const project =
-    Array.isArray(projects)
-      ? projects.find(
-          p =>
-            p?.id === projectId
-        )
-      : null;
+    projects.find(
+      p =>
+        p.id === projectId
+    );
 
   if (!project) {
     return notFound(
@@ -1063,55 +818,44 @@ async function handlePublicConfig(
   return json({
     tracking:
       project.tracking || {},
-
     contact:
       project.contact || {},
-
     social:
       project.social || {},
-
     formspree:
       project.formspree || "",
   });
 }
 
 // ============================================================
-// DASHBOARD
+// DASHBOARD — ESTATÍSTICAS
 // ============================================================
 
 async function handleDashboardStats(
   env
 ) {
-  const clients =
-    await kvGetJSON(
+  const [
+    clients,
+    projects,
+  ] = await Promise.all([
+    kvGetJSON(
       env,
       "clients",
       []
-    );
-
-  const projects =
-    await kvGetJSON(
+    ),
+    kvGetJSON(
       env,
       "projects",
       []
-    );
-
-  const clientList =
-    Array.isArray(clients)
-      ? clients
-      : [];
-
-  const projectList =
-    Array.isArray(projects)
-      ? projects
-      : [];
+    ),
+  ]);
 
   let totalLeads = 0;
 
   const recentLeads = [];
 
   for (
-    const project of projectList
+    const project of projects
   ) {
     const leads =
       await kvGetJSON(
@@ -1120,26 +864,18 @@ async function handleDashboardStats(
         []
       );
 
-    const list =
-      Array.isArray(leads)
-        ? leads
-        : [];
-
-    totalLeads +=
-      list.length;
+    totalLeads += leads.length;
 
     for (
-      const lead of list.slice(
+      const lead of leads.slice(
         0,
         10
       )
     ) {
       recentLeads.push({
         ...lead,
-
         projectName:
-          project.name ||
-          "Projeto",
+          project.name || "Projeto",
       });
     }
   }
@@ -1152,10 +888,10 @@ async function handleDashboardStats(
 
   return json({
     totalClients:
-      clientList.length,
+      clients.length,
 
     totalProjects:
-      projectList.length,
+      projects.length,
 
     totalLeads,
 
@@ -1168,101 +904,126 @@ async function handleDashboardStats(
 }
 
 // ============================================================
-// CLIENT LINKS
+// CAMPOS CLIENTE
 // ============================================================
 
-const ALLOWED_CLIENT_FIELDS = [
+const CLIENT_FIELDS = [
   "tracking.pixel",
   "tracking.tag",
   "tracking.analytics",
-
   "contact.whatsapp",
   "contact.email",
   "contact.phone",
-
   "social.facebook",
   "social.instagram",
   "social.tiktok",
   "social.youtube",
   "social.linkedin",
-
   "formspree",
 ];
 
-async function getProject(
-  env,
-  projectId
+function getByPath(
+  obj,
+  path
 ) {
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
+  return path
+    .split(".")
+    .reduce(
+      (current, key) =>
+        current == null
+          ? undefined
+          : current[key],
+      obj
+    );
+}
+
+function setByPath(
+  obj,
+  path,
+  value
+) {
+  const keys =
+    path.split(".");
+
+  let current = obj;
+
+  for (
+    let i = 0;
+    i < keys.length - 1;
+    i++
+  ) {
+    if (
+      typeof current[keys[i]] !==
+        "object" ||
+      current[keys[i]] === null
+    ) {
+      current[keys[i]] = {};
+    }
+
+    current =
+      current[keys[i]];
+  }
+
+  current[
+    keys[keys.length - 1]
+  ] = value;
+}
+
+// ============================================================
+// TOKEN CLIENTE
+// ============================================================
+
+async function requireClientToken(
+  token,
+  env
+) {
+  const payload =
+    await verifyToken(
+      token,
+      env.TOKEN_SECRET
     );
 
-  if (!Array.isArray(projects)) {
+  if (
+    !payload ||
+    payload.role !== "client" ||
+    !payload.jti
+  ) {
     return null;
   }
 
-  return projects.find(
-    p =>
-      p?.id === projectId
-  ) || null;
-}
-
-async function handleClientLinksGet(
-  env,
-  projectId
-) {
-  const project =
-    await getProject(
-      env,
-      projectId
-    );
-
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  const links =
+  const record =
     await kvGetJSON(
       env,
-      `client_links:${projectId}`,
-      []
+      `client_token:${payload.jti}`
     );
 
-  return json(
-    Array.isArray(links)
-      ? links
-      : []
-  );
+  if (
+    !record ||
+    record.revoked
+  ) {
+    return null;
+  }
+
+  return {
+    ...payload,
+    fields:
+      Array.isArray(record.fields)
+        ? record.fields
+        : [],
+    projectId:
+      record.projectId,
+  };
 }
 
-async function handleClientLinkCreate(
+// ============================================================
+// GERAR LINK CLIENTE
+// ============================================================
+
+async function handleGenerateClientLink(
   request,
   env,
   projectId
 ) {
-  const project =
-    await getProject(
-      env,
-      projectId
-    );
-
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  if (!env.TOKEN_SECRET) {
-    return serverError(
-      "TOKEN_SECRET não configurado no Worker"
-    );
-  }
-
   let body;
 
   try {
@@ -1274,26 +1035,43 @@ async function handleClientLinkCreate(
     );
   }
 
-  const requested =
-    Array.isArray(
-      body?.fields
-    )
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
+
+  const project =
+    projects.find(
+      p =>
+        p.id === projectId
+    );
+
+  if (!project) {
+    return notFound(
+      "Projeto não encontrado"
+    );
+  }
+
+  let fields =
+    Array.isArray(body?.fields)
       ? body.fields
       : [];
 
-  const fields =
-    requested.filter(
-      field =>
-        typeof field ===
-          "string" &&
-        ALLOWED_CLIENT_FIELDS.includes(
-          field
-        )
-    );
+  fields =
+    [...new Set(
+      fields.filter(
+        field =>
+          CLIENT_FIELDS.includes(
+            field
+          )
+      )
+    )];
 
   if (!fields.length) {
     return badRequest(
-      "Nenhum campo válido foi selecionado"
+      "Nenhum campo válido selecionado"
     );
   }
 
@@ -1304,9 +1082,9 @@ async function handleClientLinkCreate(
       Date.now() / 1000
     );
 
+  // Link válido por 30 dias
   const exp =
-    now +
-    60 * 60 * 24 * 30;
+    now + 60 * 60 * 24 * 30;
 
   const token =
     await signToken(
@@ -1328,13 +1106,50 @@ async function handleClientLinkCreate(
       projectId,
       fields,
       revoked: false,
-      createdAt:
-        Date.now(),
-      expiresAt:
-        exp * 1000,
+      createdAt: Date.now(),
     }
   );
 
+  return json({
+    success: true,
+    token,
+    jti,
+    projectId,
+    fields,
+    expiresAt:
+      exp * 1000,
+  }, 201);
+}
+
+// ============================================================
+// LISTAR LINKS CLIENTE
+// ============================================================
+
+async function handleListClientLinks(
+  env,
+  projectId
+) {
+  const projects =
+    await kvGetJSON(
+      env,
+      "projects",
+      []
+    );
+
+  const project =
+    projects.find(
+      p =>
+        p.id === projectId
+    );
+
+  if (!project) {
+    return notFound(
+      "Projeto não encontrado"
+    );
+  }
+
+  // Como o KV não possui busca por prefixo,
+  // mantemos um índice por projeto.
   const links =
     await kvGetJSON(
       env,
@@ -1342,43 +1157,18 @@ async function handleClientLinkCreate(
       []
     );
 
-  const list =
+  return json(
     Array.isArray(links)
       ? links
-      : [];
-
-  list.unshift({
-    jti,
-    projectId,
-    fields,
-    revoked: false,
-    createdAt:
-      Date.now(),
-    expiresAt:
-      exp * 1000,
-  });
-
-  await kvPutJSON(
-    env,
-    `client_links:${projectId}`,
-    list.slice(0, 100)
-  );
-
-  return json(
-    {
-      ok: true,
-      token,
-      jti,
-      projectId,
-      fields,
-      expiresAt:
-        exp * 1000,
-    },
-    201
+      : []
   );
 }
 
-async function handleClientLinkRevoke(
+// ============================================================
+// REVOGAR LINK
+// ============================================================
+
+async function handleRevokeClientLink(
   env,
   jti
 ) {
@@ -1388,11 +1178,13 @@ async function handleClientLinkRevoke(
     );
   }
 
+  const key =
+    `client_token:${jti}`;
+
   const record =
     await kvGetJSON(
       env,
-      `client_token:${jti}`,
-      null
+      key
     );
 
   if (!record) {
@@ -1402,41 +1194,44 @@ async function handleClientLinkRevoke(
   }
 
   record.revoked = true;
+  record.revokedAt =
+    Date.now();
 
   await kvPutJSON(
     env,
-    `client_token:${jti}`,
+    key,
     record
   );
 
-  const links =
-    await kvGetJSON(
-      env,
-      `client_links:${record.projectId}`,
-      []
-    );
+  // Atualizar índice
+  if (record.projectId) {
+    const links =
+      await kvGetJSON(
+        env,
+        `client_links:${record.projectId}`,
+        []
+      );
 
-  const list =
-    Array.isArray(links)
-      ? links
-      : [];
+    const index =
+      links.findIndex(
+        l =>
+          l.jti === jti
+      );
 
-  const updated =
-    list.map(
-      link =>
-        link.jti === jti
-          ? {
-              ...link,
-              revoked: true,
-            }
-          : link
-    );
+    if (index !== -1) {
+      links[index].revoked =
+        true;
 
-  await kvPutJSON(
-    env,
-    `client_links:${record.projectId}`,
-    updated
-  );
+      links[index].revokedAt =
+        Date.now();
+
+      await kvPutJSON(
+        env,
+        `client_links:${record.projectId}`,
+        links
+      );
+    }
+  }
 
   return json({
     ok: true,
@@ -1445,82 +1240,13 @@ async function handleClientLinkRevoke(
 }
 
 // ============================================================
-// CLIENT ACCESS
+// CLIENTE — GET
 // ============================================================
-
-async function requireClientToken(
-  token,
-  env
-) {
-  if (!env.TOKEN_SECRET) {
-    return null;
-  }
-
-  const payload =
-    await verifyToken(
-      token,
-      env.TOKEN_SECRET
-    );
-
-  if (
-    !payload ||
-    payload.role !== "client"
-  ) {
-    return null;
-  }
-
-  if (!payload.jti) {
-    return null;
-  }
-
-  const record =
-    await kvGetJSON(
-      env,
-      `client_token:${payload.jti}`,
-      null
-    );
-
-  if (!record) {
-    return null;
-  }
-
-  if (record.revoked) {
-    return null;
-  }
-
-  if (
-    record.expiresAt &&
-    Date.now() >
-      record.expiresAt
-  ) {
-    return null;
-  }
-
-  return {
-    ...payload,
-
-    fields:
-      Array.isArray(
-        record.fields
-      )
-        ? record.fields
-        : [],
-
-    projectId:
-      record.projectId,
-  };
-}
 
 async function handleClientGet(
   env,
   token
 ) {
-  if (!token) {
-    return unauthorized(
-      "Token obrigatório"
-    );
-  }
-
   const auth =
     await requireClientToken(
       token,
@@ -1529,19 +1255,42 @@ async function handleClientGet(
 
   if (!auth) {
     return unauthorized(
-      "Link inválido, expirado ou revogado"
+      "Link inválido ou revogado"
     );
   }
 
-  const project =
-    await getProject(
+  const projects =
+    await kvGetJSON(
       env,
-      auth.projectId
+      "projects",
+      []
+    );
+
+  const project =
+    projects.find(
+      p =>
+        p.id ===
+        auth.projectId
     );
 
   if (!project) {
     return notFound(
       "Projeto não encontrado"
+    );
+  }
+
+  const safeData = {};
+
+  for (
+    const field of auth.fields
+  ) {
+    setByPath(
+      safeData,
+      field,
+      getByPath(
+        project,
+        field
+      )
     );
   }
 
@@ -1553,21 +1302,19 @@ async function handleClientGet(
       auth.fields,
 
     data:
-      project,
+      safeData,
   });
 }
+
+// ============================================================
+// CLIENTE — UPDATE
+// ============================================================
 
 async function handleClientUpdate(
   request,
   env,
   token
 ) {
-  if (!token) {
-    return unauthorized(
-      "Token obrigatório"
-    );
-  }
-
   const auth =
     await requireClientToken(
       token,
@@ -1576,7 +1323,7 @@ async function handleClientUpdate(
 
   if (!auth) {
     return unauthorized(
-      "Link inválido, expirado ou revogado"
+      "Link inválido ou revogado"
     );
   }
 
@@ -1598,16 +1345,10 @@ async function handleClientUpdate(
       []
     );
 
-  if (!Array.isArray(projects)) {
-    return serverError(
-      "Coleção de projetos inválida"
-    );
-  }
-
   const index =
     projects.findIndex(
       p =>
-        p?.id ===
+        p.id ===
         auth.projectId
     );
 
@@ -1618,21 +1359,18 @@ async function handleClientUpdate(
   }
 
   for (
-    const path of
-      auth.fields
+    const field of auth.fields
   ) {
     const value =
       getByPath(
         body,
-        path
+        field
       );
 
-    if (
-      value !== undefined
-    ) {
+    if (value !== undefined) {
       setByPath(
         projects[index],
-        path,
+        field,
         value
       );
     }
@@ -1650,79 +1388,6 @@ async function handleClientUpdate(
 }
 
 // ============================================================
-// OBJECT PATH HELPERS
-// ============================================================
-
-function getByPath(
-  obj,
-  path
-) {
-  if (
-    !obj ||
-    !path
-  ) {
-    return undefined;
-  }
-
-  return path
-    .split(".")
-    .reduce(
-      (current, key) =>
-        current &&
-        typeof current ===
-          "object"
-          ? current[key]
-          : undefined,
-      obj
-    );
-}
-
-function setByPath(
-  obj,
-  path,
-  value
-) {
-  if (
-    !obj ||
-    !path
-  ) {
-    return;
-  }
-
-  const keys =
-    path.split(".");
-
-  let current = obj;
-
-  for (
-    let i = 0;
-    i <
-    keys.length - 1;
-    i++
-  ) {
-    if (
-      typeof current[
-        keys[i]
-      ] !== "object" ||
-      current[
-        keys[i]
-      ] === null
-    ) {
-      current[keys[i]] = {};
-    }
-
-    current =
-      current[keys[i]];
-  }
-
-  current[
-    keys[
-      keys.length - 1
-    ]
-  ] = value;
-}
-
-// ============================================================
 // ROUTER
 // ============================================================
 
@@ -1731,10 +1396,7 @@ export default {
     request,
     env
   ) {
-    // --------------------------------------------------------
-    // CORS PREFLIGHT
-    // --------------------------------------------------------
-
+    // CORS
     if (
       request.method ===
       "OPTIONS"
@@ -1766,6 +1428,7 @@ export default {
       request.method.toUpperCase();
 
     try {
+
       // ======================================================
       // HOME
       // ======================================================
@@ -1776,74 +1439,11 @@ export default {
       ) {
         return json({
           ok: true,
-
           worker:
             "v8adminuniversal",
-
           status:
             "online",
-
           api: true,
-
-          version:
-            "1.0.0",
-
-          time:
-            new Date().toISOString(),
-        });
-      }
-
-      // ======================================================
-      // API INFO
-      // ======================================================
-
-      if (
-        path === "/api" &&
-        method === "GET"
-      ) {
-        return json({
-          ok: true,
-
-          worker:
-            "v8adminuniversal",
-
-          status:
-            "online",
-
-          api: true,
-
-          version:
-            "1.0.0",
-
-          endpoints: {
-            health:
-              "/api/health",
-
-            login:
-              "POST /api/login",
-
-            clients:
-              "/api/data/clients",
-
-            projects:
-              "/api/data/projects",
-
-            dashboard:
-              "/api/dashboard/stats",
-
-            publicConfig:
-              "/api/public/config/:projectId",
-
-            publicLeads:
-              "POST /api/public/leads/:projectId",
-
-            client:
-              "/api/client/:token",
-
-            clientLinks:
-              "/api/client-link/:projectId",
-          },
-
           time:
             new Date().toISOString(),
         });
@@ -1890,16 +1490,9 @@ export default {
 
       if (
         path ===
-          "/api/login"
+          "/api/login" &&
+        method === "POST"
       ) {
-        if (
-          method !== "POST"
-        ) {
-          return methodNotAllowed(
-            "Use POST /api/login"
-          );
-        }
-
         return handleLogin(
           request,
           env
@@ -1907,70 +1500,7 @@ export default {
       }
 
       // ======================================================
-      // PUBLIC CONFIG
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/public/config/"
-        )
-      ) {
-        if (
-          method !== "GET"
-        ) {
-          return methodNotAllowed(
-            "Use GET nesta rota"
-          );
-        }
-
-        const projectId =
-          decodeURIComponent(
-            path.substring(
-              "/api/public/config/"
-                .length
-            )
-          );
-
-        return handlePublicConfig(
-          env,
-          projectId
-        );
-      }
-
-      // ======================================================
-      // PUBLIC LEADS
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/public/leads/"
-        )
-      ) {
-        if (
-          method !== "POST"
-        ) {
-          return methodNotAllowed(
-            "Use POST nesta rota"
-          );
-        }
-
-        const projectId =
-          decodeURIComponent(
-            path.substring(
-              "/api/public/leads/"
-                .length
-            )
-          );
-
-        return handlePublicCreateLead(
-          request,
-          env,
-          projectId
-        );
-      }
-
-      // ======================================================
-      // CLIENT TOKEN
+      // API CLIENTE PÚBLICA
       // ======================================================
 
       if (
@@ -1981,8 +1511,7 @@ export default {
         const token =
           decodeURIComponent(
             path.substring(
-              "/api/client/"
-                .length
+              "/api/client/".length
             )
           );
 
@@ -2004,12 +1533,59 @@ export default {
             token
           );
         }
-
-        return methodNotAllowed();
       }
 
       // ======================================================
-      // ADMIN AUTH
+      // CONFIG PÚBLICA
+      // ======================================================
+
+      if (
+        path.startsWith(
+          "/api/public/config/"
+        ) &&
+        method === "GET"
+      ) {
+        const projectId =
+          decodeURIComponent(
+            path.substring(
+              "/api/public/config/"
+                .length
+            )
+          );
+
+        return handlePublicConfig(
+          env,
+          projectId
+        );
+      }
+
+      // ======================================================
+      // LEAD PÚBLICO
+      // ======================================================
+
+      if (
+        path.startsWith(
+          "/api/public/leads/"
+        ) &&
+        method === "POST"
+      ) {
+        const projectId =
+          decodeURIComponent(
+            path.substring(
+              "/api/public/leads/"
+                .length
+            )
+          );
+
+        return handlePublicCreateLead(
+          request,
+          env,
+          projectId
+        );
+      }
+
+      // ======================================================
+      // ADMIN
       // ======================================================
 
       const admin =
@@ -2030,28 +1606,21 @@ export default {
 
       if (
         path ===
-          "/api/dashboard/stats"
+          "/api/dashboard/stats" &&
+        method === "GET"
       ) {
-        if (
-          method !== "GET"
-        ) {
-          return methodNotAllowed();
-        }
-
         return handleDashboardStats(
           env
         );
       }
 
       // ======================================================
-      // CLIENTS
+      // CLIENTES
       // ======================================================
 
       if (
         path ===
-          "/api/data/clients" ||
-        path ===
-          "/api/clients"
+        "/api/data/clients"
       ) {
         if (
           method === "GET"
@@ -2083,8 +1652,7 @@ export default {
         }
 
         if (
-          method ===
-          "DELETE"
+          method === "DELETE"
         ) {
           return handleCollectionDelete(
             request,
@@ -2095,19 +1663,15 @@ export default {
             )
           );
         }
-
-        return methodNotAllowed();
       }
 
       // ======================================================
-      // PROJECTS
+      // PROJETOS
       // ======================================================
 
       if (
         path ===
-          "/api/data/projects" ||
-        path ===
-          "/api/projects"
+        "/api/data/projects"
       ) {
         if (
           method === "GET"
@@ -2140,8 +1704,7 @@ export default {
         }
 
         if (
-          method ===
-          "DELETE"
+          method === "DELETE"
         ) {
           return handleCollectionDelete(
             request,
@@ -2152,25 +1715,18 @@ export default {
             )
           );
         }
-
-        return methodNotAllowed();
       }
 
       // ======================================================
-      // ADMIN LEADS
+      // LEADS ADMIN
       // ======================================================
 
       if (
         path.startsWith(
           "/api/data/leads/"
-        )
+        ) &&
+        method === "GET"
       ) {
-        if (
-          method !== "GET"
-        ) {
-          return methodNotAllowed();
-        }
-
         const projectId =
           decodeURIComponent(
             path.substring(
@@ -2186,82 +1742,90 @@ export default {
       }
 
       // ======================================================
-      // CLIENT LINKS
+      // GERAR LINK DO CLIENTE
       // ======================================================
 
       if (
         path.startsWith(
           "/api/client-link/"
-        )
+        ) &&
+        method === "POST"
       ) {
-        const rest =
-          path.substring(
-            "/api/client-link/"
-              .length
-          );
-
-        // ----------------------------------------------------
-        // REVOKE
-        // ----------------------------------------------------
-
-        if (
-          rest.endsWith(
-            "/revoke"
-          )
-        ) {
-          if (
-            method !== "POST"
-          ) {
-            return methodNotAllowed();
-          }
-
-          const jti =
-            decodeURIComponent(
-              rest.replace(
-                /\/revoke$/,
-                ""
-              )
-            );
-
-          return handleClientLinkRevoke(
-            env,
-            jti
-          );
-        }
-
-        // ----------------------------------------------------
-        // PROJECT LINK
-        // ----------------------------------------------------
-
         const projectId =
           decodeURIComponent(
-            rest
+            path.substring(
+              "/api/client-link/"
+                .length
+            )
           );
 
-        if (
-          method === "GET"
-        ) {
-          return handleClientLinksGet(
-            env,
-            projectId
-          );
-        }
-
-        if (
-          method === "POST"
-        ) {
-          return handleClientLinkCreate(
-            request,
-            env,
-            projectId
-          );
-        }
-
-        return methodNotAllowed();
+        return handleGenerateClientLink(
+          request,
+          env,
+          projectId
+        );
       }
 
       // ======================================================
-      // NOT FOUND
+      // LISTAR LINKS DO CLIENTE
+      // ======================================================
+
+      if (
+        path.startsWith(
+          "/api/client-link/"
+        ) &&
+        method === "GET"
+      ) {
+        const projectId =
+          decodeURIComponent(
+            path.substring(
+              "/api/client-link/"
+                .length
+            )
+          );
+
+        return handleListClientLinks(
+          env,
+          projectId
+        );
+      }
+
+      // ======================================================
+      // REVOGAR LINK
+      // ======================================================
+
+      if (
+        path.startsWith(
+          "/api/client-link/"
+        ) &&
+        path.endsWith(
+          "/revoke"
+        ) &&
+        method === "POST"
+      ) {
+        const base =
+          "/api/client-link/";
+
+        const jti =
+          decodeURIComponent(
+            path.substring(
+              base.length,
+              path.length -
+                "/revoke".length
+            ).replace(
+              /\/$/,
+              ""
+            )
+          );
+
+        return handleRevokeClientLink(
+          env,
+          jti
+        );
+      }
+
+      // ======================================================
+      // 404
       // ======================================================
 
       return notFound(
@@ -2269,14 +1833,19 @@ export default {
       );
 
     } catch (error) {
+
       console.error(
-        "V8 ADMIN Worker error:",
+        "Worker error:",
         error
       );
 
-      return serverError(
-        "Erro interno no Worker"
-      );
+      return json({
+        error: true,
+        message:
+          "Erro interno no Worker",
+        detail:
+          String(error?.message || error),
+      }, 500);
     }
   },
 };
