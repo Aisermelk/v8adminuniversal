@@ -1,5 +1,6 @@
+```html
 <!DOCTYPE html>
-<html lang="pt-BR" data-theme="dark">
+<html lang="pt-BR">
 
 <head>
 
@@ -10,25 +11,14 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Entrar — V8 ADMIN</title>
-
-    <link
-        rel="icon"
-        type="image/png"
-        href="assets/v8p.png"
+    <meta
+        name="description"
+        content="V8 Admin Universal — Painel administrativo"
     >
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-
-    <link
-        href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap"
-        rel="stylesheet"
-    >
-
-    <link
-        rel="stylesheet"
-        href="css/variables.css"
-    >
+    <title>
+        V8 Admin Universal
+    </title>
 
     <link
         rel="stylesheet"
@@ -39,132 +29,530 @@
 
 <body>
 
-    <div class="auth-page">
+    <!-- =========================================================
+         APP
+    ========================================================== -->
 
-        <div class="auth-card">
+    <div
+        class="app"
+        id="app"
+    >
 
-            <!-- LOGO -->
+        <!-- =====================================================
+             SIDEBAR
+        ====================================================== -->
 
-            <div class="auth-logo">
+        <aside class="sidebar">
 
-                <img
-                    src="assets/v8p.png"
-                    alt="V8 ADMIN"
-                >
+            <div class="sidebar-header">
+
+                <div class="brand">
+
+                    <div class="brand-mark">
+                        V8
+                    </div>
+
+                    <div class="brand-text">
+
+                        <strong>
+                            V8 Admin
+                        </strong>
+
+                        <span>
+                            Universal
+                        </span>
+
+                    </div>
+
+                </div>
 
             </div>
 
 
-            <!-- TÍTULO -->
+            <!-- =================================================
+                 NAVEGAÇÃO
+            ================================================== -->
 
-            <h1>V8 ADMIN</h1>
+            <nav class="sidebar-nav">
 
-            <p class="sub">
-                Entre com suas credenciais de administrador
-            </p>
+                <button
+                    class="nav-item active"
+                    data-section="dashboard"
+                    type="button"
+                >
 
+                    <span class="nav-icon">
+                        ▦
+                    </span>
 
-            <!-- ERRO -->
+                    <span>
+                        Dashboard
+                    </span>
 
-            <div
-                class="auth-error hidden"
-                id="auth-error"
-                role="alert"
-            ></div>
-
-
-            <!-- LOGIN -->
-
-            <form id="login-form">
-
-                <div class="field">
-
-                    <label for="email">
-                        E-mail
-                    </label>
-
-                    <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        required
-                        autocomplete="username"
-                        placeholder="seu@email.com"
-                    >
-
-                </div>
-
-
-                <div class="field">
-
-                    <label for="password">
-                        Senha
-                    </label>
-
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        required
-                        autocomplete="current-password"
-                        placeholder="Digite sua senha"
-                    >
-
-                </div>
+                </button>
 
 
                 <button
-                    type="submit"
-                    class="btn btn-primary"
-                    id="login-submit"
-                    style="
-                        width:100%;
-                        justify-content:center;
-                        margin-top:6px;
-                    "
+                    class="nav-item"
+                    data-section="clients"
+                    type="button"
                 >
-                    Entrar
+
+                    <span class="nav-icon">
+                        ♙
+                    </span>
+
+                    <span>
+                        Clientes
+                    </span>
+
                 </button>
 
-            </form>
 
-        </div>
+                <button
+                    class="nav-item"
+                    data-section="projects"
+                    type="button"
+                >
+
+                    <span class="nav-icon">
+                        ◫
+                    </span>
+
+                    <span>
+                        Projetos
+                    </span>
+
+                </button>
+
+            </nav>
+
+
+            <!-- =================================================
+                 RODAPÉ SIDEBAR
+            ================================================== -->
+
+            <div class="sidebar-footer">
+
+                <button
+                    id="logout-btn"
+                    class="nav-item logout-btn"
+                    type="button"
+                >
+
+                    <span class="nav-icon">
+                        ⇥
+                    </span>
+
+                    <span>
+                        Sair
+                    </span>
+
+                </button>
+
+            </div>
+
+        </aside>
+
+
+        <!-- =====================================================
+             CONTEÚDO PRINCIPAL
+        ====================================================== -->
+
+        <main class="main-content">
+
+
+            <!-- =================================================
+                 TOPBAR
+            ================================================== -->
+
+            <header class="topbar">
+
+                <div>
+
+                    <h1 id="page-title">
+                        Dashboard
+                    </h1>
+
+                    <p id="page-subtitle">
+                        Visão geral do sistema
+                    </p>
+
+                </div>
+
+
+                <div class="topbar-actions">
+
+                    <!-- Tema -->
+
+                    <label
+                        class="theme-switch"
+                        title="Alternar tema"
+                    >
+
+                        <input
+                            type="checkbox"
+                            id="theme-toggle"
+                        >
+
+                        <span class="theme-slider"></span>
+
+                    </label>
+
+                </div>
+
+            </header>
+
+
+            <!-- =================================================
+                 DASHBOARD
+            ================================================== -->
+
+            <section
+                class="section"
+                data-section="dashboard"
+            >
+
+                <div
+                    id="dashboard-stats"
+                    class="stats-grid"
+                >
+
+                    <div class="stat-card">
+
+                        <div class="value">
+                            …
+                        </div>
+
+                        <div class="label">
+                            Carregando
+                        </div>
+
+                    </div>
+
+
+                    <div class="stat-card">
+
+                        <div class="value">
+                            …
+                        </div>
+
+                        <div class="label">
+                            Carregando
+                        </div>
+
+                    </div>
+
+
+                    <div class="stat-card">
+
+                        <div class="value">
+                            …
+                        </div>
+
+                        <div class="label">
+                            Carregando
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- Leads recentes -->
+
+                <div class="card">
+
+                    <div class="card-header">
+
+                        <div>
+
+                            <h2>
+                                Leads recentes
+                            </h2>
+
+                            <p>
+                                Últimas mensagens recebidas
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div
+                        id="dashboard-recent-leads"
+                        class="list"
+                    >
+
+                        <div class="empty-state">
+
+                            <strong>
+                                Carregando...
+                            </strong>
+
+                            Aguarde enquanto os dados são carregados.
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 CLIENTES
+            ================================================== -->
+
+            <section
+                class="section hidden"
+                data-section="clients"
+            >
+
+                <div class="section-header">
+
+                    <div>
+
+                        <h2>
+                            Clientes
+                        </h2>
+
+                        <p>
+                            Gerencie seus clientes e projetos vinculados.
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        class="btn btn-primary"
+                        type="button"
+                        onclick="openClientModal()"
+                    >
+
+                        <span>
+                            +
+                        </span>
+
+                        Novo cliente
+
+                    </button>
+
+                </div>
+
+
+                <div class="card">
+
+                    <div
+                        id="clients-table-wrap"
+                        class="table-wrap"
+                    >
+
+                        <div class="empty-state">
+
+                            <strong>
+                                Carregando clientes...
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- =================================================
+                 PROJETOS
+            ================================================== -->
+
+            <section
+                class="section hidden"
+                data-section="projects"
+            >
+
+                <div class="section-header">
+
+                    <div>
+
+                        <h2>
+                            Projetos
+                        </h2>
+
+                        <p>
+                            Gerencie sites e suas integrações.
+                        </p>
+
+                    </div>
+
+
+                    <button
+                        class="btn btn-primary"
+                        type="button"
+                        onclick="openProjectModal()"
+                    >
+
+                        <span>
+                            +
+                        </span>
+
+                        Novo projeto
+
+                    </button>
+
+                </div>
+
+
+                <div class="card">
+
+                    <div
+                        id="projects-table-wrap"
+                        class="table-wrap"
+                    >
+
+                        <div class="empty-state">
+
+                            <strong>
+                                Carregando projetos...
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+        </main>
 
     </div>
 
 
-    <!-- ======================================================
-         TEMA
-         ====================================================== -->
+    <!-- =========================================================
+         SCRIPTS
+         
+         IMPORTANTE:
+         API deve carregar antes de Auth.
+         Auth deve carregar antes de dashboard.js.
+    ========================================================== -->
+
+
+    <!-- API -->
+
+    <script
+        src="js/api.js"
+    ></script>
+
+
+    <!-- Autenticação -->
+
+    <script
+        src="js/auth.js"
+    ></script>
+
+
+    <!-- Dashboard / Painel -->
+
+    <script
+        src="js/dashboard.js"
+    ></script>
+
+
+    <!-- =========================================================
+         ATUALIZAÇÃO DO TÍTULO DA PÁGINA
+    ========================================================== -->
 
     <script>
 
-        const savedTheme =
-            localStorage.getItem("v8_theme") ||
-            "dark";
+        document.addEventListener(
+            "DOMContentLoaded",
+            () => {
 
-        document.documentElement.setAttribute(
-            "data-theme",
-            savedTheme
+                const title =
+                    document.getElementById(
+                        "page-title"
+                    );
+
+                const subtitle =
+                    document.getElementById(
+                        "page-subtitle"
+                    );
+
+
+                document
+                    .querySelectorAll(
+                        ".nav-item[data-section]"
+                    )
+                    .forEach(
+                        (button) => {
+
+                            button.addEventListener(
+                                "click",
+                                () => {
+
+                                    const section =
+                                        button.dataset.section;
+
+
+                                    if (
+                                        section ===
+                                        "dashboard"
+                                    ) {
+
+                                        title.textContent =
+                                            "Dashboard";
+
+                                        subtitle.textContent =
+                                            "Visão geral do sistema";
+
+                                    }
+
+
+                                    if (
+                                        section ===
+                                        "clients"
+                                    ) {
+
+                                        title.textContent =
+                                            "Clientes";
+
+                                        subtitle.textContent =
+                                            "Gerencie seus clientes";
+
+                                    }
+
+
+                                    if (
+                                        section ===
+                                        "projects"
+                                    ) {
+
+                                        title.textContent =
+                                            "Projetos";
+
+                                        subtitle.textContent =
+                                            "Gerencie sites e integrações";
+
+                                    }
+
+                                }
+                            );
+
+                        }
+                    );
+
+            }
         );
 
     </script>
 
 
-    <!-- ======================================================
-         API
-         ====================================================== -->
-
-    <script src="js/api.js"></script>
-
-
-    <!-- ======================================================
-         AUTENTICAÇÃO
-         ====================================================== -->
-
-    <script src="js/auth.js"></script>
-
-
 </body>
 
 </html>
+```
