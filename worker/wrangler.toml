@@ -1,7 +1,0 @@
-name = "v8adminuniversal"
-main = "index.js"
-compatibility_date = "2024-11-01"
-
-[[kv_namespaces]]
-binding = "V8_KV"
-id = "48cb4e4cd5354c648a48d120fe87951f"
