@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR" data-theme="dark">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<meta
+    name="theme-color"
+    content="#09070F"
+>
+
+<meta
+    name="description"
+    content="V8 ADMIN — Painel administrativo universal para gerenciamento de sites"
+>
+
+<meta
+    name="robots"
+    content="noindex, nofollow"
+>
+
+<title>V8 ADMIN — Universal V2</title>
+
+
+<!-- =====================================================
+     FAVICON
+====================================================== -->
+
+<link
+    rel="icon"
+    type="image/png"
+    href="assets/v8p.png"
+>
+
+
+<!-- =====================================================
+     FONTES
+====================================================== -->
+
+<link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+>
+
+<link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+>
+
+<link
+    href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet"
+>
+
+
+<!-- =====================================================
+     CSS
+====================================================== -->
+
+<link
+    rel="stylesheet"
+    href="css/variables.css"
+>
+
+<link
+    rel="stylesheet"
+    href="css/style.css"
+>
+
+</head>
+
+<body>
+
+<div class="app">
+
+<!-- =========================================================
+     SIDEBAR
+========================================================== -->
+
+<aside class="sidebar">
+
+<div class="sidebar-brand">
+
+    <img
+        src="assets/v8p.png"
+        alt="V8 ADMIN"
+        loading="eager"
+    >
+
+    <span>V8 ADMIN</span>
+
+</div>
+
+
+<nav
+    class="nav"
+    aria-label="Navegação principal"
+>
+
+
+    <!-- DASHBOARD -->
+
+    <button
+        type="button"
+        class="nav-item active"
+        data-section="dashboard"
+    >
+
+        <span class="dot"></span>
+
+        Dashboard
+
+    </button>
+
+
+    <!-- CLIENTES -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="clients"
+    >
+
+        <span class="dot"></span>
+
+        Clientes
+
+    </button>
+
+
+    <!-- PROJETOS -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="projects"
+    >
+
+        <span class="dot"></span>
+
+        Projetos
+
+    </button>
+
+
+    <!-- INTEGRAÇÕES -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="integrations"
+    >
+
+        <span class="dot"></span>
+
+        Integrações
+
+    </button>
+
+
+    <!-- CONTEÚDO -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="content"
+    >
+
+        <span class="dot"></span>
+
+        Conteúdo
+
+    </button>
+
+
+    <!-- MÍDIA -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="media"
+    >
+
+        <span class="dot"></span>
+
+        Galeria & Mídia
+
+    </button>
+
+
+    <!-- LOCALIZAÇÃO -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="location"
+    >
+
+        <span class="dot"></span>
+
+        Google Maps
+
+    </button>
+
+
+    <!-- SEO -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="seo"
+    >
+
+        <span class="dot"></span>
+
+        SEO
+
+    </button>
+
+
+    <!-- SCRIPTS -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="scripts"
+    >
+
+        <span class="dot"></span>
+
+        Scripts
+
+    </button>
+
+</nav>
+
+
+<!-- =====================================================
+     SIDEBAR FOOTER
+====================================================== -->
+
+<div class="sidebar-footer">
+
+    <div
+        class="checkbox-row"
+        style="padding:6px 8px"
+    >
+
+        <label
+            style="
+                margin:0;
+                font-weight:400;
+                color:var(--text-muted);
+                font-size:12.5px;
+                display:flex;
+                align-items:center;
+                gap:8px;
+                cursor:pointer;
+            "
+        >
+
+            <input
+                type="checkbox"
+                id="theme-toggle"
+                style="width:auto"
+            >
+
+            Tema claro
+
+        </label>
+
+    </div>
+
+
+    <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        id="logout-btn"
+        style="
+            width:100%;
+            justify-content:center;
+        "
+    >
+
+        Sair
+
+    </button>
+
+</div>
+
+</aside>
+
+<!-- =========================================================
+     CONTEÚDO PRINCIPAL
+========================================================== -->
+
+<main class="main">
+
+<!-- =========================================================
+     DASHBOARD
+========================================================== -->
+
+<section
+    class="section"
+    data-section="dashboard"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Dashboard</h1>
+
+        <p>
+            Visão geral de todos os seus projetos
+        </p>
+
+    </div>
+
+</div>
+
+
+<div
+    class="stat-grid"
+    id="dashboard-stats"
+>
+
+    <div class="loading">
+        Carregando...
+    </div>
+
+</div>
+
+
+<div class="section-title">
+    Leads recentes
+</div>
+
+
+<div
+    class="table-wrap"
+    id="dashboard-recent-leads"
+>
+
+    <div class="loading">
+        Carregando leads...
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     CLIENTES
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="clients"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Clientes</h1>
+
+        <p>
+            Pessoas ou empresas para quem você presta serviço
+        </p>
+
+    </div>
+
+
+    <button
+        type="button"
+        class="btn btn-primary"
+        id="new-client-btn"
+    >
+
+        + Novo cliente
+
+    </button>
+
+</div>
+
+
+<div
+    class="table-wrap"
+    id="clients-table-wrap"
+>
+
+    <div class="loading">
+        Carregando clientes...
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     PROJETOS
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="projects"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Projetos</h1>
+
+        <p>
+            Sites gerenciados pelo V8 ADMIN Universal
+        </p>
+
+    </div>
+
+
+    <button
+        type="button"
+        class="btn btn-primary"
+        id="new-project-btn"
+    >
+
+        + Novo projeto
+
+    </button>
+
+</div>
+
+
+<div
+    class="table-wrap"
+    id="projects-table-wrap"
+>
+
+    <div class="loading">
+        Carregando projetos...
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     INTEGRAÇÕES
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="integrations"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Integrações</h1>
+
+        <p>
+            Configure WhatsApp, redes sociais, formulários
+            e ferramentas de marketing.
+        </p>
+
+    </div>
+
+</div>
+
+
+<div
+    class="table-wrap"
+    id="integrations-panel"
+>
+
+    <div class="form-grid">
+
+
+        <!-- WHATSAPP -->
+
+        <div class="form-card">
+
+            <h3>WhatsApp</h3>
+
+            <p>
+                Número utilizado pelos botões de contato.
+            </p>
+
+            <input
+                type="tel"
+                id="integration-whatsapp"
+                placeholder="Ex.: 5554999999999"
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-whatsapp-enabled"
+                >
+
+                Ativar WhatsApp
+
+            </label>
+
+        </div>
+
+
+        <!-- E-MAIL -->
+
+        <div class="form-card">
+
+            <h3>E-mail</h3>
+
+            <p>
+                E-mail público do projeto.
+            </p>
+
+            <input
+                type="email"
+                id="integration-email"
+                placeholder="contato@empresa.com"
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-email-enabled"
+                >
+
+                Ativar e-mail
+
+            </label>
+
+        </div>
+
+
+        <!-- INSTAGRAM -->
+
+        <div class="form-card">
+
+            <h3>Instagram</h3>
+
+            <input
+                type="url"
+                id="integration-instagram"
+                placeholder="https://instagram.com/"
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-instagram-enabled"
+                >
+
+                Ativar Instagram
+
+            </label>
+
+        </div>
+
+
+        <!-- FACEBOOK -->
+
+        <div class="form-card">
+
+            <h3>Facebook</h3>
+
+            <input
+                type="url"
+                id="integration-facebook"
+                placeholder="https://facebook.com/"
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-facebook-enabled"
+                >
+
+                Ativar Facebook
+
+            </label>
+
+        </div>
+
+
+        <!-- TIKTOK -->
+
+        <div class="form-card">
+
+            <h3>TikTok</h3>
+
+            <input
+                type="url"
+                id="integration-tiktok"
+                placeholder="https://tiktok.com/@usuario"
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-tiktok-enabled"
+                >
+
+                Ativar TikTok
+
+            </label>
+
+        </div>
+
+
+        <!-- LINKEDIN -->
+
+        <div class="form-card">
+
+            <h3>LinkedIn</h3>
+
+            <input
+                type="url"
+                id="integration-linkedin"
+                placeholder="https://linkedin.com/"
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-linkedin-enabled"
+                >
+
+                Ativar LinkedIn
+
+            </label>
+
+        </div>
+
+
+        <!-- YOUTUBE -->
+
+        <div class="form-card">
+
+            <h3>YouTube</h3>
+
+            <input
+                type="url"
+                id="integration-youtube"
+                placeholder="https://youtube.com/"
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-youtube-enabled"
+                >
+
+                Ativar YouTube
+
+            </label>
+
+        </div>
+
+
+        <!-- FORMSPREE -->
+
+        <div class="form-card">
+
+            <h3>Formspree</h3>
+
+            <p>
+                Endpoint utilizado pelos formulários.
+            </p>
+
+            <input
+                type="text"
+                id="integration-formspree"
+                placeholder="https://formspree.io/f/..."
+            >
+
+            <label class="checkbox-row">
+
+                <input
+                    type="checkbox"
+                    id="integration-formspree-enabled"
+                >
+
+                Ativar formulário
+
+            </label>
+
+        </div>
+
+    </div>
+
+
+    <div class="form-actions">
+
+        <button
+            type="button"
+            class="btn btn-primary"
+            id="save-integrations-btn"
+        >
+
+            Salvar integrações
+
+        </button>
+
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     CONTEÚDO
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="content"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Conteúdo</h1>
+
+        <p>
+            Gerencie textos e informações exibidas nos sites.
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="table-wrap">
+
+    <div class="form-grid">
+
+
+        <div class="form-card">
+
+            <h3>Nome da empresa / profissional</h3>
+
+            <input
+                type="text"
+                id="content-name"
+                placeholder="Nome"
+            >
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Profissão</h3>
+
+            <input
+                type="text"
+                id="content-job"
+                placeholder="Profissão"
+            >
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Título principal</h3>
+
+            <textarea
+                id="content-headline"
+                rows="3"
+                placeholder="Título principal do site"
+            ></textarea>
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Descrição principal</h3>
+
+            <textarea
+                id="content-description"
+                rows="4"
+                placeholder="Descrição"
+            ></textarea>
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Especialização</h3>
+
+            <textarea
+                id="content-specialization"
+                rows="4"
+                placeholder="Especializações"
+            ></textarea>
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Experiência</h3>
+
+            <textarea
+                id="content-experience"
+                rows="4"
+                placeholder="Experiência profissional"
+            ></textarea>
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Endereço</h3>
+
+            <textarea
+                id="content-address"
+                rows="3"
+                placeholder="Endereço"
+            ></textarea>
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Registro profissional</h3>
+
+            <input
+                type="text"
+                id="content-registration"
+                placeholder="Registro"
+            >
+
+        </div>
+
+    </div>
+
+
+    <div class="form-actions">
+
+        <button
+            type="button"
+            class="btn btn-primary"
+            id="save-content-btn"
+        >
+
+            Salvar conteúdo
+
+        </button>
+
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     GALERIA E MÍDIA
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="media"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Galeria & Mídia</h1>
+
+        <p>
+            Configure imagens, vídeos e galerias dos projetos.
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="table-wrap">
+
+
+    <div class="form-card">
+
+        <h3>Galeria principal</h3>
+
+        <p>
+            Informe as imagens que o site deverá carregar.
+        </p>
+
+
+        <textarea
+            id="gallery-images"
+            rows="8"
+            placeholder="Uma URL de imagem por linha"
+        ></textarea>
+
+
+        <label class="checkbox-row">
+
+            <input
+                type="checkbox"
+                id="gallery-enabled"
+            >
+
+            Ativar galeria
+
+        </label>
+
+    </div>
+
+
+    <br>
+
+
+    <div class="form-card">
+
+        <h3>Vídeo</h3>
+
+        <input
+            type="url"
+            id="media-video"
+            placeholder="URL do YouTube ou vídeo"
+        >
+
+
+        <label class="checkbox-row">
+
+            <input
+                type="checkbox"
+                id="media-video-enabled"
+            >
+
+            Ativar vídeo
+
+        </label>
+
+    </div>
+
+
+    <div class="form-actions">
+
+        <button
+            type="button"
+            class="btn btn-primary"
+            id="save-media-btn"
+        >
+
+            Salvar mídia
+
+        </button>
+
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     GOOGLE MAPS
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="location"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Google Maps</h1>
+
+        <p>
+            Configure localização e mapa do projeto.
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="table-wrap">
+
+
+    <div class="form-card">
+
+        <h3>Endereço</h3>
+
+        <input
+            type="text"
+            id="maps-address"
+            placeholder="Rua, número, cidade"
+        >
+
+    </div>
+
+
+    <br>
+
+
+    <div class="form-card">
+
+        <h3>URL do Google Maps</h3>
+
+        <input
+            type="url"
+            id="maps-url"
+            placeholder="https://maps.google.com/..."
+        >
+
+    </div>
+
+
+    <br>
+
+
+    <div class="form-card">
+
+        <h3>Incorporação do mapa</h3>
+
+        <textarea
+            id="maps-embed"
+            rows="5"
+            placeholder="URL de incorporação do Google Maps"
+        ></textarea>
+
+
+        <label class="checkbox-row">
+
+            <input
+                type="checkbox"
+                id="maps-enabled"
+            >
+
+            Ativar Google Maps
+
+        </label>
+
+    </div>
+
+
+    <div class="form-actions">
+
+        <button
+            type="button"
+            class="btn btn-primary"
+            id="save-maps-btn"
+        >
+
+            Salvar localização
+
+        </button>
+
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     SEO
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="seo"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>SEO</h1>
+
+        <p>
+            Controle as principais informações de indexação do site.
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="table-wrap">
+
+    <div class="form-grid">
+
+
+        <div class="form-card">
+
+            <h3>Meta Title</h3>
+
+            <input
+                type="text"
+                id="seo-title"
+                placeholder="Título do site"
+            >
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Meta Description</h3>
+
+            <textarea
+                id="seo-description"
+                rows="4"
+                placeholder="Descrição para mecanismos de busca"
+            ></textarea>
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Imagem Open Graph</h3>
+
+            <input
+                type="url"
+                id="seo-og-image"
+                placeholder="URL da imagem"
+            >
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Canonical URL</h3>
+
+            <input
+                type="url"
+                id="seo-canonical"
+                placeholder="https://seudominio.com.br"
+            >
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Palavras-chave</h3>
+
+            <textarea
+                id="seo-keywords"
+                rows="4"
+                placeholder="palavra 1, palavra 2, palavra 3"
+            ></textarea>
+
+        </div>
+
+
+        <div class="form-card">
+
+            <h3>Robots</h3>
+
+            <select id="seo-robots">
+
+                <option value="index, follow">
+                    Indexar
+                </option>
+
+                <option value="noindex, nofollow">
+                    Não indexar
+                </option>
+
+            </select>
+
+        </div>
+
+    </div>
+
+
+    <div class="form-actions">
+
+        <button
+            type="button"
+            class="btn btn-primary"
+            id="save-seo-btn"
+        >
+
+            Salvar SEO
+
+        </button>
+
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     SCRIPTS
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="scripts"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Scripts personalizados</h1>
+
+        <p>
+            Scripts adicionais específicos para cada projeto.
+        </p>
+
+    </div>
+
+</div>
+
+
+<div class="table-wrap">
+
+
+    <div class="form-card">
+
+        <h3>Head</h3>
+
+        <p>
+            Código inserido no &lt;head&gt; do site.
+        </p>
+
+        <textarea
+            id="scripts-head"
+            rows="8"
+            placeholder="Cole aqui o código permitido..."
+        ></textarea>
+
+    </div>
+
+
+    <br>
+
+
+    <div class="form-card">
+
+        <h3>Body</h3>
+
+        <p>
+            Código executado no corpo da página.
+        </p>
+
+        <textarea
+            id="scripts-body"
+            rows="8"
+            placeholder="Cole aqui o código permitido..."
+        ></textarea>
+
+    </div>
+
+
+    <br>
+
+
+    <div class="form-card">
+
+        <h3>Footer</h3>
+
+        <p>
+            Código inserido antes do fechamento do body.
+        </p>
+
+        <textarea
+            id="scripts-footer"
+            rows="8"
+            placeholder="Cole aqui o código permitido..."
+        ></textarea>
+
+    </div>
+
+
+    <div class="form-actions">
+
+        <button
+            type="button"
+            class="btn btn-primary"
+            id="save-scripts-btn"
+        >
+
+            Salvar scripts
+
+        </button>
+
+    </div>
+
+</div>
+
+</section>
+
+</main>
+
+</div>
+
+<!-- =========================================================
+     CONFIGURAÇÃO DA API
+========================================================== -->
+
+<script>
+
+window.V8_ADMIN_CONFIG = {
+
+    API_URL:
+        "https://v8adminuniversal.aisermelk.workers.dev",
+
+    API_PREFIX:
+        "/api"
+
+};
+
+</script>
+
+<!-- =========================================================
+     JAVASCRIPT EXISTENTE
+========================================================== -->
+
+<script src="js/api.js"></script>
+
+<script src="js/auth.js"></script>
+
+<script src="js/dashboard.js"></script>
+
+<!-- =========================================================
+     NAVEGAÇÃO V2
+========================================================== -->
+
+<script>
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+
+
+        const navItems =
+            document.querySelectorAll(
+                ".nav-item"
+            );
+
+
+        const sections =
+            document.querySelectorAll(
+                ".section"
+            );
+
+
+        navItems.forEach(
+            function (button) {
+
+                button.addEventListener(
+                    "click",
+                    function () {
+
+                        const target =
+                            button.dataset.section;
+
+
+                        if (!target) {
+                            return;
+                        }
+
+
+                        navItems.forEach(
+                            function (item) {
+
+                                item.classList.remove(
+                                    "active"
+                                );
+
+                            }
+                        );
+
+
+                        sections.forEach(
+                            function (section) {
+
+                                section.classList.add(
+                                    "hidden"
+                                );
+
+                            }
+                        );
+
+
+                        button.classList.add(
+                            "active"
+                        );
+
+
+                        const section =
+                            document.querySelector(
+                                '.section[data-section="' +
+                                target +
+                                '"]'
+                            );
+
+
+                        if (section) {
+
+                            section.classList.remove(
+                                "hidden"
+                            );
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+
+
+        /* ==================================================
+           TEMA
+        ================================================== */
+
+        const themeToggle =
+            document.getElementById(
+                "theme-toggle"
+            );
+
+
+        if (themeToggle) {
+
+            const savedTheme =
+                localStorage.getItem(
+                    "v8admin_theme"
+                );
+
+
+            if (
+                savedTheme ===
+                "light"
+            ) {
+
+                document.documentElement
+                    .setAttribute(
+                        "data-theme",
+                        "light"
+                    );
+
+                themeToggle.checked =
+                    true;
+
+            }
+
+
+            themeToggle.addEventListener(
+                "change",
+                function () {
+
+                    const theme =
+                        themeToggle.checked
+                            ? "light"
+                            : "dark";
+
+
+                    document.documentElement
+                        .setAttribute(
+                            "data-theme",
+                            theme
+                        );
+
+
+                    localStorage.setItem(
+                        "v8admin_theme",
+                        theme
+                    );
+
+                }
+            );
+
+        }
+
+
+
+        /* ==================================================
+           NOVO CLIENTE
+        ================================================== */
+
+        const newClientButton =
+            document.getElementById(
+                "new-client-btn"
+            );
+
+
+        if (
+            newClientButton &&
+            typeof window.openClientModal ===
+                "function"
+        ) {
+
+            newClientButton.addEventListener(
+                "click",
+                function () {
+
+                    window.openClientModal();
+
+                }
+            );
+
+        }
+
+
+
+        /* ==================================================
+           NOVO PROJETO
+        ================================================== */
+
+        const newProjectButton =
+            document.getElementById(
+                "new-project-btn"
+            );
+
+
+        if (
+            newProjectButton &&
+            typeof window.openProjectModal ===
+                "function"
+        ) {
+
+            newProjectButton.addEventListener(
+                "click",
+                function () {
+
+                    window.openProjectModal();
+
+                }
+            );
+
+        }
+
+
+
+        /* ==================================================
+           BOTÕES V2
+        ================================================== */
+
+        const buttons = [
+
+            "save-integrations-btn",
+            "save-content-btn",
+            "save-media-btn",
+            "save-maps-btn",
+            "save-seo-btn",
+            "save-scripts-btn"
+
+        ];
+
+
+        buttons.forEach(
+            function (id) {
+
+                const button =
+                    document.getElementById(
+                        id
+                    );
+
+
+                if (!button) {
+                    return;
+                }
+
+
+                button.addEventListener(
+                    "click",
+                    function () {
+
+                        document.dispatchEvent(
+                            new CustomEvent(
+                                "v8admin:save",
+                                {
+                                    detail: {
+                                        type: id
+                                    }
+                                }
+                            )
+                        );
+
+
+                        console.info(
+                            "V8 ADMIN V2:",
+                            id
+                        );
+
+                    }
+                );
+
+            }
+        );
+
+    }
+);
+
+</script>
+
+</body>
+
+</html>
