@@ -1,286 +1,711 @@
-// V8 ADMIN — Universal | Lógica completa do painel
+// ============================================================
+// V8 ADMIN — UNIVERSAL
+// Dashboard / Projetos / Clientes / Integrações
+// ============================================================
 
 const CLIENT_FIELD_LABELS = {
-  "tracking.pixel": "Meta Pixel",
-  "tracking.tag": "Google Tag (GTM)",
-  "tracking.analytics": "Google Analytics",
-  "contact.whatsapp": "WhatsApp",
-  "contact.email": "E-mail",
-  "contact.phone": "Telefone",
-  "social.facebook": "Facebook",
-  "social.instagram": "Instagram",
-  "social.tiktok": "TikTok",
-  "social.youtube": "YouTube",
-  "social.linkedin": "LinkedIn",
-  "formspree": "Formspree",
+
+  // ----------------------------------------------------------
+  // RASTREAMENTO
+  // ----------------------------------------------------------
+
+  "tracking.pixel":
+    "Meta Pixel",
+
+  "tracking.tag":
+    "Google Tag (GTM)",
+
+  "tracking.analytics":
+    "Google Analytics",
+
+
+  // ----------------------------------------------------------
+  // CONTATO
+  // ----------------------------------------------------------
+
+  "contact.whatsapp":
+    "WhatsApp",
+
+  "contact.email":
+    "E-mail",
+
+  "contact.phone":
+    "Telefone",
+
+
+  // ----------------------------------------------------------
+  // REDES SOCIAIS
+  // ----------------------------------------------------------
+
+  "social.facebook":
+    "Facebook",
+
+  "social.instagram":
+    "Instagram",
+
+  "social.tiktok":
+    "TikTok",
+
+  "social.youtube":
+    "YouTube",
+
+  "social.linkedin":
+    "LinkedIn",
+
+
+  // ----------------------------------------------------------
+  // GOOGLE
+  // ----------------------------------------------------------
+
+  "google.maps":
+    "Google Maps",
+
+  "google.reviews":
+    "Google Reviews",
+
+
+  // ----------------------------------------------------------
+  // FORMULÁRIO
+  // ----------------------------------------------------------
+
+  "formspree":
+    "Formspree",
+
+
+  // ----------------------------------------------------------
+  // SEO
+  // ----------------------------------------------------------
+
+  "seo.title":
+    "Título SEO",
+
+  "seo.description":
+    "Descrição SEO",
+
+
+  // ----------------------------------------------------------
+  // VISUAL
+  // ----------------------------------------------------------
+
+  "branding.favicon":
+    "Favicon",
+
+
+  // ----------------------------------------------------------
+  // GALERIA
+  // ----------------------------------------------------------
+
+  "gallery.enabled":
+    "Galeria",
+
+  "gallery.images":
+    "Imagens da galeria",
+
+
+  // ----------------------------------------------------------
+  // SCRIPTS
+  // ----------------------------------------------------------
+
+  "scripts.custom":
+    "Scripts personalizados",
+
 };
+
+
+
+// ============================================================
+// ESTADO
+// ============================================================
 
 const state = {
-  section: "dashboard",
-  clients: [],
-  projects: [],
-  editingClientId: null,
-  editingProjectId: null,
-  projectTab: "geral",
-  _editingProjectDraft: null,
-  _lastGeneratedToken: null,
+
+  section:
+    "dashboard",
+
+  clients:
+    [],
+
+  projects:
+    [],
+
+  editingClientId:
+    null,
+
+  editingProjectId:
+    null,
+
+  projectTab:
+    "geral",
+
+  _editingProjectDraft:
+    null,
+
+  _lastGeneratedToken:
+    null,
+
 };
 
+
+
+// ============================================================
+// UTILITÁRIO $
+// ============================================================
+
 function $(id) {
+
   return document.getElementById(id);
+
 }
 
-// ================================================================
-// UTILITÁRIOS
-// ================================================================
 
-function toast(message, type = "success") {
-  const el = document.createElement("div");
 
-  el.className = `toast ${type}`;
-  el.textContent = message;
+// ============================================================
+// TOAST
+// ============================================================
+
+function toast(
+  message,
+  type = "success"
+) {
+
+  const el =
+    document.createElement("div");
+
+  el.className =
+    `toast ${type}`;
+
+  el.textContent =
+    message;
 
   document.body.appendChild(el);
 
   setTimeout(() => {
+
     el.remove();
+
   }, 3200);
+
 }
+
+
+
+// ============================================================
+// ESCAPE HTML
+// ============================================================
 
 function escapeHtml(str) {
-  if (str === null || str === undefined) return "";
+
+  if (
+    str === null ||
+    str === undefined
+  ) {
+
+    return "";
+
+  }
 
   return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+
+    .replace(
+      /</g,
+      "&lt;"
+    )
+
+    .replace(
+      />/g,
+      "&gt;"
+    )
+
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+
 }
 
-function getByPath(obj, path) {
-  return path.split(".").reduce(
-    (o, k) => (o ? o[k] : undefined),
-    obj
-  );
+
+
+// ============================================================
+// GET BY PATH
+// ============================================================
+
+function getByPath(
+  obj,
+  path
+) {
+
+  return path
+    .split(".")
+    .reduce(
+      (o, k) =>
+        o
+          ? o[k]
+          : undefined,
+      obj
+    );
+
 }
 
-function setByPath(obj, path, value) {
-  const keys = path.split(".");
-  let cur = obj;
 
-  for (let i = 0; i < keys.length - 1; i++) {
+
+// ============================================================
+// SET BY PATH
+// ============================================================
+
+function setByPath(
+  obj,
+  path,
+  value
+) {
+
+  const keys =
+    path.split(".");
+
+  let cur =
+    obj;
+
+  for (
+    let i = 0;
+    i < keys.length - 1;
+    i++
+  ) {
+
     if (
-      typeof cur[keys[i]] !== "object" ||
+      typeof cur[keys[i]] !==
+        "object" ||
       cur[keys[i]] === null
     ) {
-      cur[keys[i]] = {};
+
+      cur[keys[i]] =
+        {};
+
     }
 
-    cur = cur[keys[i]];
+    cur =
+      cur[keys[i]];
+
   }
 
-  cur[keys[keys.length - 1]] = value;
+  cur[
+    keys[keys.length - 1]
+  ] =
+    value;
+
 }
 
-// ================================================================
-// INICIALIZAÇÃO
-// ================================================================
 
-document.addEventListener("DOMContentLoaded", async () => {
-  try {
-    if (typeof Auth !== "undefined") {
-      Auth.requireAuth();
+
+// ============================================================
+// INICIALIZAÇÃO
+// ============================================================
+
+document.addEventListener(
+  "DOMContentLoaded",
+  async () => {
+
+    try {
+
+      if (
+        typeof Auth !==
+        "undefined"
+      ) {
+
+        Auth.requireAuth();
+
+      }
+
+
+      applyStoredTheme();
+
+      setupNav();
+
+      setupThemeToggle();
+
+      switchSection(
+        "dashboard"
+      );
+
+      await refreshAllData();
+
+    } catch (error) {
+
+      console.error(
+        "Erro ao inicializar painel:",
+        error
+      );
+
+      toast(
+        "Erro ao carregar o painel.",
+        "error"
+      );
+
     }
 
-    applyStoredTheme();
-    setupNav();
-    setupThemeToggle();
-
-    switchSection("dashboard");
-
-    await refreshAllData();
-
-  } catch (error) {
-    console.error("Erro ao inicializar painel:", error);
-    toast("Erro ao carregar o painel.", "error");
   }
-});
+);
 
-// ================================================================
+
+
+// ============================================================
 // NAVEGAÇÃO
-// ================================================================
+// ============================================================
 
 function setupNav() {
+
   document
-    .querySelectorAll(".nav-item[data-section]")
-    .forEach((btn) => {
+    .querySelectorAll(
+      ".nav-item[data-section]"
+    )
+    .forEach(
+      (btn) => {
 
-      btn.addEventListener("click", () => {
-        switchSection(btn.dataset.section);
-      });
+        btn.addEventListener(
+          "click",
+          () => {
 
-    });
+            switchSection(
+              btn.dataset.section
+            );
 
-  const logoutBtn = $("logout-btn");
+          }
+        );
+
+      }
+    );
+
+
+  const logoutBtn =
+    $("logout-btn");
+
 
   if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
-      if (typeof Auth !== "undefined") {
-        Auth.logout();
+
+    logoutBtn.addEventListener(
+      "click",
+      () => {
+
+        if (
+          typeof Auth !==
+          "undefined"
+        ) {
+
+          Auth.logout();
+
+        }
+
       }
-    });
+    );
+
   }
+
 }
 
-function switchSection(name) {
-  state.section = name;
+
+
+// ============================================================
+// TROCAR SEÇÃO
+// ============================================================
+
+function switchSection(
+  name
+) {
+
+  state.section =
+    name;
+
 
   document
-    .querySelectorAll(".nav-item[data-section]")
-    .forEach((btn) => {
+    .querySelectorAll(
+      ".nav-item[data-section]"
+    )
+    .forEach(
+      (btn) => {
 
-      btn.classList.toggle(
-        "active",
-        btn.dataset.section === name
-      );
+        btn.classList.toggle(
+          "active",
+          btn.dataset.section ===
+            name
+        );
 
-    });
+      }
+    );
+
 
   document
-    .querySelectorAll(".section")
-    .forEach((sec) => {
+    .querySelectorAll(
+      ".section"
+    )
+    .forEach(
+      (sec) => {
 
-      sec.classList.toggle(
-        "hidden",
-        sec.dataset.section !== name
-      );
+        sec.classList.toggle(
+          "hidden",
+          sec.dataset.section !==
+            name
+        );
 
-    });
+      }
+    );
 
-  if (name === "dashboard") {
+
+  if (
+    name ===
+    "dashboard"
+  ) {
+
     renderDashboard();
+
   }
 
-  if (name === "clients") {
+
+  if (
+    name ===
+    "clients"
+  ) {
+
     renderClients();
+
   }
 
-  if (name === "projects") {
+
+  if (
+    name ===
+    "projects"
+  ) {
+
     renderProjects();
+
   }
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // CARREGAR DADOS
-// ================================================================
+// ============================================================
 
 async function refreshAllData() {
+
   try {
-    const [clientsRes, projectsRes] = await Promise.all([
-      API.get("/api/data/clients"),
-      API.get("/api/data/projects"),
-    ]);
 
-    state.clients = Array.isArray(clientsRes)
-      ? clientsRes
-      : [];
+    const [
+      clientsRes,
+      projectsRes
+    ] =
+      await Promise.all([
 
-    state.projects = Array.isArray(projectsRes)
-      ? projectsRes
-      : [];
+        API.get(
+          "/api/data/clients"
+        ),
 
-    switchSection(state.section);
+        API.get(
+          "/api/data/projects"
+        ),
+
+      ]);
+
+
+    state.clients =
+      Array.isArray(
+        clientsRes
+      )
+        ? clientsRes
+        : [];
+
+
+    state.projects =
+      Array.isArray(
+        projectsRes
+      )
+        ? projectsRes
+        : [];
+
+
+    switchSection(
+      state.section
+    );
 
   } catch (error) {
-    console.error("Erro ao carregar dados:", error);
 
-    state.clients = [];
-    state.projects = [];
+    console.error(
+      "Erro ao carregar dados:",
+      error
+    );
+
+    state.clients =
+      [];
+
+    state.projects =
+      [];
+
 
     toast(
       "Não foi possível carregar os dados.",
       "error"
     );
+
   }
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // TEMA
-// ================================================================
+// ============================================================
 
 function applyStoredTheme() {
-  const saved =
-    localStorage.getItem("v8_theme") || "dark";
 
-  document.documentElement.setAttribute(
-    "data-theme",
-    saved
-  );
+  const saved =
+    localStorage.getItem(
+      "v8_theme"
+    ) ||
+    "dark";
+
+
+  document.documentElement
+    .setAttribute(
+      "data-theme",
+      saved
+    );
+
 }
+
+
+
+// ============================================================
+// TEMA TOGGLE
+// ============================================================
 
 function setupThemeToggle() {
-  const toggle = $("theme-toggle");
 
-  if (!toggle) return;
+  const toggle =
+    $("theme-toggle");
+
+
+  if (!toggle) {
+
+    return;
+
+  }
+
 
   toggle.checked =
-    document.documentElement.getAttribute(
-      "data-theme"
-    ) === "light";
+    document.documentElement
+      .getAttribute(
+        "data-theme"
+      ) === "light";
 
-  toggle.addEventListener("change", () => {
 
-    const theme = toggle.checked
-      ? "light"
-      : "dark";
+  toggle.addEventListener(
+    "change",
+    () => {
 
-    document.documentElement.setAttribute(
-      "data-theme",
-      theme
-    );
+      const theme =
+        toggle.checked
+          ? "light"
+          : "dark";
 
-    localStorage.setItem(
-      "v8_theme",
-      theme
-    );
-  });
+
+      document.documentElement
+        .setAttribute(
+          "data-theme",
+          theme
+        );
+
+
+      localStorage.setItem(
+        "v8_theme",
+        theme
+      );
+
+    }
+  );
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // DASHBOARD
-// ================================================================
+// ============================================================
 
 async function renderDashboard() {
 
-  const wrap = $("dashboard-stats");
+  const wrap =
+    $("dashboard-stats");
 
-  if (!wrap) return;
+
+  if (!wrap) {
+
+    return;
+
+  }
+
 
   wrap.innerHTML = `
-    <div class="stat-card">
-      <div class="value">…</div>
-      <div class="label">Carregando</div>
-    </div>
 
     <div class="stat-card">
-      <div class="value">…</div>
-      <div class="label">Carregando</div>
+
+      <div class="value">
+        …
+      </div>
+
+      <div class="label">
+        Carregando
+      </div>
+
     </div>
 
+
     <div class="stat-card">
-      <div class="value">…</div>
-      <div class="label">Carregando</div>
+
+      <div class="value">
+        …
+      </div>
+
+      <div class="label">
+        Carregando
+      </div>
+
     </div>
+
+
+    <div class="stat-card">
+
+      <div class="value">
+        …
+      </div>
+
+      <div class="label">
+        Carregando
+      </div>
+
+    </div>
+
   `;
+
 
   let stats;
 
+
   try {
 
-    stats = await API.get(
-      "/api/dashboard/stats"
-    );
+    stats =
+      await API.get(
+        "/api/dashboard/stats"
+      );
 
   } catch (error) {
 
@@ -292,11 +717,9 @@ async function renderDashboard() {
     stats = {
       error: true
     };
+
   }
 
-  // ============================================================
-  // Se a API de estatísticas estiver funcionando
-  // ============================================================
 
   if (
     stats &&
@@ -304,47 +727,62 @@ async function renderDashboard() {
   ) {
 
     wrap.innerHTML = `
+
       <div class="stat-card">
+
         <div class="value">
-          ${Number(stats.totalProjects || 0)}
+          ${Number(
+            stats.totalProjects ||
+            0
+          )}
         </div>
 
         <div class="label">
           Projetos
         </div>
+
       </div>
 
+
       <div class="stat-card">
+
         <div class="value">
-          ${Number(stats.totalClients || 0)}
+          ${Number(
+            stats.totalClients ||
+            0
+          )}
         </div>
 
         <div class="label">
           Clientes
         </div>
+
       </div>
 
+
       <div class="stat-card">
+
         <div class="value">
-          ${Number(stats.totalLeads || 0)}
+          ${Number(
+            stats.totalLeads ||
+            0
+          )}
         </div>
 
         <div class="label">
           Leads recebidos
         </div>
+
       </div>
+
     `;
 
   } else {
 
-    // ==========================================================
-    // Fallback
-    // Se /api/dashboard/stats falhar,
-    // pelo menos projetos e clientes continuam aparecendo.
-    // ==========================================================
-
     wrap.innerHTML = `
+
       <div class="stat-card">
+
         <div class="value">
           ${state.projects.length}
         </div>
@@ -352,9 +790,12 @@ async function renderDashboard() {
         <div class="label">
           Projetos
         </div>
+
       </div>
 
+
       <div class="stat-card">
+
         <div class="value">
           ${state.clients.length}
         </div>
@@ -362,9 +803,12 @@ async function renderDashboard() {
         <div class="label">
           Clientes
         </div>
+
       </div>
 
+
       <div class="stat-card">
+
         <div class="value">
           —
         </div>
@@ -372,102 +816,146 @@ async function renderDashboard() {
         <div class="label">
           Leads recebidos
         </div>
+
       </div>
+
     `;
+
   }
 
-  // ============================================================
-  // LEADS RECENTES
-  // ============================================================
+
 
   const leadsWrap =
     $("dashboard-recent-leads");
 
-  if (!leadsWrap) return;
+
+  if (!leadsWrap) {
+
+    return;
+
+  }
+
 
   if (
     !stats ||
     stats.error ||
-    !Array.isArray(stats.recentLeads) ||
-    stats.recentLeads.length === 0
+    !Array.isArray(
+      stats.recentLeads
+    ) ||
+    stats.recentLeads.length ===
+      0
   ) {
 
     leadsWrap.innerHTML = `
+
       <div class="empty-state">
 
-        <strong>Nenhum lead ainda</strong>
+        <strong>
+          Nenhum lead ainda
+        </strong>
 
         Assim que o formulário de algum
         projeto receber uma mensagem,
         ela aparece aqui.
 
       </div>
+
     `;
 
     return;
+
   }
+
 
   leadsWrap.innerHTML =
     stats.recentLeads
-      .map((l) => `
+      .map(
+        (l) => `
 
-        <div class="link-row">
-
-          <div>
+          <div class="link-row">
 
             <div>
-              ${escapeHtml(
-                l.name || "Sem nome"
-              )}
 
-              <span class="meta">
-                —
+              <div>
+
                 ${escapeHtml(
-                  l.projectName || ""
+                  l.name ||
+                  "Sem nome"
                 )}
-              </span>
+
+                <span class="meta">
+
+                  —
+                  ${escapeHtml(
+                    l.projectName ||
+                    ""
+                  )}
+
+                </span>
+
+              </div>
+
+
+              <div class="meta">
+
+                ${escapeHtml(
+                  l.email ||
+                  ""
+                )}
+
+              </div>
+
             </div>
+
 
             <div class="meta">
-              ${escapeHtml(
-                l.email || ""
-              )}
+
+              ${
+                l.createdAt
+                  ? new Date(
+                      l.createdAt
+                    ).toLocaleDateString(
+                      "pt-BR"
+                    )
+                  : ""
+              }
+
             </div>
 
           </div>
 
-          <div class="meta">
-            ${
-              l.createdAt
-                ? new Date(
-                    l.createdAt
-                  ).toLocaleDateString(
-                    "pt-BR"
-                  )
-                : ""
-            }
-          </div>
-
-        </div>
-
-      `)
+        `
+      )
       .join("");
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // CLIENTES
-// ================================================================
+// ============================================================
 
 function renderClients() {
 
   const wrap =
     $("clients-table-wrap");
 
-  if (!wrap) return;
 
-  if (state.clients.length === 0) {
+  if (!wrap) {
+
+    return;
+
+  }
+
+
+  if (
+    state.clients.length ===
+    0
+  ) {
 
     wrap.innerHTML = `
+
       <div class="empty-state">
 
         <strong>
@@ -478,10 +966,13 @@ function renderClients() {
         para vincular a um projeto.
 
       </div>
+
     `;
 
     return;
+
   }
+
 
   wrap.innerHTML = `
 
@@ -491,216 +982,313 @@ function renderClients() {
 
         <tr>
 
-          <th>Nome</th>
+          <th>
+            Nome
+          </th>
 
-          <th>Contato</th>
+          <th>
+            Contato
+          </th>
 
-          <th>Projeto vinculado</th>
+          <th>
+            Projeto vinculado
+          </th>
 
-          <th>Ações</th>
+          <th>
+            Ações
+          </th>
 
         </tr>
 
       </thead>
 
+
       <tbody>
 
         ${state.clients
-          .map((c) => `
+          .map(
+            (c) => `
 
-            <tr>
+              <tr>
 
-              <td>
-                ${escapeHtml(
-                  c.name || ""
-                )}
-              </td>
+                <td>
 
-              <td>
-                ${escapeHtml(
-                  c.email ||
-                  c.phone ||
-                  "—"
-                )}
-              </td>
+                  ${escapeHtml(
+                    c.name ||
+                    ""
+                  )}
 
-              <td>
-                ${escapeHtml(
-                  projectNameById(
-                    c.projectId
-                  ) || "—"
-                )}
-              </td>
+                </td>
 
-              <td class="row-actions">
 
-                <button
-                  class="icon-btn"
-                  onclick="openClientModal('${escapeHtml(c.id)}')"
-                  title="Editar"
-                >
-                  ✏️
-                </button>
+                <td>
 
-                <button
-                  class="icon-btn"
-                  onclick="deleteClient('${escapeHtml(c.id)}')"
-                  title="Excluir"
-                >
-                  🗑️
-                </button>
+                  ${escapeHtml(
+                    c.email ||
+                    c.phone ||
+                    "—"
+                  )}
 
-              </td>
+                </td>
 
-            </tr>
 
-          `)
+                <td>
+
+                  ${escapeHtml(
+                    projectNameById(
+                      c.projectId
+                    ) ||
+                    "—"
+                  )}
+
+                </td>
+
+
+                <td class="row-actions">
+
+                  <button
+                    class="icon-btn"
+                    onclick="openClientModal('${escapeHtml(
+                      c.id
+                    )}')"
+                    title="Editar"
+                  >
+                    ✏️
+                  </button>
+
+
+                  <button
+                    class="icon-btn"
+                    onclick="deleteClient('${escapeHtml(
+                      c.id
+                    )}')"
+                    title="Excluir"
+                  >
+                    🗑️
+                  </button>
+
+                </td>
+
+              </tr>
+
+            `
+          )
           .join("")}
 
       </tbody>
 
     </table>
+
   `;
+
 }
 
-function projectNameById(id) {
+
+
+// ============================================================
+// PROJETO POR ID
+// ============================================================
+
+function projectNameById(
+  id
+) {
 
   const project =
     state.projects.find(
-      (p) => p.id === id
+      (p) =>
+        p.id ===
+        id
     );
+
 
   return project
     ? project.name
     : null;
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // MODAL CLIENTE
-// ================================================================
+// ============================================================
 
-function openClientModal(id = null) {
+function openClientModal(
+  id = null
+) {
 
-  state.editingClientId = id;
+  state.editingClientId =
+    id;
 
-  const client = id
-    ? state.clients.find(
-        (c) => c.id === id
-      )
-    : {
-        name: "",
-        email: "",
-        phone: "",
-        projectId: "",
-      };
+
+  const client =
+    id
+
+      ? state.clients.find(
+          (c) =>
+            c.id ===
+            id
+        )
+
+      : {
+
+          name: "",
+
+          email: "",
+
+          phone: "",
+
+          projectId: "",
+
+        };
+
 
   if (!client) {
+
     toast(
       "Cliente não encontrado.",
       "error"
     );
 
     return;
+
   }
+
 
   const projectOptions =
     state.projects
       .map(
         (p) => `
+
           <option
-            value="${escapeHtml(p.id)}"
+            value="${escapeHtml(
+              p.id
+            )}"
+
             ${
-              p.id === client.projectId
+              p.id ===
+              client.projectId
                 ? "selected"
                 : ""
             }
           >
-            ${escapeHtml(p.name)}
+
+            ${escapeHtml(
+              p.name
+            )}
+
           </option>
+
         `
       )
       .join("");
+
 
   showModal(`
 
     <div class="modal-header">
 
       <h2>
+
         ${
           id
             ? "Editar cliente"
             : "Novo cliente"
         }
+
       </h2>
+
 
       <button
         class="icon-btn"
         onclick="closeModal()"
       >
+
         ✕
+
       </button>
 
     </div>
 
+
     ${
       id
         ? `
+
           <div class="field">
 
-            <label>ID do cliente</label>
+            <label>
+              ID do cliente
+            </label>
 
             <input
-              value="${escapeHtml(id)}"
+              value="${escapeHtml(
+                id
+              )}"
               readonly
             >
 
           </div>
+
         `
         : ""
     }
 
+
     <div class="field">
 
-      <label>Nome</label>
+      <label>
+        Nome
+      </label>
 
       <input
         id="client-name"
         value="${escapeHtml(
-          client.name || ""
+          client.name ||
+          ""
         )}"
       >
 
     </div>
 
+
     <div class="field-row">
 
       <div class="field">
 
-        <label>E-mail</label>
+        <label>
+          E-mail
+        </label>
 
         <input
           id="client-email"
           value="${escapeHtml(
-            client.email || ""
+            client.email ||
+            ""
           )}"
         >
 
       </div>
 
+
       <div class="field">
 
-        <label>Telefone</label>
+        <label>
+          Telefone
+        </label>
 
         <input
           id="client-phone"
           value="${escapeHtml(
-            client.phone || ""
+            client.phone ||
+            ""
           )}"
         >
 
       </div>
 
     </div>
+
 
     <div class="field">
 
@@ -720,6 +1308,7 @@ function openClientModal(id = null) {
 
     </div>
 
+
     <button
       class="btn btn-primary"
       style="
@@ -728,11 +1317,20 @@ function openClientModal(id = null) {
       "
       onclick="saveClient()"
     >
+
       Salvar cliente
+
     </button>
 
   `);
+
 }
+
+
+
+// ============================================================
+// SALVAR CLIENTE
+// ============================================================
 
 async function saveClient() {
 
@@ -740,32 +1338,39 @@ async function saveClient() {
 
     name:
       $("client-name")
-        .value
-        .trim(),
+        ?.value
+        .trim() ||
+      "",
 
     email:
       $("client-email")
-        .value
-        .trim(),
+        ?.value
+        .trim() ||
+      "",
 
     phone:
       $("client-phone")
-        .value
-        .trim(),
+        ?.value
+        .trim() ||
+      "",
 
     projectId:
       $("client-project")
-        .value,
+        ?.value ||
+      "",
 
   };
+
 
   if (!body.name) {
 
     return toast(
-      "Informe o nome do cliente",
+      "Informe o nome do cliente.",
       "error"
     );
+
   }
+
 
   const res =
     state.editingClientId
@@ -784,58 +1389,84 @@ async function saveClient() {
           body
         );
 
+
   if (res.error) {
 
     return toast(
       res.message ||
-      "Erro ao salvar cliente",
+      "Erro ao salvar cliente.",
       "error"
     );
+
   }
 
+
   closeModal();
+
 
   toast(
     "Cliente salvo com sucesso."
   );
 
+
   await refreshAllData();
+
 }
 
-async function deleteClient(id) {
+
+
+// ============================================================
+// EXCLUIR CLIENTE
+// ============================================================
+
+async function deleteClient(
+  id
+) {
 
   if (
     !confirm(
       "Excluir este cliente?"
     )
   ) {
+
     return;
+
   }
+
 
   const res =
     await API.del(
-      `/api/data/clients?id=${encodeURIComponent(id)}`
+      `/api/data/clients?id=${encodeURIComponent(
+        id
+      )}`
     );
+
 
   if (res.error) {
 
     return toast(
       res.message ||
-      "Erro ao excluir cliente",
+      "Erro ao excluir cliente.",
       "error"
     );
+
   }
+
 
   toast(
     "Cliente excluído."
   );
 
+
   await refreshAllData();
+
 }
 
-// ================================================================
-// PROJETOS
-// ================================================================
+
+
+// ============================================================
+// STATUS
+// ============================================================
 
 const STATUS_BADGE = {
 
@@ -850,16 +1481,32 @@ const STATUS_BADGE = {
 
 };
 
+
+
+// ============================================================
+// PROJETOS
+// ============================================================
+
 function renderProjects() {
 
   const wrap =
     $("projects-table-wrap");
 
-  if (!wrap) return;
 
-  if (state.projects.length === 0) {
+  if (!wrap) {
+
+    return;
+
+  }
+
+
+  if (
+    state.projects.length ===
+    0
+  ) {
 
     wrap.innerHTML = `
+
       <div class="empty-state">
 
         <strong>
@@ -868,18 +1515,17 @@ function renderProjects() {
 
         Crie o primeiro projeto
         para configurar rastreamento,
-        contato e redes sociais.
+        contato, redes sociais,
+        Google e outras integrações.
 
       </div>
+
     `;
 
     return;
+
   }
 
-  // ============================================================
-  // AQUI ESTÁ A CORREÇÃO PRINCIPAL:
-  // ID DO PROJETO AGORA TEM TH E TD.
-  // ============================================================
 
   wrap.innerHTML = `
 
@@ -889,90 +1535,121 @@ function renderProjects() {
 
         <tr>
 
-          <th>Projeto</th>
+          <th>
+            Projeto
+          </th>
 
-          <th>ID do projeto</th>
+          <th>
+            ID do projeto
+          </th>
 
-          <th>Status</th>
+          <th>
+            Status
+          </th>
 
-          <th>Ações</th>
+          <th>
+            Ações
+          </th>
 
         </tr>
 
       </thead>
 
+
       <tbody>
 
         ${state.projects
-          .map((p) => `
+          .map(
+            (p) => `
 
-            <tr>
+              <tr>
 
-              <td>
-                ${escapeHtml(
-                  p.name || ""
-                )}
-              </td>
+                <td>
 
-              <td>
-
-                <span
-                  class="meta"
-                  title="${escapeHtml(
-                    p.id || ""
-                  )}"
-                  style="
-                    font-family:monospace;
-                    font-size:11px;
-                    word-break:break-all;
-                  "
-                >
                   ${escapeHtml(
-                    p.id || "—"
+                    p.name ||
+                    ""
                   )}
-                </span>
 
-              </td>
+                </td>
 
-              <td>
 
-                <span
-                  class="badge ${
-                    STATUS_BADGE[p.status] ||
-                    "badge-muted"
-                  }"
-                >
-                  ${escapeHtml(
-                    p.status ||
-                    "Sem status"
-                  )}
-                </span>
+                <td>
 
-              </td>
+                  <span
+                    class="meta"
+                    title="${escapeHtml(
+                      p.id ||
+                      ""
+                    )}"
 
-              <td class="row-actions">
+                    style="
+                      font-family:monospace;
+                      font-size:11px;
+                      word-break:break-all;
+                    "
+                  >
 
-                <button
-                  class="icon-btn"
-                  onclick="openProjectModal('${escapeHtml(p.id)}')"
-                  title="Editar"
-                >
-                  ✏️
-                </button>
+                    ${escapeHtml(
+                      p.id ||
+                      "—"
+                    )}
 
-                <button
-                  class="icon-btn"
-                  onclick="deleteProject('${escapeHtml(p.id)}')"
-                  title="Excluir"
-                >
-                  🗑️
-                </button>
+                  </span>
 
-              </td>
+                </td>
 
-            </tr>
 
-          `)
+                <td>
+
+                  <span
+                    class="badge ${
+                      STATUS_BADGE[
+                        p.status
+                      ] ||
+                      "badge-muted"
+                    }"
+                  >
+
+                    ${escapeHtml(
+                      p.status ||
+                      "Sem status"
+                    )}
+
+                  </span>
+
+                </td>
+
+
+                <td class="row-actions">
+
+                  <button
+                    class="icon-btn"
+                    onclick="openProjectModal('${escapeHtml(
+                      p.id
+                    )}')"
+                    title="Editar"
+                  >
+                    ✏️
+                  </button>
+
+
+                  <button
+                    class="icon-btn"
+                    onclick="deleteProject('${escapeHtml(
+                      p.id
+                    )}')"
+                    title="Excluir"
+                  >
+                    🗑️
+                  </button>
+
+                </td>
+
+              </tr>
+
+            `
+          )
           .join("")}
 
       </tbody>
@@ -980,70 +1657,273 @@ function renderProjects() {
     </table>
 
   `;
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // PROJETO PADRÃO
-// ================================================================
+// ============================================================
 
 function defaultProject() {
 
   return {
 
-    name: "",
+    name:
+      "",
 
     status:
       "Em desenvolvimento",
 
+
+    // ----------------------------------------------------------
+    // RASTREAMENTO
+    // ----------------------------------------------------------
+
     tracking: {
 
-      pixel: "",
-      tag: "",
-      analytics: "",
+      pixel:
+        "",
+
+      tag:
+        "",
+
+      analytics:
+        "",
 
     },
+
+
+    // ----------------------------------------------------------
+    // CONTATO
+    // ----------------------------------------------------------
 
     contact: {
 
-      whatsapp: "",
-      email: "",
-      phone: "",
+      whatsapp:
+        "",
+
+      email:
+        "",
+
+      phone:
+        "",
 
     },
+
+
+    // ----------------------------------------------------------
+    // REDES SOCIAIS
+    // ----------------------------------------------------------
 
     social: {
 
-      facebook: "",
-      instagram: "",
-      tiktok: "",
-      youtube: "",
-      linkedin: "",
+      facebook:
+        "",
+
+      instagram:
+        "",
+
+      tiktok:
+        "",
+
+      youtube:
+        "",
+
+      linkedin:
+        "",
 
     },
 
-    formspree: "",
+
+    // ----------------------------------------------------------
+    // GOOGLE
+    // ----------------------------------------------------------
+
+    google: {
+
+      maps:
+        "",
+
+      reviews:
+        "",
+
+    },
+
+
+    // ----------------------------------------------------------
+    // FORMULÁRIO
+    // ----------------------------------------------------------
+
+    formspree:
+      "",
+
+
+    // ----------------------------------------------------------
+    // GALERIA
+    // ----------------------------------------------------------
+
+    gallery: {
+
+      enabled:
+        false,
+
+      images:
+        [],
+
+    },
+
+
+    // ----------------------------------------------------------
+    // SEO
+    // ----------------------------------------------------------
+
+    seo: {
+
+      title:
+        "",
+
+      description:
+        "",
+
+      keywords:
+        "",
+
+    },
+
+
+    // ----------------------------------------------------------
+    // BRANDING
+    // ----------------------------------------------------------
+
+    branding: {
+
+      favicon:
+        "",
+
+    },
+
+
+    // ----------------------------------------------------------
+    // SCRIPTS PERSONALIZADOS
+    // ----------------------------------------------------------
+
+    scripts: {
+
+      custom:
+        "",
+
+    },
 
   };
+
 }
 
-// ================================================================
+
+
+// ============================================================
+// NORMALIZAR PROJETO
+// ============================================================
+
+function normalizeProject(
+  project
+) {
+
+  const p =
+    project ||
+    defaultProject();
+
+
+  p.tracking =
+    p.tracking ||
+    {};
+
+  p.contact =
+    p.contact ||
+    {};
+
+  p.social =
+    p.social ||
+    {};
+
+  p.google =
+    p.google ||
+    {};
+
+  p.gallery =
+    p.gallery ||
+    {};
+
+  p.seo =
+    p.seo ||
+    {};
+
+  p.branding =
+    p.branding ||
+    {};
+
+  p.scripts =
+    p.scripts ||
+    {};
+
+
+  if (
+    !Array.isArray(
+      p.gallery.images
+    )
+  ) {
+
+    p.gallery.images =
+      [];
+
+  }
+
+
+  if (
+    typeof p.gallery.enabled !==
+    "boolean"
+  ) {
+
+    p.gallery.enabled =
+      false;
+
+  }
+
+
+  return p;
+
+}
+
+
+
+// ============================================================
 // MODAL PROJETO
-// ================================================================
+// ============================================================
 
-function openProjectModal(id = null) {
+function openProjectModal(
+  id = null
+) {
 
-  state.editingProjectId = id;
+  state.editingProjectId =
+    id;
 
-  state.projectTab = "geral";
+  state.projectTab =
+    "geral";
+
 
   let project;
+
 
   if (id) {
 
     project =
       state.projects.find(
-        (p) => p.id === id
+        (p) =>
+          p.id ===
+          id
       );
+
 
     if (!project) {
 
@@ -1053,6 +1933,7 @@ function openProjectModal(id = null) {
       );
 
       return;
+
     }
 
   } else {
@@ -1062,47 +1943,52 @@ function openProjectModal(id = null) {
 
   }
 
-  // Garante que objetos antigos
-  // não quebrem o painel.
 
-  project.tracking =
-    project.tracking || {};
+  project =
+    normalizeProject(
+      project
+    );
 
-  project.contact =
-    project.contact || {};
-
-  project.social =
-    project.social || {};
 
   state._editingProjectDraft =
     JSON.parse(
-      JSON.stringify(project)
+      JSON.stringify(
+        project
+      )
     );
+
 
   showModal(`
 
     <div class="modal-header">
 
       <h2>
+
         ${
           id
             ? "Editar projeto"
             : "Novo projeto"
         }
+
       </h2>
+
 
       <button
         class="icon-btn"
         onclick="closeModal()"
       >
+
         ✕
+
       </button>
 
     </div>
 
+
     ${
       id
         ? `
+
           <div
             style="
               font-size:11px;
@@ -1111,14 +1997,19 @@ function openProjectModal(id = null) {
               word-break:break-all;
             "
           >
+
             ID:
+
             <strong>
               ${escapeHtml(id)}
             </strong>
+
           </div>
+
         `
         : ""
     }
+
 
     <div
       class="tabs"
@@ -1132,6 +2023,7 @@ function openProjectModal(id = null) {
         Geral
       </button>
 
+
       <button
         class="tab"
         data-tab="config"
@@ -1139,109 +2031,159 @@ function openProjectModal(id = null) {
         Config & redes
       </button>
 
+
+      <button
+        class="tab"
+        data-tab="google"
+      >
+        Google
+      </button>
+
+
+      <button
+        class="tab"
+        data-tab="galeria"
+      >
+        Galeria
+      </button>
+
+
+      <button
+        class="tab"
+        data-tab="seo"
+      >
+        SEO
+      </button>
+
+
       ${
         id
           ? `
+
             <button
               class="tab"
               data-tab="acesso"
             >
               Acesso do cliente
             </button>
+
           `
           : ""
       }
 
+
       ${
         id
           ? `
+
             <button
               class="tab"
               data-tab="leads"
             >
               Leads
             </button>
+
           `
           : ""
       }
 
     </div>
 
+
     <div
       id="project-tab-content"
     ></div>
 
-  `, "560px");
+  `, "700px");
+
 
   document
     .querySelectorAll(
       "#project-tabs .tab"
     )
-    .forEach((btn) => {
+    .forEach(
+      (btn) => {
 
-      btn.addEventListener(
-        "click",
-        () => {
+        btn.addEventListener(
+          "click",
+          () => {
 
-          document
-            .querySelectorAll(
-              "#project-tabs .tab"
-            )
-            .forEach(
-              (b) =>
-                b.classList.remove(
-                  "active"
-                )
+            document
+              .querySelectorAll(
+                "#project-tabs .tab"
+              )
+              .forEach(
+                (b) =>
+                  b.classList.remove(
+                    "active"
+                  )
+              );
+
+
+            btn.classList.add(
+              "active"
             );
 
-          btn.classList.add(
-            "active"
-          );
 
-          state.projectTab =
-            btn.dataset.tab;
+            state.projectTab =
+              btn.dataset.tab;
 
-          renderProjectTab();
 
-        }
-      );
+            renderProjectTab();
 
-    });
+          }
+        );
+
+      }
+    );
+
 
   renderProjectTab();
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // ABAS DO PROJETO
-// ================================================================
+// ============================================================
 
 function renderProjectTab() {
 
   const el =
     $("project-tab-content");
 
-  if (!el) return;
+
+  if (!el) {
+
+    return;
+
+  }
+
 
   const draft =
     state._editingProjectDraft;
 
-  if (!draft) return;
 
-  draft.tracking =
-    draft.tracking || {};
+  if (!draft) {
 
-  draft.contact =
-    draft.contact || {};
+    return;
 
-  draft.social =
-    draft.social || {};
+  }
 
-  // ============================================================
+
+  normalizeProject(
+    draft
+  );
+
+
+  // ==========================================================
   // GERAL
-  // ============================================================
+  // ==========================================================
 
   if (
-    state.projectTab === "geral"
+    state.projectTab ===
+    "geral"
   ) {
 
     el.innerHTML = `
@@ -1249,24 +2191,34 @@ function renderProjectTab() {
       ${
         state.editingProjectId
           ? `
+
             <div class="field">
 
               <label>
+
                 ID do projeto
-                <span style="
-                  color:var(--text-muted);
-                  font-weight:400
-                ">
+
+                <span
+                  style="
+                    color:var(--text-muted);
+                    font-weight:400
+                  "
+                >
+
                   (use este ID para
-                  integrar o site
-                  em /api/public/config/)
+                  integrar o site)
+
                 </span>
+
               </label>
 
-              <div style="
-                display:flex;
-                gap:6px
-              ">
+
+              <div
+                style="
+                  display:flex;
+                  gap:6px
+                "
+              >
 
                 <input
                   id="p-project-id"
@@ -1280,6 +2232,7 @@ function renderProjectTab() {
                   "
                 >
 
+
                 <button
                   type="button"
                   class="btn btn-ghost btn-sm"
@@ -1287,15 +2240,19 @@ function renderProjectTab() {
                     state.editingProjectId
                   )}')"
                 >
+
                   Copiar
+
                 </button>
 
               </div>
 
             </div>
+
           `
           : ""
       }
+
 
       <div class="field">
 
@@ -1306,11 +2263,14 @@ function renderProjectTab() {
         <input
           id="p-name"
           value="${escapeHtml(
-            draft.name || ""
+            draft.name ||
+            ""
           )}"
+          placeholder="Ex.: Studio Voar"
         >
 
       </div>
+
 
       <div class="field">
 
@@ -1327,16 +2287,26 @@ function renderProjectTab() {
           ]
             .map(
               (s) => `
+
                 <option
-                  value="${escapeHtml(s)}"
+                  value="${escapeHtml(
+                    s
+                  )}"
+
                   ${
-                    s === draft.status
+                    s ===
+                    draft.status
                       ? "selected"
                       : ""
                   }
                 >
-                  ${escapeHtml(s)}
+
+                  ${escapeHtml(
+                    s
+                  )}
+
                 </option>
+
               `
             )
             .join("")}
@@ -1344,6 +2314,42 @@ function renderProjectTab() {
         </select>
 
       </div>
+
+
+      <div class="form-section">
+
+        <h3>
+          Identidade
+        </h3>
+
+
+        <div class="field">
+
+          <label>
+            Favicon
+          </label>
+
+          <input
+            id="p-favicon"
+            value="${escapeHtml(
+              draft.branding
+                ?.favicon ||
+              ""
+            )}"
+            placeholder="https://site.com/favicon.png"
+          >
+
+          <div class="meta">
+
+            URL da imagem que será usada
+            como favicon do site.
+
+          </div>
+
+        </div>
+
+      </div>
+
 
       <button
         class="btn btn-primary"
@@ -1353,19 +2359,24 @@ function renderProjectTab() {
         "
         onclick="saveProject()"
       >
+
         Salvar projeto
+
       </button>
 
     `;
 
   }
 
-  // ============================================================
+
+
+  // ==========================================================
   // CONFIGURAÇÕES
-  // ============================================================
+  // ==========================================================
 
   if (
-    state.projectTab === "config"
+    state.projectTab ===
+    "config"
   ) {
 
     el.innerHTML = `
@@ -1375,6 +2386,7 @@ function renderProjectTab() {
         <h3>
           Rastreamento
         </h3>
+
 
         <div class="field">
 
@@ -1388,9 +2400,11 @@ function renderProjectTab() {
               draft.tracking.pixel ||
               ""
             )}"
+            placeholder="123456789012345"
           >
 
         </div>
+
 
         <div class="field">
 
@@ -1404,9 +2418,11 @@ function renderProjectTab() {
               draft.tracking.tag ||
               ""
             )}"
+            placeholder="GTM-XXXXXXX"
           >
 
         </div>
+
 
         <div class="field">
 
@@ -1420,31 +2436,39 @@ function renderProjectTab() {
               draft.tracking.analytics ||
               ""
             )}"
+            placeholder="G-XXXXXXXXXX"
           >
 
         </div>
+
 
         ${
           draft.tracking.pixel ||
           draft.tracking.analytics
             ? `
+
               <button
                 class="btn btn-ghost btn-sm"
                 onclick="copyTrackingSnippet()"
               >
+
                 Copiar snippet de instalação
+
               </button>
+
             `
             : ""
         }
 
       </div>
 
+
       <div class="form-section">
 
         <h3>
           Contato
         </h3>
+
 
         <div class="field">
 
@@ -1463,6 +2487,7 @@ function renderProjectTab() {
 
         </div>
 
+
         <div class="field-row">
 
           <div class="field">
@@ -1480,6 +2505,7 @@ function renderProjectTab() {
             >
 
           </div>
+
 
           <div class="field">
 
@@ -1501,11 +2527,13 @@ function renderProjectTab() {
 
       </div>
 
+
       <div class="form-section">
 
         <h3>
           Redes sociais
         </h3>
+
 
         <div class="field">
 
@@ -1523,6 +2551,7 @@ function renderProjectTab() {
 
         </div>
 
+
         <div class="field">
 
           <label>
@@ -1538,6 +2567,7 @@ function renderProjectTab() {
           >
 
         </div>
+
 
         <div class="field">
 
@@ -1555,6 +2585,7 @@ function renderProjectTab() {
 
         </div>
 
+
         <div class="field">
 
           <label>
@@ -1570,6 +2601,7 @@ function renderProjectTab() {
           >
 
         </div>
+
 
         <div class="field">
 
@@ -1589,11 +2621,13 @@ function renderProjectTab() {
 
       </div>
 
+
       <div class="form-section">
 
         <h3>
           Formspree
         </h3>
+
 
         <div class="field">
 
@@ -1614,17 +2648,20 @@ function renderProjectTab() {
 
       </div>
 
+
       <div class="live-preview">
 
         <div class="preview-label">
           Prévia — como aparece no site
         </div>
 
+
         <div
           id="live-preview-content"
         ></div>
 
       </div>
+
 
       <button
         class="btn btn-primary"
@@ -1635,12 +2672,16 @@ function renderProjectTab() {
         "
         onclick="saveProject()"
       >
+
         Salvar projeto
+
       </button>
 
     `;
 
+
     [
+
       "p-whatsapp",
       "p-email",
       "p-phone",
@@ -1649,98 +2690,621 @@ function renderProjectTab() {
       "p-tiktok",
       "p-youtube",
       "p-linkedin",
-    ].forEach((id) => {
 
-      const input = $(id);
+    ].forEach(
+      (id) => {
 
-      if (input) {
+        const input =
+          $(id);
 
-        input.addEventListener(
-          "input",
-          renderLivePreview
-        );
+
+        if (input) {
+
+          input.addEventListener(
+            "input",
+            renderLivePreview
+          );
+
+        }
 
       }
+    );
 
-    });
 
     renderLivePreview();
+
   }
 
-  // ============================================================
+
+
+  // ==========================================================
+  // GOOGLE
+  // ==========================================================
+
+  if (
+    state.projectTab ===
+    "google"
+  ) {
+
+    el.innerHTML = `
+
+      <div class="form-section">
+
+        <h3>
+          Google Maps
+        </h3>
+
+
+        <p
+          class="meta"
+          style="margin-bottom:12px"
+        >
+
+          Configure o endereço ou
+          URL do Google Maps que o
+          site deverá utilizar.
+
+        </p>
+
+
+        <div class="field">
+
+          <label>
+            Google Maps
+          </label>
+
+          <input
+            id="p-google-maps"
+            value="${escapeHtml(
+              draft.google.maps ||
+              ""
+            )}"
+            placeholder="https://maps.google.com/..."
+          >
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            Google Maps — Embed / iframe
+          </label>
+
+          <textarea
+            id="p-google-maps-embed"
+            rows="5"
+            placeholder="<iframe src=...></iframe>"
+          >${escapeHtml(
+            draft.google.mapsEmbed ||
+            ""
+          )}</textarea>
+
+        </div>
+
+      </div>
+
+
+      <div class="form-section">
+
+        <h3>
+          Google Reviews
+        </h3>
+
+
+        <p
+          class="meta"
+          style="margin-bottom:12px"
+        >
+
+          Informe o link público das
+          avaliações da empresa.
+
+        </p>
+
+
+        <div class="field">
+
+          <label>
+            Link das avaliações
+          </label>
+
+          <input
+            id="p-google-reviews"
+            value="${escapeHtml(
+              draft.google.reviews ||
+              ""
+            )}"
+            placeholder="https://g.page/r/..."
+          >
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            Place ID
+          </label>
+
+          <input
+            id="p-google-place-id"
+            value="${escapeHtml(
+              draft.google.placeId ||
+              ""
+            )}"
+            placeholder="ChIJ..."
+          >
+
+        </div>
+
+      </div>
+
+
+      <div class="live-preview">
+
+        <div class="preview-label">
+          Google configurado
+        </div>
+
+
+        <div
+          style="
+            font-size:12px;
+            color:var(--text-muted)
+          "
+        >
+
+          ${
+            draft.google.maps ||
+            draft.google.reviews ||
+            draft.google.placeId
+              ? "Sim — existem configurações Google cadastradas."
+              : "Nenhuma configuração Google cadastrada ainda."
+          }
+
+        </div>
+
+      </div>
+
+
+      <button
+        class="btn btn-primary"
+        style="
+          width:100%;
+          justify-content:center;
+          margin-top:16px
+        "
+        onclick="saveProject()"
+      >
+
+        Salvar projeto
+
+      </button>
+
+    `;
+
+  }
+
+
+
+  // ==========================================================
+  // GALERIA
+  // ==========================================================
+
+  if (
+    state.projectTab ===
+    "galeria"
+  ) {
+
+    const images =
+      Array.isArray(
+        draft.gallery.images
+      )
+        ? draft.gallery.images
+        : [];
+
+
+    el.innerHTML = `
+
+      <div class="form-section">
+
+        <h3>
+          Galeria do projeto
+        </h3>
+
+
+        <div class="checkbox-row">
+
+          <input
+            type="checkbox"
+            id="p-gallery-enabled"
+            ${
+              draft.gallery.enabled
+                ? "checked"
+                : ""
+            }
+          >
+
+
+          <label
+            for="p-gallery-enabled"
+            style="
+              margin:0;
+              font-weight:400;
+              color:var(--text-main)
+            "
+          >
+
+            Ativar galeria
+
+          </label>
+
+        </div>
+
+
+        <div
+          class="field"
+          style="margin-top:14px"
+        >
+
+          <label>
+            Imagens
+          </label>
+
+
+          <textarea
+            id="p-gallery-images"
+            rows="8"
+            placeholder="Cole uma URL de imagem por linha"
+          >${escapeHtml(
+            images.join("\n")
+          )}</textarea>
+
+
+          <div class="meta">
+
+            Uma URL por linha.
+            Exemplo:
+
+            https://site.com/imagem1.jpg
+
+            https://site.com/imagem2.jpg
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="live-preview">
+
+        <div class="preview-label">
+          Prévia da galeria
+        </div>
+
+
+        <div
+          id="gallery-preview"
+          style="
+            display:grid;
+            grid-template-columns:
+              repeat(3,1fr);
+            gap:8px;
+          "
+        >
+
+          ${
+            images.length
+              ? images
+                  .filter(Boolean)
+                  .map(
+                    (url) => `
+
+                      <img
+                        src="${escapeHtml(
+                          url
+                        )}"
+                        alt="Imagem"
+                        style="
+                          width:100%;
+                          height:90px;
+                          object-fit:cover;
+                          border-radius:8px;
+                          background:var(--surface);
+                        "
+                        onerror="
+                          this.style.opacity='.25'
+                        "
+                      >
+
+                    `
+                  )
+                  .join("")
+              : `
+
+                <span
+                  class="meta"
+                  style="
+                    grid-column:1/-1
+                  "
+                >
+
+                  Nenhuma imagem cadastrada.
+
+                </span>
+
+              `
+          }
+
+        </div>
+
+      </div>
+
+
+      <button
+        class="btn btn-primary"
+        style="
+          width:100%;
+          justify-content:center;
+          margin-top:16px
+        "
+        onclick="saveProject()"
+      >
+
+        Salvar galeria
+
+      </button>
+
+    `;
+
+  }
+
+
+
+  // ==========================================================
+  // SEO
+  // ==========================================================
+
+  if (
+    state.projectTab ===
+    "seo"
+  ) {
+
+    el.innerHTML = `
+
+      <div class="form-section">
+
+        <h3>
+          SEO do projeto
+        </h3>
+
+
+        <div class="field">
+
+          <label>
+            Título SEO
+          </label>
+
+          <input
+            id="p-seo-title"
+            value="${escapeHtml(
+              draft.seo.title ||
+              ""
+            )}"
+            placeholder="Nome da empresa | Serviço"
+          >
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            Descrição SEO
+          </label>
+
+          <textarea
+            id="p-seo-description"
+            rows="4"
+            placeholder="Descrição da empresa para mecanismos de busca..."
+          >${escapeHtml(
+            draft.seo.description ||
+            ""
+          )}</textarea>
+
+        </div>
+
+
+        <div class="field">
+
+          <label>
+            Palavras-chave
+          </label>
+
+          <input
+            id="p-seo-keywords"
+            value="${escapeHtml(
+              draft.seo.keywords ||
+              ""
+            )}"
+            placeholder="empresa, serviço, cidade"
+          >
+
+        </div>
+
+      </div>
+
+
+      <div class="form-section">
+
+        <h3>
+          Scripts personalizados
+        </h3>
+
+
+        <div class="field">
+
+          <label>
+            Scripts
+          </label>
+
+          <textarea
+            id="p-custom-scripts"
+            rows="8"
+            placeholder="Cole aqui scripts personalizados..."
+          >${escapeHtml(
+            draft.scripts.custom ||
+            ""
+          )}</textarea>
+
+
+          <div class="meta">
+
+            Use somente scripts confiáveis.
+            O loader poderá aplicar esses
+            scripts automaticamente no site.
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <button
+        class="btn btn-primary"
+        style="
+          width:100%;
+          justify-content:center
+        "
+        onclick="saveProject()"
+      >
+
+        Salvar SEO
+
+      </button>
+
+    `;
+
+  }
+
+
+
+  // ==========================================================
   // ACESSO
-  // ============================================================
+  // ==========================================================
 
   if (
-    state.projectTab === "acesso"
+    state.projectTab ===
+    "acesso"
   ) {
 
-    renderClientAccessTab(el);
+    renderClientAccessTab(
+      el
+    );
+
   }
 
-  // ============================================================
+
+
+  // ==========================================================
   // LEADS
-  // ============================================================
+  // ==========================================================
 
   if (
-    state.projectTab === "leads"
+    state.projectTab ===
+    "leads"
   ) {
 
-    renderLeadsTab(el);
+    renderLeadsTab(
+      el
+    );
+
   }
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // PRÉVIA
-// ================================================================
+// ============================================================
 
 function renderLivePreview() {
 
   const box =
     $("live-preview-content");
 
-  if (!box) return;
+
+  if (!box) {
+
+    return;
+
+  }
+
 
   const social = {
 
     Facebook:
-      $("p-facebook")?.value,
+      $("p-facebook")
+        ?.value,
 
     Instagram:
-      $("p-instagram")?.value,
+      $("p-instagram")
+        ?.value,
 
     TikTok:
-      $("p-tiktok")?.value,
+      $("p-tiktok")
+        ?.value,
 
     YouTube:
-      $("p-youtube")?.value,
+      $("p-youtube")
+        ?.value,
 
     LinkedIn:
-      $("p-linkedin")?.value,
+      $("p-linkedin")
+        ?.value,
 
   };
 
+
   const contactBits = [
 
-    $("p-whatsapp")?.value &&
+    $("p-whatsapp")
+      ?.value &&
       "WhatsApp",
 
-    $("p-email")?.value &&
+    $("p-email")
+      ?.value &&
       "E-mail",
 
-    $("p-phone")?.value &&
+    $("p-phone")
+      ?.value &&
       "Telefone",
 
   ].filter(Boolean);
 
+
   const chips =
-    Object.entries(social)
-      .filter(([, v]) => v)
+    Object.entries(
+      social
+    )
+
+      .filter(
+        ([, v]) => v
+      )
+
       .map(
         ([name]) =>
-          `<span class="preview-chip">${escapeHtml(name)}</span>`
+          `<span class="preview-chip">${escapeHtml(
+            name
+          )}</span>`
       )
+
       .join("");
+
 
   box.innerHTML = `
 
@@ -1749,16 +3313,24 @@ function renderLivePreview() {
       ${
         chips ||
         `
+
           <span
             class="meta"
-            style="color:var(--text-faint)"
+            style="
+              color:var(--text-faint)
+            "
           >
-            Nenhuma rede social preenchida ainda
+
+            Nenhuma rede social
+            preenchida ainda
+
           </span>
+
         `
       }
 
     </div>
+
 
     <div
       style="
@@ -1772,48 +3344,71 @@ function renderLivePreview() {
 
       ${
         contactBits.length
-          ? contactBits.join(", ")
+          ? contactBits.join(
+              ", "
+            )
           : "nenhum"
       }
 
     </div>
 
   `;
+
 }
 
-// ================================================================
-// SNIPPET
-// ================================================================
+
+
+// ============================================================
+// SNIPPET DE TRACKING
+// ============================================================
 
 async function copyTrackingSnippet() {
 
   const pixel =
     $("p-pixel")
       ?.value
-      .trim() || "";
+      .trim() ||
+    "";
+
 
   const analytics =
     $("p-analytics")
       ?.value
-      .trim() || "";
+      .trim() ||
+    "";
 
-  let snippet = "";
+
+  let snippet =
+    "";
+
 
   if (pixel) {
 
     snippet += `
+
 <!-- Meta Pixel -->
 
 <script>
+
 !function(f,b,e,v,n,t,s){
+
 if(f.fbq)return;
+
 n=f.fbq=function(){
+
 n.callMethod ?
-n.callMethod.apply(n,arguments) :
+
+n.callMethod.apply(
+  n,
+  arguments
+) :
+
 n.queue.push(arguments)
+
 };
 
-if(!f._fbq)f._fbq=n;
+if(!f._fbq)
+  f._fbq=n;
 
 n.push=n;
 n.loaded=!0;
@@ -1825,50 +3420,87 @@ t.async=!0;
 t.src=v;
 
 s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)
-}
-(window, document, 'script',
-'https://connect.facebook.net/en_US/fbevents.js');
 
-fbq('init', '${pixel}');
-fbq('track', 'PageView');
+s.parentNode.insertBefore(
+  t,
+  s
+)
+
+}
+
+(
+  window,
+  document,
+  'script',
+  'https://connect.facebook.net/en_US/fbevents.js'
+);
+
+fbq(
+  'init',
+  '${pixel}'
+);
+
+fbq(
+  'track',
+  'PageView'
+);
+
 </script>
+
 `.trim();
 
   }
+
 
   if (analytics) {
 
     if (snippet) {
-      snippet += "\n\n";
+
+      snippet +=
+        "\n\n";
+
     }
 
+
     snippet += `
+
 <!-- Google Analytics -->
 
 <script
-async
-src="https://www.googletagmanager.com/gtag/js?id=${analytics}">
+  async
+  src="https://www.googletagmanager.com/gtag/js?id=${analytics}">
 </script>
 
 <script>
+
 window.dataLayer =
-window.dataLayer || [];
+  window.dataLayer ||
+  [];
 
 function gtag(){
-dataLayer.push(arguments);
+
+  dataLayer.push(
+    arguments
+  );
+
 }
 
-gtag('js', new Date());
+gtag(
+  'js',
+  new Date()
+);
 
 gtag(
-'config',
-'${analytics}'
+  'config',
+  '${analytics}'
 );
+
 </script>
+
 `.trim();
 
   }
+
 
   if (!snippet) {
 
@@ -1876,13 +3508,16 @@ gtag(
       "Preencha Pixel ou Analytics primeiro.",
       "error"
     );
+
   }
+
 
   try {
 
     await navigator.clipboard.writeText(
       snippet
     );
+
 
     toast(
       "Snippet copiado."
@@ -1894,20 +3529,27 @@ gtag(
       "Não foi possível copiar automaticamente.",
       "error"
     );
+
   }
+
 }
 
-// ================================================================
-// COPIAR ID DO PROJETO
-// ================================================================
 
-async function copyProjectId(id) {
+
+// ============================================================
+// COPIAR ID
+// ============================================================
+
+async function copyProjectId(
+  id
+) {
 
   try {
 
     await navigator.clipboard.writeText(
       id
     );
+
 
     toast(
       "ID do projeto copiado."
@@ -1919,108 +3561,379 @@ async function copyProjectId(id) {
       id,
       "success"
     );
+
   }
+
 }
 
-// ================================================================
-// SALVAR PROJETO
-// ================================================================
 
-async function saveProject() {
 
-  const draft =
-    state._editingProjectDraft;
+// ============================================================
+// LER CAMPOS DO PROJETO
+// ============================================================
 
-  if (!draft) return;
+function collectProjectFormData(
+  draft
+) {
 
-  if (
-    state.projectTab === "geral"
-  ) {
+  // ----------------------------------------------------------
+  // GERAL
+  // ----------------------------------------------------------
+
+  const name =
+    $("p-name")
+      ?.value
+      .trim();
+
+
+  const status =
+    $("p-status")
+      ?.value;
+
+
+  if (name !== undefined) {
 
     draft.name =
-      $("p-name")
-        ?.value
-        .trim() || "";
+      name;
+
+  }
+
+
+  if (status !== undefined) {
 
     draft.status =
-      $("p-status")
-        ?.value ||
-      "Em desenvolvimento";
+      status;
 
-  } else {
+  }
+
+
+  // ----------------------------------------------------------
+  // BRANDING
+  // ----------------------------------------------------------
+
+  if (
+    $("p-favicon")
+  ) {
+
+    draft.branding =
+      draft.branding ||
+      {};
+
+    draft.branding.favicon =
+      $("p-favicon")
+        .value
+        .trim();
+
+  }
+
+
+  // ----------------------------------------------------------
+  // TRACKING
+  // ----------------------------------------------------------
+
+  if (
+    $("p-pixel") ||
+    $("p-tag") ||
+    $("p-analytics")
+  ) {
 
     draft.tracking = {
 
       pixel:
         $("p-pixel")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       tag:
         $("p-tag")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       analytics:
         $("p-analytics")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
     };
+
+  }
+
+
+  // ----------------------------------------------------------
+  // CONTATO
+  // ----------------------------------------------------------
+
+  if (
+    $("p-whatsapp") ||
+    $("p-email") ||
+    $("p-phone")
+  ) {
 
     draft.contact = {
 
       whatsapp:
         $("p-whatsapp")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       email:
         $("p-email")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       phone:
         $("p-phone")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
     };
+
+  }
+
+
+  // ----------------------------------------------------------
+  // REDES SOCIAIS
+  // ----------------------------------------------------------
+
+  if (
+    $("p-facebook") ||
+    $("p-instagram") ||
+    $("p-tiktok") ||
+    $("p-youtube") ||
+    $("p-linkedin")
+  ) {
 
     draft.social = {
 
       facebook:
         $("p-facebook")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       instagram:
         $("p-instagram")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       tiktok:
         $("p-tiktok")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       youtube:
         $("p-youtube")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
       linkedin:
         $("p-linkedin")
           ?.value
-          .trim() || "",
+          .trim() ||
+        "",
 
     };
 
+  }
+
+
+  // ----------------------------------------------------------
+  // FORMSPREE
+  // ----------------------------------------------------------
+
+  if (
+    $("p-formspree")
+  ) {
+
     draft.formspree =
       $("p-formspree")
-        ?.value
-        .trim() || "";
+        .value
+        .trim();
+
   }
+
+
+  // ----------------------------------------------------------
+  // GOOGLE
+  // ----------------------------------------------------------
+
+  if (
+    $("p-google-maps") ||
+    $("p-google-reviews") ||
+    $("p-google-place-id") ||
+    $("p-google-maps-embed")
+  ) {
+
+    draft.google =
+      draft.google ||
+      {};
+
+
+    draft.google.maps =
+      $("p-google-maps")
+        ?.value
+        .trim() ||
+      "";
+
+
+    draft.google.mapsEmbed =
+      $("p-google-maps-embed")
+        ?.value
+        .trim() ||
+      "";
+
+
+    draft.google.reviews =
+      $("p-google-reviews")
+        ?.value
+        .trim() ||
+      "";
+
+
+    draft.google.placeId =
+      $("p-google-place-id")
+        ?.value
+        .trim() ||
+      "";
+
+  }
+
+
+  // ----------------------------------------------------------
+  // GALERIA
+  // ----------------------------------------------------------
+
+  if (
+    $("p-gallery-enabled") ||
+    $("p-gallery-images")
+  ) {
+
+    draft.gallery =
+      draft.gallery ||
+      {};
+
+
+    draft.gallery.enabled =
+      Boolean(
+        $("p-gallery-enabled")
+          ?.checked
+      );
+
+
+    draft.gallery.images =
+      (
+        $("p-gallery-images")
+          ?.value ||
+        ""
+      )
+
+        .split("\n")
+
+        .map(
+          (url) =>
+            url.trim()
+        )
+
+        .filter(Boolean);
+
+  }
+
+
+  // ----------------------------------------------------------
+  // SEO
+  // ----------------------------------------------------------
+
+  if (
+    $("p-seo-title") ||
+    $("p-seo-description") ||
+    $("p-seo-keywords")
+  ) {
+
+    draft.seo =
+      draft.seo ||
+      {};
+
+
+    draft.seo.title =
+      $("p-seo-title")
+        ?.value
+        .trim() ||
+      "";
+
+
+    draft.seo.description =
+      $("p-seo-description")
+        ?.value
+        .trim() ||
+      "";
+
+
+    draft.seo.keywords =
+      $("p-seo-keywords")
+        ?.value
+        .trim() ||
+      "";
+
+  }
+
+
+  // ----------------------------------------------------------
+  // SCRIPTS
+  // ----------------------------------------------------------
+
+  if (
+    $("p-custom-scripts")
+  ) {
+
+    draft.scripts =
+      draft.scripts ||
+      {};
+
+
+    draft.scripts.custom =
+      $("p-custom-scripts")
+        .value
+        .trim();
+
+  }
+
+
+  return draft;
+
+}
+
+
+
+// ============================================================
+// SALVAR PROJETO
+// ============================================================
+
+async function saveProject() {
+
+  const draft =
+    state._editingProjectDraft;
+
+
+  if (!draft) {
+
+    return;
+
+  }
+
+
+  collectProjectFormData(
+    draft
+  );
+
 
   if (!draft.name) {
 
@@ -2028,9 +3941,12 @@ async function saveProject() {
       "Informe o nome do projeto.",
       "error"
     );
+
   }
 
+
   let res;
+
 
   if (
     state.editingProjectId
@@ -2042,7 +3958,9 @@ async function saveProject() {
         {
           id:
             state.editingProjectId,
+
           ...draft,
+
         }
       );
 
@@ -2053,7 +3971,9 @@ async function saveProject() {
         "/api/data/projects",
         draft
       );
+
   }
+
 
   if (res.error) {
 
@@ -2062,11 +3982,14 @@ async function saveProject() {
       "Erro ao salvar projeto.",
       "error"
     );
+
   }
+
 
   toast(
     "Projeto salvo com sucesso."
   );
+
 
   if (
     !state.editingProjectId
@@ -2076,9 +3999,6 @@ async function saveProject() {
 
   } else {
 
-    // Atualiza o projeto local
-    // sem fechar o modal.
-
     const index =
       state.projects.findIndex(
         (p) =>
@@ -2086,24 +4006,42 @@ async function saveProject() {
           state.editingProjectId
       );
 
-    if (index !== -1) {
 
-      state.projects[index] = {
-        ...state.projects[index],
+    if (
+      index !==
+      -1
+    ) {
+
+      state.projects[
+        index
+      ] = {
+
+        ...state.projects[
+          index
+        ],
+
         ...draft,
+
       };
 
     }
+
   }
 
+
   await refreshAllData();
+
 }
 
-// ================================================================
-// EXCLUIR PROJETO
-// ================================================================
 
-async function deleteProject(id) {
+
+// ============================================================
+// EXCLUIR PROJETO
+// ============================================================
+
+async function deleteProject(
+  id
+) {
 
   if (
     !confirm(
@@ -2114,12 +4052,17 @@ async function deleteProject(id) {
   ) {
 
     return;
+
   }
+
 
   const res =
     await API.del(
-      `/api/data/projects?id=${encodeURIComponent(id)}`
+      `/api/data/projects?id=${encodeURIComponent(
+        id
+      )}`
     );
+
 
   if (res.error) {
 
@@ -2128,34 +4071,49 @@ async function deleteProject(id) {
       "Erro ao excluir projeto.",
       "error"
     );
+
   }
+
 
   toast(
     "Projeto excluído."
   );
 
+
   await refreshAllData();
+
 }
 
-// ================================================================
-// ACESSO DO CLIENTE
-// ================================================================
 
-async function renderClientAccessTab(el) {
+
+// ============================================================
+// ACESSO DO CLIENTE
+// ============================================================
+
+async function renderClientAccessTab(
+  el
+) {
 
   el.innerHTML = `
+
     <div class="empty-state">
       Carregando links...
     </div>
+
   `;
+
 
   const projectId =
     state.editingProjectId;
 
+
   const links =
     await API.get(
-      `/api/client-link/${encodeURIComponent(projectId)}`
+      `/api/client-link/${encodeURIComponent(
+        projectId
+      )}`
     );
+
 
   el.innerHTML = `
 
@@ -2165,6 +4123,7 @@ async function renderClientAccessTab(el) {
         Liberar campos para o cliente
       </h3>
 
+
       <p
         style="
           color:var(--text-muted);
@@ -2172,11 +4131,14 @@ async function renderClientAccessTab(el) {
           margin-bottom:10px
         "
       >
+
         Marque exatamente o que
         esse cliente pode editar.
         Você pode gerar mais de um
         link com combinações diferentes.
+
       </p>
+
 
       <div
         class="checkbox-grid"
@@ -2195,19 +4157,37 @@ async function renderClientAccessTab(el) {
 
                 <input
                   type="checkbox"
-                  value="${escapeHtml(path)}"
-                  id="cf-${escapeHtml(path)}"
+                  value="${escapeHtml(
+                    path
+                  )}"
+                  id="cf-${escapeHtml(
+                    path.replace(
+                      /\./g,
+                      "-"
+                    )
+                  )}"
                 >
 
+
                 <label
-                  for="cf-${escapeHtml(path)}"
+                  for="cf-${escapeHtml(
+                    path.replace(
+                      /\./g,
+                      "-"
+                    )
+                  )}"
+
                   style="
                     margin:0;
                     font-weight:400;
                     color:var(--text-main)
                   "
                 >
-                  ${escapeHtml(label)}
+
+                  ${escapeHtml(
+                    label
+                  )}
+
                 </label>
 
               </div>
@@ -2218,15 +4198,19 @@ async function renderClientAccessTab(el) {
 
       </div>
 
+
       <button
         class="btn btn-primary btn-sm"
         style="margin-top:12px"
         onclick="generateClientLink()"
       >
+
         Gerar link do cliente
+
       </button>
 
     </div>
+
 
     <div class="form-section">
 
@@ -2234,26 +4218,37 @@ async function renderClientAccessTab(el) {
         Links ativos
       </h3>
 
+
       <div id="client-links-list">
 
         ${
-          Array.isArray(links) &&
+          Array.isArray(
+            links
+          ) &&
           links.length
 
             ? links
+
                 .filter(
-                  (l) => !l.revoked
+                  (l) =>
+                    !l.revoked
                 )
+
                 .map(
                   renderClientLinkRow
                 )
+
                 .join("")
 
             : `
+
               <div class="empty-state">
+
                 Nenhum link gerado ainda
                 para este projeto.
+
               </div>
+
             `
         }
 
@@ -2262,23 +4257,40 @@ async function renderClientAccessTab(el) {
     </div>
 
   `;
+
 }
 
-function renderClientLinkRow(l) {
+
+
+// ============================================================
+// LINHA LINK CLIENTE
+// ============================================================
+
+function renderClientLinkRow(
+  l
+) {
 
   const fields =
-    Array.isArray(l.fields)
+    Array.isArray(
+      l.fields
+    )
       ? l.fields
       : [];
 
+
   const fieldsLabel =
     fields
+
       .map(
         (f) =>
-          CLIENT_FIELD_LABELS[f] ||
+          CLIENT_FIELD_LABELS[
+            f
+          ] ||
           f
       )
+
       .join(", ");
+
 
   return `
 
@@ -2289,10 +4301,13 @@ function renderClientLinkRow(l) {
         <div
           style="font-size:12.5px"
         >
+
           ${escapeHtml(
             fieldsLabel
           )}
+
         </div>
+
 
         <div class="meta">
 
@@ -2312,6 +4327,7 @@ function renderClientLinkRow(l) {
 
       </div>
 
+
       <div
         style="
           display:flex;
@@ -2321,16 +4337,25 @@ function renderClientLinkRow(l) {
 
         <button
           class="btn btn-ghost btn-sm"
-          onclick="copyClientLink('${escapeHtml(l.jti)}', this)"
+          onclick="copyClientLink('${escapeHtml(
+            l.jti
+          )}', this)"
         >
+
           Copiar link
+
         </button>
+
 
         <button
           class="btn btn-danger btn-sm"
-          onclick="revokeClientLink('${escapeHtml(l.jti)}')"
+          onclick="revokeClientLink('${escapeHtml(
+            l.jti
+          )}')"
         >
+
           Revogar
+
         </button>
 
       </div>
@@ -2338,11 +4363,14 @@ function renderClientLinkRow(l) {
     </div>
 
   `;
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // GERAR LINK
-// ================================================================
+// ============================================================
 
 async function generateClientLink() {
 
@@ -2351,17 +4379,25 @@ async function generateClientLink() {
       document.querySelectorAll(
         "#client-fields-checkboxes input:checked"
       )
-    ).map(
-      (i) => i.value
-    );
+    )
+      .map(
+        (i) =>
+          i.value
+      );
 
-  if (fields.length === 0) {
+
+  if (
+    fields.length ===
+    0
+  ) {
 
     return toast(
       "Marque ao menos um campo.",
       "error"
     );
+
   }
+
 
   const res =
     await API.post(
@@ -2373,6 +4409,7 @@ async function generateClientLink() {
       }
     );
 
+
   if (res.error) {
 
     return toast(
@@ -2380,16 +4417,21 @@ async function generateClientLink() {
       "Erro ao gerar link.",
       "error"
     );
+
   }
+
 
   state._lastGeneratedToken =
     res.token;
+
 
   toast(
     "Link gerado."
   );
 
+
   renderProjectTab();
+
 
   setTimeout(
     () =>
@@ -2398,40 +4440,61 @@ async function generateClientLink() {
       ),
     100
   );
+
 }
 
-// ================================================================
-// URL DO CLIENTE
-// ================================================================
 
-function buildClientEditUrl(token) {
+
+// ============================================================
+// URL DO CLIENTE
+// ============================================================
+
+function buildClientEditUrl(
+  token
+) {
 
   const base =
     window.location.href
+
       .replace(
         /index\.html.*$/,
         ""
       )
+
       .replace(
         /\/$/,
         ""
       );
 
-  return `${base}/editar.html?token=${encodeURIComponent(token)}`;
+
+  return `${base}/editar.html?token=${encodeURIComponent(
+    token
+  )}`;
+
 }
+
+
+
+// ============================================================
+// COPIAR LINK GERADO
+// ============================================================
 
 async function copyClientLinkByToken(
   token
 ) {
 
   const url =
-    buildClientEditUrl(token);
+    buildClientEditUrl(
+      token
+    );
+
 
   try {
 
     await navigator.clipboard.writeText(
       url
     );
+
 
     toast(
       "Link copiado — envie para o cliente."
@@ -2443,12 +4506,16 @@ async function copyClientLinkByToken(
       url,
       "success"
     );
+
   }
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // COPIAR LINK ANTIGO
-// ================================================================
+// ============================================================
 
 async function copyClientLink(
   jti,
@@ -2459,11 +4526,14 @@ async function copyClientLink(
     "Por segurança, o link completo só é mostrado no momento em que é gerado. Se foi perdido, revogue e gere um novo.",
     "error"
   );
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // REVOGAR LINK
-// ================================================================
+// ============================================================
 
 async function revokeClientLink(
   jti
@@ -2477,7 +4547,9 @@ async function revokeClientLink(
   ) {
 
     return;
+
   }
+
 
   const res =
     await API.post(
@@ -2487,6 +4559,7 @@ async function revokeClientLink(
       {}
     );
 
+
   if (res.error) {
 
     return toast(
@@ -2494,26 +4567,37 @@ async function revokeClientLink(
       "Erro ao revogar link.",
       "error"
     );
+
   }
+
 
   toast(
     "Link revogado."
   );
 
+
   renderProjectTab();
+
 }
 
-// ================================================================
-// LEADS
-// ================================================================
 
-async function renderLeadsTab(el) {
+
+// ============================================================
+// LEADS
+// ============================================================
+
+async function renderLeadsTab(
+  el
+) {
 
   el.innerHTML = `
+
     <div class="empty-state">
       Carregando leads...
     </div>
+
   `;
+
 
   const leads =
     await API.get(
@@ -2522,9 +4606,13 @@ async function renderLeadsTab(el) {
       )}`
     );
 
+
   if (
-    !Array.isArray(leads) ||
-    leads.length === 0
+    !Array.isArray(
+      leads
+    ) ||
+    leads.length ===
+    0
   ) {
 
     el.innerHTML = `
@@ -2544,10 +4632,13 @@ async function renderLeadsTab(el) {
     `;
 
     return;
+
   }
+
 
   el.innerHTML =
     leads
+
       .map(
         (l) => `
 
@@ -2556,34 +4647,46 @@ async function renderLeadsTab(el) {
             <div>
 
               <div>
+
                 ${escapeHtml(
                   l.name ||
                   "Sem nome"
                 )}
+
               </div>
 
+
               <div class="meta">
+
                 ${escapeHtml(
-                  l.email || ""
+                  l.email ||
+                  ""
                 )}
+
               </div>
+
 
               ${
                 l.message
                   ? `
+
                     <div
                       class="meta"
                       style="margin-top:4px"
                     >
+
                       ${escapeHtml(
                         l.message
                       )}
+
                     </div>
+
                   `
                   : ""
               }
 
             </div>
+
 
             <div class="meta">
 
@@ -2603,12 +4706,16 @@ async function renderLeadsTab(el) {
 
         `
       )
+
       .join("");
+
 }
 
-// ================================================================
+
+
+// ============================================================
 // MODAL
-// ================================================================
+// ============================================================
 
 function showModal(
   innerHtml,
@@ -2617,23 +4724,28 @@ function showModal(
 
   closeModal();
 
+
   const overlay =
     document.createElement(
       "div"
     );
 
+
   overlay.className =
     "modal-overlay";
 
+
   overlay.id =
     "modal-overlay";
+
 
   overlay.addEventListener(
     "click",
     (e) => {
 
       if (
-        e.target === overlay
+        e.target ===
+        overlay
       ) {
 
         closeModal();
@@ -2642,6 +4754,7 @@ function showModal(
 
     }
   );
+
 
   overlay.innerHTML = `
 
@@ -2656,17 +4769,74 @@ function showModal(
 
   `;
 
+
   document.body.appendChild(
     overlay
   );
+
 }
+
+
+
+// ============================================================
+// FECHAR MODAL
+// ============================================================
 
 function closeModal() {
 
   const el =
     $("modal-overlay");
 
+
   if (el) {
+
     el.remove();
+
   }
+
 }
+
+
+
+// ============================================================
+// EXPOR FUNÇÕES GLOBALMENTE
+// ============================================================
+
+window.openClientModal =
+  openClientModal;
+
+window.saveClient =
+  saveClient;
+
+window.deleteClient =
+  deleteClient;
+
+window.openProjectModal =
+  openProjectModal;
+
+window.saveProject =
+  saveProject;
+
+window.deleteProject =
+  deleteProject;
+
+window.copyProjectId =
+  copyProjectId;
+
+window.copyTrackingSnippet =
+  copyTrackingSnippet;
+
+window.generateClientLink =
+  generateClientLink;
+
+window.copyClientLinkByToken =
+  copyClientLinkByToken;
+
+window.copyClientLink =
+  copyClientLink;
+
+window.revokeClientLink =
+  revokeClientLink;
+
+window.closeModal =
+  closeModal;
