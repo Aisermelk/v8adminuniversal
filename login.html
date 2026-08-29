@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -15,9 +16,7 @@
         content="noindex, nofollow"
     >
 
-    <title>
-        V8 Admin — Login
-    </title>
+    <title>V8 Admin — Login</title>
 
     <link
         rel="stylesheet"
@@ -39,24 +38,19 @@
                 </div>
 
                 <div>
-
-                    <h1>
-                        V8 Admin
-                    </h1>
+                    <h1>V8 Admin</h1>
 
                     <p>
                         Painel administrativo
                     </p>
-
                 </div>
 
             </div>
 
+
             <div class="login-header">
 
-                <h2>
-                    Entrar
-                </h2>
+                <h2>Entrar</h2>
 
                 <p>
                     Acesse o painel para gerenciar
@@ -65,16 +59,16 @@
 
             </div>
 
+
             <form
                 id="login-form"
                 autocomplete="on"
+                novalidate
             >
 
                 <div class="field">
 
-                    <label
-                        for="email"
-                    >
+                    <label for="email">
                         E-mail
                     </label>
 
@@ -89,11 +83,10 @@
 
                 </div>
 
+
                 <div class="field">
 
-                    <label
-                        for="password"
-                    >
+                    <label for="password">
                         Senha
                     </label>
 
@@ -108,12 +101,14 @@
 
                 </div>
 
+
                 <div
                     id="auth-error"
                     class="auth-error hidden"
                     role="alert"
                     aria-live="polite"
                 ></div>
+
 
                 <button
                     type="submit"
@@ -124,6 +119,7 @@
                 </button>
 
             </form>
+
 
             <div class="login-footer">
 
@@ -137,45 +133,21 @@
 
     </main>
 
-    <!-- =========================================================
+
+    <!-- =====================================================
          API
-    ========================================================== -->
+    ====================================================== -->
 
-    <script src="js/api.js"></script>
+    <script src="./js/api.js"></script>
 
-    <!-- =========================================================
+
+    <!-- =====================================================
          AUTENTICAÇÃO
-    ========================================================== -->
+    ====================================================== -->
 
-    <script src="js/auth.js"></script>
-
-    <!-- =========================================================
-         LOGIN
-    ========================================================== -->
-
-    <script>
-
-        document.addEventListener(
-            "DOMContentLoaded",
-            () => {
-
-                const form =
-                    document.getElementById(
-                        "login-form"
-                    );
-
-                if (!form) return;
-
-                form.addEventListener(
-                    "submit",
-                    handleLoginSubmit
-                );
-
-            }
-        );
-
-    </script>
+    <script src="./js/auth.js"></script>
 
 </body>
 
 </html>
+```
