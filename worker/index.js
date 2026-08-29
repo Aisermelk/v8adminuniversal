@@ -1,1874 +1,2573 @@
-/**
- * V8 ADMIN — Universal
- * Cloudflare Worker
- *
- * Worker:
- * v8adminuniversal
- *
- * API:
- * https://v8adminuniversal.aisermelk.workers.dev
- *
- * KV:
- * V8_KV
- *
- * Secrets:
- * ADMIN_EMAIL
- * ADMIN_PASS
- * TOKEN_SECRET
- */
+```javascript
+// ============================================================
+// V8 ADMIN UNIVERSAL
+// index.js
+//
+// Cloudflare Worker + KV
+//
+// Binding:
+// V8_KV
+//
+// Secrets:
+// ADMIN_EMAIL
+// ADMIN_PASS
+// TOKEN_SECRET
+//
+// ============================================================
+
+
+// ============================================================
+// CONFIGURAÇÃO
+// ============================================================
+
+const TOKEN_TTL = 24 * 60 * 60 * 1000;
+const CLIENT_LINK_TTL = 30 * 24 * 60 * 60 * 1000;
+
+
+// ============================================================
+// CHAVES KV
+// ============================================================
+
+const KEYS = {
+    clients: "data:clients",
+    projects: "data:projects",
+    leads: "data:leads",
+    clientLinks: "data:client-links"
+};
+
+
+// ============================================================
+// RESPONSE JSON
+// ============================================================
+
+function json(data, status = 200, origin = "*") {
+
+    return new Response(
+        JSON.stringify(data),
+        {
+            status,
+
+            headers: {
+                "Content-Type": "application/json; charset=utf-8",
+
+                "Access-Control-Allow-Origin": origin,
+
+                "Access-Control-Allow-Headers":
+                    "Content-Type, Authorization",
+
+                "Access-Control-Allow-Methods":
+                    "GET, POST, PUT, DELETE, OPTIONS",
+
+                "Cache-Control":
+                    "no-store"
+            }
+        }
+    );
+}
+
 
 // ============================================================
 // CORS
 // ============================================================
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+function cors(request) {
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=UTF-8",
-      ...CORS_HEADERS,
-    },
-  });
+    const origin =
+        request.headers.get("Origin");
+
+    return origin || "*";
 }
 
-function badRequest(message) {
-  return json({
-    error: true,
-    message,
-  }, 400);
+
+// ============================================================
+// HASH SHA-256
+// ============================================================
+
+async function sha256(value) {
+
+    const data =
+        new TextEncoder().encode(value);
+
+    const hash =
+        await crypto.subtle.digest(
+            "SHA-256",
+            data
+        );
+
+    return Array
+        .from(new Uint8Array(hash))
+        .map(
+            b =>
+                b.toString(16).padStart(2, "0")
+        )
+        .join("");
 }
 
-function unauthorized(message = "Não autorizado") {
-  return json({
-    error: true,
-    message,
-  }, 401);
-}
 
-function notFound(message = "Rota não encontrada") {
-  return json({
-    error: true,
-    message,
-  }, 404);
-}
-
-function serverError(message = "Erro interno do servidor") {
-  return json({
-    error: true,
-    message,
-  }, 500);
-}
-
-function tooMany(message = "Muitas tentativas. Tente novamente em alguns minutos.") {
-  return json({
-    error: true,
-    message,
-  }, 429);
-}
+// ============================================================
+// UUID
+// ============================================================
 
 function uuid() {
-  return crypto.randomUUID();
+
+    return crypto.randomUUID();
 }
+
 
 // ============================================================
-// BASE64URL
+// TOKEN ADMIN
 // ============================================================
 
-function b64urlEncode(bytes) {
-  const uint8 = new Uint8Array(bytes);
+async function createToken(env) {
 
-  let binary = "";
+    const now =
+        Date.now();
 
-  for (let i = 0; i < uint8.length; i++) {
-    binary += String.fromCharCode(uint8[i]);
-  }
+    const expiresAt =
+        now + TOKEN_TTL;
 
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+    const payload = {
+        sub:
+            env.ADMIN_EMAIL || "admin",
+
+        iat:
+            now,
+
+        exp:
+            expiresAt,
+
+        type:
+            "admin"
+    };
+
+    const encoded =
+        btoa(
+            JSON.stringify(payload)
+        );
+
+    const signature =
+        await sha256(
+            encoded +
+            String(env.TOKEN_SECRET || "")
+        );
+
+    return {
+        token:
+            `${encoded}.${signature}`,
+
+        expiresAt
+    };
 }
 
-function b64urlEncodeStr(str) {
-  return b64urlEncode(
-    new TextEncoder().encode(str)
-  );
-}
-
-function b64urlDecodeStr(str) {
-  str = str
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-
-  while (str.length % 4) {
-    str += "=";
-  }
-
-  const binary = atob(str);
-
-  const bytes = new Uint8Array(binary.length);
-
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  return new TextDecoder().decode(bytes);
-}
 
 // ============================================================
-// TOKEN HMAC
+// VALIDAR TOKEN
 // ============================================================
 
-async function getSigningKey(secret) {
-  if (!secret) {
-    throw new Error("TOKEN_SECRET não configurado");
-  }
+async function verifyToken(request, env) {
 
-  return crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
-    false,
-    ["sign"]
-  );
-}
+    const auth =
+        request.headers.get(
+            "Authorization"
+        );
 
-async function signToken(payload, secret) {
-  const key = await getSigningKey(secret);
+    if (!auth) {
+        return false;
+    }
 
-  const payloadStr =
-    b64urlEncodeStr(
-      JSON.stringify(payload)
-    );
+    if (!auth.startsWith("Bearer ")) {
+        return false;
+    }
 
-  const signature =
-    await crypto.subtle.sign(
-      "HMAC",
-      key,
-      new TextEncoder().encode(payloadStr)
-    );
+    const token =
+        auth.slice(7).trim();
 
-  return `${payloadStr}.${b64urlEncode(signature)}`;
-}
+    const parts =
+        token.split(".");
 
-async function verifyToken(token, secret) {
-  if (!token || typeof token !== "string") {
-    return null;
-  }
+    if (parts.length !== 2) {
+        return false;
+    }
 
-  const parts = token.split(".");
+    const encoded =
+        parts[0];
 
-  if (parts.length !== 2) {
-    return null;
-  }
-
-  try {
-    const payloadStr = parts[0];
-    const signature = parts[1];
-
-    const key = await getSigningKey(secret);
+    const signature =
+        parts[1];
 
     const expected =
-      await crypto.subtle.sign(
-        "HMAC",
-        key,
-        new TextEncoder().encode(payloadStr)
-      );
+        await sha256(
+            encoded +
+            String(env.TOKEN_SECRET || "")
+        );
 
-    const expectedSig =
-      b64urlEncode(expected);
-
-    if (signature !== expectedSig) {
-      return null;
+    if (signature !== expected) {
+        return false;
     }
 
-    const payload =
-      JSON.parse(
-        b64urlDecodeStr(payloadStr)
-      );
+    let payload;
+
+    try {
+
+        payload =
+            JSON.parse(
+                atob(encoded)
+            );
+
+    } catch {
+
+        return false;
+    }
+
+    if (!payload) {
+        return false;
+    }
 
     if (!payload.exp) {
-      return null;
+        return false;
     }
 
-    if (
-      Date.now() / 1000 >
-      payload.exp
-    ) {
-      return null;
+    if (Date.now() >= payload.exp) {
+        return false;
     }
 
-    return payload;
+    if (payload.type !== "admin") {
+        return false;
+    }
 
-  } catch {
-    return null;
-  }
+    return true;
 }
 
-// ============================================================
-// AUTORIZAÇÃO ADMIN
-// ============================================================
-
-function getBearerToken(request) {
-  const authorization =
-    request.headers.get("Authorization") || "";
-
-  const match =
-    authorization.match(
-      /^Bearer\s+(.+)$/i
-    );
-
-  return match
-    ? match[1]
-    : null;
-}
-
-async function requireAdmin(request, env) {
-  const token =
-    getBearerToken(request);
-
-  if (!token) {
-    return null;
-  }
-
-  const payload =
-    await verifyToken(
-      token,
-      env.TOKEN_SECRET
-    );
-
-  if (!payload) {
-    return null;
-  }
-
-  if (payload.role !== "admin") {
-    return null;
-  }
-
-  return payload;
-}
 
 // ============================================================
-// KV
+// AUTH
 // ============================================================
 
-async function kvGetJSON(
-  env,
-  key,
-  fallback = null
+async function requireAuth(
+    request,
+    env,
+    origin
 ) {
-  if (!env.V8_KV) {
-    throw new Error(
-      "Binding V8_KV não configurado"
-    );
-  }
 
-  const raw =
-    await env.V8_KV.get(key);
+    const valid =
+        await verifyToken(
+            request,
+            env
+        );
 
-  if (!raw) {
-    return fallback;
-  }
+    if (!valid) {
 
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
+        return json(
+            {
+                error: true,
+                message:
+                    "Não autorizado."
+            },
+            401,
+            origin
+        );
+    }
+
+    return null;
 }
 
-async function kvPutJSON(
-  env,
-  key,
-  value,
-  options = undefined
-) {
-  if (!env.V8_KV) {
-    throw new Error(
-      "Binding V8_KV não configurado"
-    );
-  }
-
-  await env.V8_KV.put(
-    key,
-    JSON.stringify(value),
-    options
-  );
-}
 
 // ============================================================
-// LOGIN RATE LIMIT
+// KV GET
 // ============================================================
 
-const LOGIN_MAX_ATTEMPTS = 5;
-const LOGIN_WINDOW_SECONDS = 15 * 60;
-
-async function checkLoginRateLimit(
-  env,
-  ip
-) {
-  const key =
-    `ratelimit:login:${ip}`;
-
-  const record =
-    await kvGetJSON(
-      env,
-      key,
-      { count: 0 }
-    );
-
-  return (
-    record.count <
-    LOGIN_MAX_ATTEMPTS
-  );
-}
-
-async function registerLoginFailure(
-  env,
-  ip
-) {
-  const key =
-    `ratelimit:login:${ip}`;
-
-  const record =
-    await kvGetJSON(
-      env,
-      key,
-      { count: 0 }
-    );
-
-  record.count += 1;
-
-  await kvPutJSON(
+async function kvGet(
     env,
     key,
-    record,
-    {
-      expirationTtl:
-        LOGIN_WINDOW_SECONDS,
+    fallback = null
+) {
+
+    if (!env.V8_KV) {
+        throw new Error(
+            "Binding V8_KV não configurado."
+        );
     }
-  );
+
+    const value =
+        await env.V8_KV.get(
+            key,
+            "json"
+        );
+
+    return value === null
+        ? fallback
+        : value;
 }
 
-async function clearLoginRateLimit(
-  env,
-  ip
+
+// ============================================================
+// KV PUT
+// ============================================================
+
+async function kvPut(
+    env,
+    key,
+    value
 ) {
-  await env.V8_KV.delete(
-    `ratelimit:login:${ip}`
-  );
+
+    if (!env.V8_KV) {
+        throw new Error(
+            "Binding V8_KV não configurado."
+        );
+    }
+
+    await env.V8_KV.put(
+        key,
+        JSON.stringify(value)
+    );
+
+    return true;
 }
+
+
+// ============================================================
+// KV DELETE
+// ============================================================
+
+async function kvDelete(
+    env,
+    key
+) {
+
+    if (!env.V8_KV) {
+        throw new Error(
+            "Binding V8_KV não configurado."
+        );
+    }
+
+    await env.V8_KV.delete(key);
+
+    return true;
+}
+
+
+// ============================================================
+// DATA LOADERS
+// ============================================================
+
+async function getClients(env) {
+
+    return await kvGet(
+        env,
+        KEYS.clients,
+        []
+    );
+}
+
+
+async function getProjects(env) {
+
+    return await kvGet(
+        env,
+        KEYS.projects,
+        []
+    );
+}
+
+
+async function getLeads(env) {
+
+    return await kvGet(
+        env,
+        KEYS.leads,
+        []
+    );
+}
+
+
+async function getClientLinks(env) {
+
+    return await kvGet(
+        env,
+        KEYS.clientLinks,
+        []
+    );
+}
+
+
+// ============================================================
+// DATA NORMALIZATION
+// ============================================================
+
+function normalizeProject(project = {}) {
+
+    const now =
+        new Date().toISOString();
+
+    return {
+
+        id:
+            project.id ||
+            uuid(),
+
+        name:
+            String(
+                project.name || ""
+            ),
+
+        status:
+            project.status ||
+            "Em desenvolvimento",
+
+        tracking: {
+
+            pixel:
+                project.tracking?.pixel ||
+                "",
+
+            tag:
+                project.tracking?.tag ||
+                "",
+
+            analytics:
+                project.tracking?.analytics ||
+                ""
+
+        },
+
+        contact: {
+
+            whatsapp:
+                project.contact?.whatsapp ||
+                "",
+
+            email:
+                project.contact?.email ||
+                "",
+
+            phone:
+                project.contact?.phone ||
+                ""
+
+        },
+
+        social: {
+
+            facebook:
+                project.social?.facebook ||
+                "",
+
+            instagram:
+                project.social?.instagram ||
+                "",
+
+            tiktok:
+                project.social?.tiktok ||
+                "",
+
+            youtube:
+                project.social?.youtube ||
+                "",
+
+            linkedin:
+                project.social?.linkedin ||
+                ""
+
+        },
+
+        formspree:
+            project.formspree ||
+            "",
+
+        createdAt:
+            project.createdAt ||
+            now,
+
+        updatedAt:
+            now
+    };
+}
+
+
+function normalizeClient(client = {}) {
+
+    const now =
+        new Date().toISOString();
+
+    return {
+
+        id:
+            client.id ||
+            uuid(),
+
+        name:
+            String(
+                client.name || ""
+            ),
+
+        email:
+            String(
+                client.email || ""
+            ),
+
+        phone:
+            String(
+                client.phone || ""
+            ),
+
+        projectId:
+            client.projectId ||
+            "",
+
+        createdAt:
+            client.createdAt ||
+            now,
+
+        updatedAt:
+            now
+    };
+}
+
 
 // ============================================================
 // LOGIN
 // ============================================================
 
 async function handleLogin(
-  request,
-  env
-) {
-  if (!env.ADMIN_EMAIL) {
-    return serverError(
-      "ADMIN_EMAIL não configurado"
-    );
-  }
-
-  if (!env.ADMIN_PASS) {
-    return serverError(
-      "ADMIN_PASS não configurado"
-    );
-  }
-
-  if (!env.TOKEN_SECRET) {
-    return serverError(
-      "TOKEN_SECRET não configurado"
-    );
-  }
-
-  const ip =
-    request.headers.get(
-      "CF-Connecting-IP"
-    ) || "unknown";
-
-  if (
-    !(await checkLoginRateLimit(
-      env,
-      ip
-    ))
-  ) {
-    return tooMany();
-  }
-
-  let body;
-
-  try {
-    body = await request.json();
-  } catch {
-    return badRequest(
-      "JSON inválido"
-    );
-  }
-
-  const email =
-    typeof body?.email === "string"
-      ? body.email.trim()
-      : "";
-
-  const password =
-    typeof body?.password === "string"
-      ? body.password
-      : "";
-
-  if (!email || !password) {
-    return badRequest(
-      "E-mail e senha são obrigatórios"
-    );
-  }
-
-  if (
-    email !== env.ADMIN_EMAIL ||
-    password !== env.ADMIN_PASS
-  ) {
-    await registerLoginFailure(
-      env,
-      ip
-    );
-
-    return unauthorized(
-      "E-mail ou senha inválidos"
-    );
-  }
-
-  await clearLoginRateLimit(
+    request,
     env,
-    ip
-  );
-
-  const now =
-    Math.floor(
-      Date.now() / 1000
-    );
-
-  const exp =
-    now + 60 * 60 * 12;
-
-  const token =
-    await signToken(
-      {
-        role: "admin",
-        iat: now,
-        exp,
-      },
-      env.TOKEN_SECRET
-    );
-
-  return json({
-    success: true,
-    token,
-    expiresAt: exp * 1000,
-  });
-}
-
-// ============================================================
-// CLIENTES / PROJETOS
-// ============================================================
-
-async function handleCollectionGet(
-  env,
-  collection
+    origin
 ) {
-  const list =
-    await kvGetJSON(
-      env,
-      collection,
-      []
-    );
 
-  return json(
-    Array.isArray(list)
-      ? list
-      : []
-  );
-}
+    let body;
 
-async function handleCollectionCreate(
-  request,
-  env,
-  collection,
-  shapeFn = null
-) {
-  let body;
+    try {
 
-  try {
-    body = await request.json();
-  } catch {
-    return badRequest(
-      "JSON inválido"
-    );
-  }
+        body =
+            await request.json();
 
-  const list =
-    await kvGetJSON(
-      env,
-      collection,
-      []
-    );
+    } catch {
 
-  const shape =
-    shapeFn
-      ? shapeFn()
-      : {};
-
-  const item = {
-    ...shape,
-    ...body,
-    id: uuid(),
-    createdAt: Date.now(),
-  };
-
-  list.push(item);
-
-  await kvPutJSON(
-    env,
-    collection,
-    list
-  );
-
-  return json(
-    item,
-    201
-  );
-}
-
-async function handleCollectionUpdate(
-  request,
-  env,
-  collection
-) {
-  let body;
-
-  try {
-    body = await request.json();
-  } catch {
-    return badRequest(
-      "JSON inválido"
-    );
-  }
-
-  if (!body?.id) {
-    return badRequest(
-      "Campo 'id' é obrigatório"
-    );
-  }
-
-  const list =
-    await kvGetJSON(
-      env,
-      collection,
-      []
-    );
-
-  const index =
-    list.findIndex(
-      item =>
-        item.id === body.id
-    );
-
-  if (index === -1) {
-    return notFound(
-      "Item não encontrado"
-    );
-  }
-
-  list[index] = {
-    ...list[index],
-    ...body,
-  };
-
-  await kvPutJSON(
-    env,
-    collection,
-    list
-  );
-
-  return json(
-    list[index]
-  );
-}
-
-async function handleCollectionDelete(
-  request,
-  env,
-  collection,
-  id
-) {
-  if (!id) {
-    return badRequest(
-      "Parâmetro 'id' é obrigatório"
-    );
-  }
-
-  const list =
-    await kvGetJSON(
-      env,
-      collection,
-      []
-    );
-
-  const filtered =
-    list.filter(
-      item =>
-        item.id !== id
-    );
-
-  if (
-    filtered.length ===
-    list.length
-  ) {
-    return notFound(
-      "Item não encontrado"
-    );
-  }
-
-  await kvPutJSON(
-    env,
-    collection,
-    filtered
-  );
-
-  return json({
-    deleted: true,
-  });
-}
-
-// ============================================================
-// PROJETO PADRÃO
-// ============================================================
-
-function defaultProjectShape() {
-  return {
-    name: "",
-    status: "Em desenvolvimento",
-
-    tracking: {
-      pixel: "",
-      tag: "",
-      analytics: "",
-    },
-
-    contact: {
-      whatsapp: "",
-      email: "",
-      phone: "",
-    },
-
-    social: {
-      facebook: "",
-      instagram: "",
-      tiktok: "",
-      youtube: "",
-      linkedin: "",
-    },
-
-    formspree: "",
-  };
-}
-
-// ============================================================
-// LEADS
-// ============================================================
-
-async function handleGetLeads(
-  env,
-  projectId
-) {
-  const leads =
-    await kvGetJSON(
-      env,
-      `leads:${projectId}`,
-      []
-    );
-
-  return json(
-    Array.isArray(leads)
-      ? leads
-      : []
-  );
-}
-
-async function handlePublicCreateLead(
-  request,
-  env,
-  projectId
-) {
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
-  const project =
-    projects.find(
-      p =>
-        p.id === projectId
-    );
-
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  let body;
-
-  try {
-    body =
-      await request.json();
-  } catch {
-    return badRequest(
-      "JSON inválido"
-    );
-  }
-
-  // Honeypot
-  if (body?.website) {
-    return json({
-      ok: true,
-    });
-  }
-
-  const lead = {
-    id: uuid(),
-    name:
-      typeof body?.name === "string"
-        ? body.name.trim()
-        : "",
-    email:
-      typeof body?.email === "string"
-        ? body.email.trim()
-        : "",
-    phone:
-      typeof body?.phone === "string"
-        ? body.phone.trim()
-        : "",
-    message:
-      typeof body?.message === "string"
-        ? body.message.trim()
-        : "",
-    createdAt: Date.now(),
-  };
-
-  const leads =
-    await kvGetJSON(
-      env,
-      `leads:${projectId}`,
-      []
-    );
-
-  leads.unshift(lead);
-
-  await kvPutJSON(
-    env,
-    `leads:${projectId}`,
-    leads.slice(0, 500)
-  );
-
-  return json({
-    ok: true,
-  }, 201);
-}
-
-// ============================================================
-// CONFIG PÚBLICA
-// ============================================================
-
-async function handlePublicConfig(
-  env,
-  projectId
-) {
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
-  const project =
-    projects.find(
-      p =>
-        p.id === projectId
-    );
-
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  return json({
-    tracking:
-      project.tracking || {},
-    contact:
-      project.contact || {},
-    social:
-      project.social || {},
-    formspree:
-      project.formspree || "",
-  });
-}
-
-// ============================================================
-// DASHBOARD — ESTATÍSTICAS
-// ============================================================
-
-async function handleDashboardStats(
-  env
-) {
-  const [
-    clients,
-    projects,
-  ] = await Promise.all([
-    kvGetJSON(
-      env,
-      "clients",
-      []
-    ),
-    kvGetJSON(
-      env,
-      "projects",
-      []
-    ),
-  ]);
-
-  let totalLeads = 0;
-
-  const recentLeads = [];
-
-  for (
-    const project of projects
-  ) {
-    const leads =
-      await kvGetJSON(
-        env,
-        `leads:${project.id}`,
-        []
-      );
-
-    totalLeads += leads.length;
-
-    for (
-      const lead of leads.slice(
-        0,
-        10
-      )
-    ) {
-      recentLeads.push({
-        ...lead,
-        projectName:
-          project.name || "Projeto",
-      });
+        return json(
+            {
+                error: true,
+                message:
+                    "Dados de login inválidos."
+            },
+            400,
+            origin
+        );
     }
-  }
 
-  recentLeads.sort(
-    (a, b) =>
-      (b.createdAt || 0) -
-      (a.createdAt || 0)
-  );
+    const email =
+        String(
+            body?.email || ""
+        )
+        .trim()
+        .toLowerCase();
 
-  return json({
-    totalClients:
-      clients.length,
+    const password =
+        String(
+            body?.password || ""
+        );
 
-    totalProjects:
-      projects.length,
+    const configuredEmail =
+        String(
+            env.ADMIN_EMAIL || ""
+        )
+        .trim()
+        .toLowerCase();
 
-    totalLeads,
+    const configuredPassword =
+        String(
+            env.ADMIN_PASS || ""
+        );
 
-    recentLeads:
-      recentLeads.slice(
-        0,
-        5
-      ),
-  });
-}
-
-// ============================================================
-// CAMPOS CLIENTE
-// ============================================================
-
-const CLIENT_FIELDS = [
-  "tracking.pixel",
-  "tracking.tag",
-  "tracking.analytics",
-  "contact.whatsapp",
-  "contact.email",
-  "contact.phone",
-  "social.facebook",
-  "social.instagram",
-  "social.tiktok",
-  "social.youtube",
-  "social.linkedin",
-  "formspree",
-];
-
-function getByPath(
-  obj,
-  path
-) {
-  return path
-    .split(".")
-    .reduce(
-      (current, key) =>
-        current == null
-          ? undefined
-          : current[key],
-      obj
-    );
-}
-
-function setByPath(
-  obj,
-  path,
-  value
-) {
-  const keys =
-    path.split(".");
-
-  let current = obj;
-
-  for (
-    let i = 0;
-    i < keys.length - 1;
-    i++
-  ) {
     if (
-      typeof current[keys[i]] !==
-        "object" ||
-      current[keys[i]] === null
+        !email ||
+        !password
     ) {
-      current[keys[i]] = {};
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Informe e-mail e senha."
+            },
+            400,
+            origin
+        );
     }
 
-    current =
-      current[keys[i]];
-  }
+    if (
+        !configuredEmail ||
+        !configuredPassword ||
+        !env.TOKEN_SECRET
+    ) {
 
-  current[
-    keys[keys.length - 1]
-  ] = value;
+        return json(
+            {
+                error: true,
+                message:
+                    "Configuração de autenticação incompleta no Worker."
+            },
+            500,
+            origin
+        );
+    }
+
+    if (
+        email !== configuredEmail ||
+        password !== configuredPassword
+    ) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "E-mail ou senha inválidos."
+            },
+            401,
+            origin
+        );
+    }
+
+    const session =
+        await createToken(env);
+
+    return json(
+        {
+            ok: true,
+
+            token:
+                session.token,
+
+            expiresAt:
+                session.expiresAt
+        },
+        200,
+        origin
+    );
 }
 
-// ============================================================
-// TOKEN CLIENTE
-// ============================================================
-
-async function requireClientToken(
-  token,
-  env
-) {
-  const payload =
-    await verifyToken(
-      token,
-      env.TOKEN_SECRET
-    );
-
-  if (
-    !payload ||
-    payload.role !== "client" ||
-    !payload.jti
-  ) {
-    return null;
-  }
-
-  const record =
-    await kvGetJSON(
-      env,
-      `client_token:${payload.jti}`
-    );
-
-  if (
-    !record ||
-    record.revoked
-  ) {
-    return null;
-  }
-
-  return {
-    ...payload,
-    fields:
-      Array.isArray(record.fields)
-        ? record.fields
-        : [],
-    projectId:
-      record.projectId,
-  };
-}
 
 // ============================================================
-// GERAR LINK CLIENTE
+// DASHBOARD
 // ============================================================
 
-async function handleGenerateClientLink(
-  request,
-  env,
-  projectId
-) {
-  let body;
-
-  try {
-    body =
-      await request.json();
-  } catch {
-    return badRequest(
-      "JSON inválido"
-    );
-  }
-
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
-  const project =
-    projects.find(
-      p =>
-        p.id === projectId
-    );
-
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  let fields =
-    Array.isArray(body?.fields)
-      ? body.fields
-      : [];
-
-  fields =
-    [...new Set(
-      fields.filter(
-        field =>
-          CLIENT_FIELDS.includes(
-            field
-          )
-      )
-    )];
-
-  if (!fields.length) {
-    return badRequest(
-      "Nenhum campo válido selecionado"
-    );
-  }
-
-  const jti = uuid();
-
-  const now =
-    Math.floor(
-      Date.now() / 1000
-    );
-
-  // Link válido por 30 dias
-  const exp =
-    now + 60 * 60 * 24 * 30;
-
-  const token =
-    await signToken(
-      {
-        role: "client",
-        jti,
-        projectId,
-        iat: now,
-        exp,
-      },
-      env.TOKEN_SECRET
-    );
-
-  const linkRecord = {
-    jti,
-    projectId,
-    fields,
-    revoked: false,
-    createdAt: Date.now(),
-  };
-
-  await kvPutJSON(
+async function dashboardStats(
     env,
-    `client_token:${jti}`,
-    linkRecord
-  );
+    origin
+) {
 
-  // Mantém o índice usado pela
-  // listagem em sincronia.
-  const links =
-    await kvGetJSON(
-      env,
-      `client_links:${projectId}`,
-      []
+    const [
+        projects,
+        clients,
+        leads
+    ] =
+        await Promise.all([
+            getProjects(env),
+            getClients(env),
+            getLeads(env)
+        ]);
+
+    const recentLeads =
+        leads
+            .slice()
+            .sort(
+                (a, b) =>
+                    new Date(
+                        b.createdAt || 0
+                    ) -
+                    new Date(
+                        a.createdAt || 0
+                    )
+            )
+            .slice(0, 10)
+            .map(
+                lead => {
+
+                    const project =
+                        projects.find(
+                            p =>
+                                p.id ===
+                                lead.projectId
+                        );
+
+                    return {
+                        ...lead,
+
+                        projectName:
+                            project?.name || ""
+                    };
+                }
+            );
+
+    return json(
+        {
+            ok: true,
+
+            totalProjects:
+                projects.length,
+
+            totalClients:
+                clients.length,
+
+            totalLeads:
+                leads.length,
+
+            recentLeads
+        },
+        200,
+        origin
     );
-
-  links.unshift(linkRecord);
-
-  await kvPutJSON(
-    env,
-    `client_links:${projectId}`,
-    links
-  );
-
-  return json({
-    success: true,
-    token,
-    jti,
-    projectId,
-    fields,
-    expiresAt:
-      exp * 1000,
-  }, 201);
 }
 
+
 // ============================================================
-// LISTAR LINKS CLIENTE
+// CLIENTES — LIST
 // ============================================================
 
-async function handleListClientLinks(
-  env,
-  projectId
+async function listClients(
+    env,
+    origin
 ) {
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
 
-  const project =
-    projects.find(
-      p =>
-        p.id === projectId
-    );
+    const clients =
+        await getClients(env);
 
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
+    return json(
+        clients,
+        200,
+        origin
     );
-  }
-
-  // Como o KV não possui busca por prefixo,
-  // mantemos um índice por projeto.
-  const links =
-    await kvGetJSON(
-      env,
-      `client_links:${projectId}`,
-      []
-    );
-
-  return json(
-    Array.isArray(links)
-      ? links
-      : []
-  );
 }
 
+
 // ============================================================
-// REVOGAR LINK
+// CLIENTES — CREATE
 // ============================================================
 
-async function handleRevokeClientLink(
-  env,
-  jti
-) {
-  if (!jti) {
-    return badRequest(
-      "JTI obrigatório"
-    );
-  }
-
-  const key =
-    `client_token:${jti}`;
-
-  const record =
-    await kvGetJSON(
-      env,
-      key
-    );
-
-  if (!record) {
-    return notFound(
-      "Link não encontrado"
-    );
-  }
-
-  record.revoked = true;
-  record.revokedAt =
-    Date.now();
-
-  await kvPutJSON(
+async function createClient(
+    request,
     env,
-    key,
-    record
-  );
+    origin
+) {
 
-  // Atualizar índice
-  if (record.projectId) {
-    const links =
-      await kvGetJSON(
+    let body;
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "JSON inválido."
+            },
+            400,
+            origin
+        );
+    }
+
+    const clients =
+        await getClients(env);
+
+    const client =
+        normalizeClient(body);
+
+    clients.push(client);
+
+    await kvPut(
         env,
-        `client_links:${record.projectId}`,
-        []
-      );
+        KEYS.clients,
+        clients
+    );
+
+    return json(
+        {
+            ok: true,
+            client
+        },
+        201,
+        origin
+    );
+}
+
+
+// ============================================================
+// CLIENTES — UPDATE
+// ============================================================
+
+async function updateClient(
+    request,
+    env,
+    origin
+) {
+
+    let body;
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "JSON inválido."
+            },
+            400,
+            origin
+        );
+    }
+
+    if (!body?.id) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "ID do cliente obrigatório."
+            },
+            400,
+            origin
+        );
+    }
+
+    const clients =
+        await getClients(env);
 
     const index =
-      links.findIndex(
-        l =>
-          l.jti === jti
-      );
+        clients.findIndex(
+            c =>
+                c.id === body.id
+        );
 
-    if (index !== -1) {
-      links[index].revoked =
-        true;
+    if (index === -1) {
 
-      links[index].revokedAt =
-        Date.now();
+        return json(
+            {
+                error: true,
+                message:
+                    "Cliente não encontrado."
+            },
+            404,
+            origin
+        );
+    }
 
-      await kvPutJSON(
+    clients[index] = {
+
+        ...clients[index],
+
+        ...body,
+
+        id:
+            clients[index].id,
+
+        createdAt:
+            clients[index].createdAt,
+
+        updatedAt:
+            new Date().toISOString()
+    };
+
+    await kvPut(
         env,
-        `client_links:${record.projectId}`,
-        links
-      );
-    }
-  }
+        KEYS.clients,
+        clients
+    );
 
-  return json({
-    ok: true,
-    revoked: true,
-  });
+    return json(
+        {
+            ok: true,
+            client:
+                clients[index]
+        },
+        200,
+        origin
+    );
 }
 
-// ============================================================
-// CLIENTE — GET
-// ============================================================
-
-async function handleClientGet(
-  env,
-  token
-) {
-  const auth =
-    await requireClientToken(
-      token,
-      env
-    );
-
-  if (!auth) {
-    return unauthorized(
-      "Link inválido ou revogado"
-    );
-  }
-
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
-  const project =
-    projects.find(
-      p =>
-        p.id ===
-        auth.projectId
-    );
-
-  if (!project) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  const safeData = {};
-
-  for (
-    const field of auth.fields
-  ) {
-    setByPath(
-      safeData,
-      field,
-      getByPath(
-        project,
-        field
-      )
-    );
-  }
-
-  return json({
-    projectName:
-      project.name,
-
-    fields:
-      auth.fields,
-
-    data:
-      safeData,
-  });
-}
 
 // ============================================================
-// CLIENTE — UPDATE
+// CLIENTES — DELETE
 // ============================================================
 
-async function handleClientUpdate(
-  request,
-  env,
-  token
-) {
-  const auth =
-    await requireClientToken(
-      token,
-      env
-    );
-
-  if (!auth) {
-    return unauthorized(
-      "Link inválido ou revogado"
-    );
-  }
-
-  let body;
-
-  try {
-    body =
-      await request.json();
-  } catch {
-    return badRequest(
-      "JSON inválido"
-    );
-  }
-
-  const projects =
-    await kvGetJSON(
-      env,
-      "projects",
-      []
-    );
-
-  const index =
-    projects.findIndex(
-      p =>
-        p.id ===
-        auth.projectId
-    );
-
-  if (index === -1) {
-    return notFound(
-      "Projeto não encontrado"
-    );
-  }
-
-  for (
-    const field of auth.fields
-  ) {
-    const value =
-      getByPath(
-        body,
-        field
-      );
-
-    if (value !== undefined) {
-      setByPath(
-        projects[index],
-        field,
-        value
-      );
-    }
-  }
-
-  await kvPutJSON(
+async function deleteClient(
     env,
-    "projects",
-    projects
-  );
+    origin,
+    url
+) {
 
-  return json({
-    ok: true,
-  });
+    const id =
+        url.searchParams.get("id");
+
+    if (!id) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "ID obrigatório."
+            },
+            400,
+            origin
+        );
+    }
+
+    const clients =
+        await getClients(env);
+
+    const exists =
+        clients.some(
+            client =>
+                client.id === id
+        );
+
+    if (!exists) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Cliente não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    const filtered =
+        clients.filter(
+            client =>
+                client.id !== id
+        );
+
+    await kvPut(
+        env,
+        KEYS.clients,
+        filtered
+    );
+
+    return json(
+        {
+            ok: true
+        },
+        200,
+        origin
+    );
 }
+
+
+// ============================================================
+// PROJETOS — LIST
+// ============================================================
+
+async function listProjects(
+    env,
+    origin
+) {
+
+    const projects =
+        await getProjects(env);
+
+    return json(
+        projects,
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// PROJETOS — CREATE
+// ============================================================
+
+async function createProject(
+    request,
+    env,
+    origin
+) {
+
+    let body;
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "JSON inválido."
+            },
+            400,
+            origin
+        );
+    }
+
+    const projects =
+        await getProjects(env);
+
+    const project =
+        normalizeProject(body);
+
+    projects.push(project);
+
+    await kvPut(
+        env,
+        KEYS.projects,
+        projects
+    );
+
+    return json(
+        {
+            ok: true,
+            project
+        },
+        201,
+        origin
+    );
+}
+
+
+// ============================================================
+// PROJETOS — UPDATE
+// ============================================================
+
+async function updateProject(
+    request,
+    env,
+    origin
+) {
+
+    let body;
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "JSON inválido."
+            },
+            400,
+            origin
+        );
+    }
+
+    if (!body?.id) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "ID do projeto obrigatório."
+            },
+            400,
+            origin
+        );
+    }
+
+    const projects =
+        await getProjects(env);
+
+    const index =
+        projects.findIndex(
+            project =>
+                project.id === body.id
+        );
+
+    if (index === -1) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    const current =
+        projects[index];
+
+    projects[index] =
+        normalizeProject(
+            {
+                ...current,
+
+                ...body,
+
+                id:
+                    current.id,
+
+                createdAt:
+                    current.createdAt
+            }
+        );
+
+    await kvPut(
+        env,
+        KEYS.projects,
+        projects
+    );
+
+    return json(
+        {
+            ok: true,
+
+            project:
+                projects[index]
+        },
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// PROJETOS — DELETE
+//
+// IMPORTANTE:
+// Por segurança, este endpoint NÃO apaga automaticamente
+// leads nem links do projeto.
+// ============================================================
+
+async function deleteProject(
+    env,
+    origin,
+    url
+) {
+
+    const id =
+        url.searchParams.get("id");
+
+    if (!id) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "ID obrigatório."
+            },
+            400,
+            origin
+        );
+    }
+
+    const projects =
+        await getProjects(env);
+
+    const project =
+        projects.find(
+            p =>
+                p.id === id
+        );
+
+    if (!project) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    const filtered =
+        projects.filter(
+            p =>
+                p.id !== id
+        );
+
+    await kvPut(
+        env,
+        KEYS.projects,
+        filtered
+    );
+
+    return json(
+        {
+            ok: true,
+
+            message:
+                "Projeto removido. Leads e links foram preservados."
+        },
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// PROJETO — RESTAURAR / VERIFICAR
+// ============================================================
+
+async function getProject(
+    env,
+    origin,
+    id
+) {
+
+    const projects =
+        await getProjects(env);
+
+    const project =
+        projects.find(
+            p =>
+                p.id === id
+        );
+
+    if (!project) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    return json(
+        {
+            ok: true,
+            project
+        },
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// PUBLIC CONFIG
+// ============================================================
+
+async function publicConfig(
+    env,
+    origin,
+    projectId
+) {
+
+    const projects =
+        await getProjects(env);
+
+    const project =
+        projects.find(
+            p =>
+                p.id === projectId
+        );
+
+    if (!project) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    return json(
+        {
+            ok: true,
+
+            project: {
+
+                id:
+                    project.id,
+
+                name:
+                    project.name,
+
+                status:
+                    project.status,
+
+                tracking:
+                    project.tracking || {},
+
+                contact:
+                    project.contact || {},
+
+                social:
+                    project.social || {},
+
+                formspree:
+                    project.formspree || ""
+
+            }
+        },
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// LEADS — LIST
+// ============================================================
+
+async function listLeads(
+    env,
+    origin,
+    projectId
+) {
+
+    const leads =
+        await getLeads(env);
+
+    const filtered =
+        leads
+            .filter(
+                lead =>
+                    lead.projectId ===
+                    projectId
+            )
+            .sort(
+                (a, b) =>
+                    new Date(
+                        b.createdAt || 0
+                    ) -
+                    new Date(
+                        a.createdAt || 0
+                    )
+            );
+
+    return json(
+        filtered,
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// LEADS — CREATE PÚBLICO
+// ============================================================
+
+async function createLead(
+    request,
+    env,
+    origin,
+    projectId
+) {
+
+    let body;
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "JSON inválido."
+            },
+            400,
+            origin
+        );
+    }
+
+    const projects =
+        await getProjects(env);
+
+    const projectExists =
+        projects.some(
+            project =>
+                project.id === projectId
+        );
+
+    if (!projectExists) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    const leads =
+        await getLeads(env);
+
+    const lead = {
+
+        id:
+            uuid(),
+
+        projectId,
+
+        name:
+            String(
+                body?.name || ""
+            ),
+
+        email:
+            String(
+                body?.email || ""
+            ),
+
+        phone:
+            String(
+                body?.phone || ""
+            ),
+
+        message:
+            String(
+                body?.message || ""
+            ),
+
+        createdAt:
+            new Date().toISOString()
+    };
+
+    leads.push(lead);
+
+    await kvPut(
+        env,
+        KEYS.leads,
+        leads
+    );
+
+    return json(
+        {
+            ok: true,
+            lead
+        },
+        201,
+        origin
+    );
+}
+
+
+// ============================================================
+// CLIENT LINK — CREATE
+// ============================================================
+
+async function generateClientLink(
+    request,
+    env,
+    origin,
+    projectId
+) {
+
+    let body;
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "JSON inválido."
+            },
+            400,
+            origin
+        );
+    }
+
+    const fields =
+        Array.isArray(body?.fields)
+            ? body.fields
+            : [];
+
+    if (!fields.length) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Nenhum campo selecionado."
+            },
+            400,
+            origin
+        );
+    }
+
+    const projects =
+        await getProjects(env);
+
+    const project =
+        projects.find(
+            p =>
+                p.id === projectId
+        );
+
+    if (!project) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    const jti =
+        uuid();
+
+    const token =
+        `${uuid()}-${uuid()}`;
+
+    const link = {
+
+        jti,
+
+        token,
+
+        projectId,
+
+        fields,
+
+        revoked:
+            false,
+
+        createdAt:
+            new Date().toISOString(),
+
+        expiresAt:
+            new Date(
+                Date.now() +
+                CLIENT_LINK_TTL
+            ).toISOString()
+    };
+
+    const links =
+        await getClientLinks(env);
+
+    links.push(link);
+
+    await kvPut(
+        env,
+        KEYS.clientLinks,
+        links
+    );
+
+    return json(
+        {
+            ok: true,
+
+            jti,
+
+            token,
+
+            expiresAt:
+                link.expiresAt
+        },
+        201,
+        origin
+    );
+}
+
+
+// ============================================================
+// CLIENT LINKS — LIST
+// ============================================================
+
+async function listClientLinks(
+    env,
+    origin,
+    projectId
+) {
+
+    const links =
+        await getClientLinks(env);
+
+    return json(
+        links.filter(
+            link =>
+                link.projectId ===
+                projectId
+        ),
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// CLIENT LINK — REVOKE
+// ============================================================
+
+async function revokeClientLink(
+    env,
+    origin,
+    jti
+) {
+
+    const links =
+        await getClientLinks(env);
+
+    const index =
+        links.findIndex(
+            link =>
+                link.jti === jti
+        );
+
+    if (index === -1) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Link não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    links[index] = {
+
+        ...links[index],
+
+        revoked:
+            true,
+
+        revokedAt:
+            new Date().toISOString()
+    };
+
+    await kvPut(
+        env,
+        KEYS.clientLinks,
+        links
+    );
+
+    return json(
+        {
+            ok: true
+        },
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// CLIENT ACCESS — VALIDAR
+// ============================================================
+
+async function validateClientLink(
+    env,
+    origin,
+    token
+) {
+
+    const links =
+        await getClientLinks(env);
+
+    const link =
+        links.find(
+            item =>
+                item.token === token
+        );
+
+    if (!link) {
+
+        return {
+            error:
+                json(
+                    {
+                        error: true,
+                        message:
+                            "Link inválido."
+                    },
+                    404,
+                    origin
+                )
+        };
+    }
+
+    if (link.revoked) {
+
+        return {
+            error:
+                json(
+                    {
+                        error: true,
+                        message:
+                            "Este link foi revogado."
+                    },
+                    403,
+                    origin
+                )
+        };
+    }
+
+    if (
+        link.expiresAt &&
+        Date.now() >
+            new Date(
+                link.expiresAt
+            ).getTime()
+    ) {
+
+        return {
+            error:
+                json(
+                    {
+                        error: true,
+                        message:
+                            "Este link expirou."
+                    },
+                    403,
+                    origin
+                )
+        };
+    }
+
+    return {
+        link
+    };
+}
+
+
+// ============================================================
+// CLIENT ACCESS — GET
+// ============================================================
+
+async function getClientAccess(
+    env,
+    origin,
+    token
+) {
+
+    const validation =
+        await validateClientLink(
+            env,
+            origin,
+            token
+        );
+
+    if (validation.error) {
+        return validation.error;
+    }
+
+    const link =
+        validation.link;
+
+    const projects =
+        await getProjects(env);
+
+    const project =
+        projects.find(
+            p =>
+                p.id ===
+                link.projectId
+        );
+
+    if (!project) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    return json(
+        {
+            ok: true,
+
+            id:
+                project.id,
+
+            name:
+                project.name,
+
+            status:
+                project.status,
+
+            allowedFields:
+                link.fields,
+
+            config:
+                project
+        },
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// CLIENT ACCESS — UPDATE
+// ============================================================
+
+async function updateClientAccess(
+    request,
+    env,
+    origin,
+    token
+) {
+
+    const validation =
+        await validateClientLink(
+            env,
+            origin,
+            token
+        );
+
+    if (validation.error) {
+        return validation.error;
+    }
+
+    const link =
+        validation.link;
+
+    let body;
+
+    try {
+
+        body =
+            await request.json();
+
+    } catch {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "JSON inválido."
+            },
+            400,
+            origin
+        );
+    }
+
+    const projects =
+        await getProjects(env);
+
+    const index =
+        projects.findIndex(
+            project =>
+                project.id ===
+                link.projectId
+        );
+
+    if (index === -1) {
+
+        return json(
+            {
+                error: true,
+                message:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    const current =
+        projects[index];
+
+    const updated =
+        JSON.parse(
+            JSON.stringify(current)
+        );
+
+    for (
+        const field of link.fields
+    ) {
+
+        if (
+            typeof field !==
+            "string"
+        ) {
+            continue;
+        }
+
+        if (field === "formspree") {
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    body,
+                    "formspree"
+                )
+            ) {
+
+                updated.formspree =
+                    body.formspree;
+            }
+
+            continue;
+        }
+
+        const parts =
+            field.split(".");
+
+        if (parts.length !== 2) {
+            continue;
+        }
+
+        const [
+            group,
+            key
+        ] = parts;
+
+        if (
+            body?.[group] &&
+            Object.prototype.hasOwnProperty.call(
+                body[group],
+                key
+            )
+        ) {
+
+            if (
+                !updated[group] ||
+                typeof updated[group] !==
+                    "object"
+            ) {
+
+                updated[group] = {};
+            }
+
+            updated[group][key] =
+                body[group][key];
+        }
+    }
+
+    updated.id =
+        current.id;
+
+    updated.createdAt =
+        current.createdAt;
+
+    updated.updatedAt =
+        new Date().toISOString();
+
+    projects[index] =
+        updated;
+
+    await kvPut(
+        env,
+        KEYS.projects,
+        projects
+    );
+
+    return json(
+        {
+            ok: true,
+            project:
+                updated
+        },
+        200,
+        origin
+    );
+}
+
+
+// ============================================================
+// API — INFO
+// ============================================================
+
+async function apiInfo(
+    env,
+    origin
+) {
+
+    return json(
+        {
+            ok: true,
+
+            api:
+                "V8 Admin Universal",
+
+            version:
+                "1.0.0",
+
+            worker:
+                "v8adminuniversal",
+
+            endpoints: {
+
+                login:
+                    "POST /api/login",
+
+                dashboard:
+                    "GET /api/dashboard/stats",
+
+                projects:
+                    "/api/data/projects",
+
+                clients:
+                    "/api/data/clients",
+
+                leads:
+                    "GET /api/data/leads/:projectId",
+
+                publicConfig:
+                    "GET /api/public/config/:projectId",
+
+                publicLead:
+                    "POST /api/public/leads/:projectId",
+
+                clientLink:
+                    "/api/client-link/:projectId",
+
+                clientAccess:
+                    "/api/client-access/:token"
+            },
+
+            kv:
+                !!env.V8_KV,
+
+            time:
+                new Date().toISOString()
+        },
+        200,
+        origin
+    );
+}
+
 
 // ============================================================
 // ROUTER
 // ============================================================
 
-export default {
-  async fetch(
+async function router(
     request,
     env
-  ) {
-    // CORS
-    if (
-      request.method ===
-      "OPTIONS"
-    ) {
-      return new Response(
-        null,
-        {
-          status: 204,
-          headers:
-            CORS_HEADERS,
-        }
-      );
-    }
+) {
 
     const url =
-      new URL(
-        request.url
-      );
+        new URL(
+            request.url
+        );
 
     const path =
-      url.pathname.length > 1
-        ? url.pathname.replace(
-            /\/+$/,
-            ""
-          )
-        : "/";
+        url.pathname;
 
     const method =
-      request.method.toUpperCase();
+        request.method;
 
-    try {
+    const origin =
+        cors(request);
 
-      // ======================================================
-      // HOME
-      // ======================================================
 
-      if (
+    // ========================================================
+    // OPTIONS
+    // ========================================================
+
+    if (method === "OPTIONS") {
+
+        return new Response(
+            null,
+            {
+                status: 204,
+
+                headers: {
+
+                    "Access-Control-Allow-Origin":
+                        origin,
+
+                    "Access-Control-Allow-Headers":
+                        "Content-Type, Authorization",
+
+                    "Access-Control-Allow-Methods":
+                        "GET, POST, PUT, DELETE, OPTIONS",
+
+                    "Access-Control-Max-Age":
+                        "86400"
+                }
+            }
+        );
+    }
+
+
+    // ========================================================
+    // HEALTH
+    // ========================================================
+
+    if (
         path === "/" &&
         method === "GET"
-      ) {
-        return json({
-          ok: true,
-          worker:
-            "v8adminuniversal",
-          status:
-            "online",
-          api: true,
-          time:
-            new Date().toISOString(),
-        });
-      }
+    ) {
 
-      // ======================================================
-      // HEALTH
-      // ======================================================
+        return json(
+            {
+                ok: true,
 
-      if (
-        path ===
-          "/api/health" &&
-        method === "GET"
-      ) {
-        return json({
-          ok: true,
+                worker:
+                    "v8adminuniversal",
 
-          worker:
-            "v8adminuniversal",
+                status:
+                    "online",
 
-          status:
-            "online",
+                api:
+                    true,
 
-          kv:
-            !!env.V8_KV,
+                kv:
+                    !!env.V8_KV,
 
-          adminEmail:
-            !!env.ADMIN_EMAIL,
-
-          adminPass:
-            !!env.ADMIN_PASS,
-
-          tokenSecret:
-            !!env.TOKEN_SECRET,
-
-          time:
-            new Date().toISOString(),
-        });
-      }
-
-      // ======================================================
-      // LOGIN
-      // ======================================================
-
-      if (
-        path ===
-          "/api/login" &&
-        method === "POST"
-      ) {
-        return handleLogin(
-          request,
-          env
+                time:
+                    new Date().toISOString()
+            },
+            200,
+            origin
         );
-      }
-
-      // ======================================================
-      // API CLIENTE PÚBLICA
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/client/"
-        )
-      ) {
-        const token =
-          decodeURIComponent(
-            path.substring(
-              "/api/client/".length
-            )
-          );
-
-        if (
-          method === "GET"
-        ) {
-          return handleClientGet(
-            env,
-            token
-          );
-        }
-
-        if (
-          method === "PUT"
-        ) {
-          return handleClientUpdate(
-            request,
-            env,
-            token
-          );
-        }
-      }
-
-      // ======================================================
-      // CONFIG PÚBLICA
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/public/config/"
-        ) &&
-        method === "GET"
-      ) {
-        const projectId =
-          decodeURIComponent(
-            path.substring(
-              "/api/public/config/"
-                .length
-            )
-          );
-
-        return handlePublicConfig(
-          env,
-          projectId
-        );
-      }
-
-      // ======================================================
-      // LEAD PÚBLICO
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/public/leads/"
-        ) &&
-        method === "POST"
-      ) {
-        const projectId =
-          decodeURIComponent(
-            path.substring(
-              "/api/public/leads/"
-                .length
-            )
-          );
-
-        return handlePublicCreateLead(
-          request,
-          env,
-          projectId
-        );
-      }
-
-      // ======================================================
-      // ADMIN
-      // ======================================================
-
-      const admin =
-        await requireAdmin(
-          request,
-          env
-        );
-
-      if (!admin) {
-        return unauthorized(
-          "Sessão inválida ou expirada. Faça login novamente."
-        );
-      }
-
-      // ======================================================
-      // DASHBOARD
-      // ======================================================
-
-      if (
-        path ===
-          "/api/dashboard/stats" &&
-        method === "GET"
-      ) {
-        return handleDashboardStats(
-          env
-        );
-      }
-
-      // ======================================================
-      // CLIENTES
-      // ======================================================
-
-      if (
-        path ===
-        "/api/data/clients"
-      ) {
-        if (
-          method === "GET"
-        ) {
-          return handleCollectionGet(
-            env,
-            "clients"
-          );
-        }
-
-        if (
-          method === "POST"
-        ) {
-          return handleCollectionCreate(
-            request,
-            env,
-            "clients"
-          );
-        }
-
-        if (
-          method === "PUT"
-        ) {
-          return handleCollectionUpdate(
-            request,
-            env,
-            "clients"
-          );
-        }
-
-        if (
-          method === "DELETE"
-        ) {
-          return handleCollectionDelete(
-            request,
-            env,
-            "clients",
-            url.searchParams.get(
-              "id"
-            )
-          );
-        }
-      }
-      
-
-      // ======================================================
-      // PROJETOS
-      // ======================================================
-
-      if (
-        path ===
-        "/api/data/projects"
-      ) {
-        if (
-          method === "GET"
-        ) {
-          return handleCollectionGet(
-            env,
-            "projects"
-          );
-        }
-
-        if (
-          method === "POST"
-        ) {
-          return handleCollectionCreate(
-            request,
-            env,
-            "projects",
-            defaultProjectShape
-          );
-        }
-
-        if (
-          method === "PUT"
-        ) {
-          return handleCollectionUpdate(
-            request,
-            env,
-            "projects"
-          );
-        }
-
-        if (
-          method === "DELETE"
-        ) {
-          return handleCollectionDelete(
-            request,
-            env,
-            "projects",
-            url.searchParams.get(
-              "id"
-            )
-          );
-        }
-      }
-
-      // ======================================================
-      // LEADS ADMIN
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/data/leads/"
-        ) &&
-        method === "GET"
-      ) {
-        const projectId =
-          decodeURIComponent(
-            path.substring(
-              "/api/data/leads/"
-                .length
-            )
-          );
-
-        return handleGetLeads(
-          env,
-          projectId
-        );
-      }
-
-      // ======================================================
-      // GERAR LINK DO CLIENTE
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/client-link/"
-        ) &&
-        method === "POST" &&
-        !path.endsWith(
-          "/revoke"
-        )
-      ) {
-        const projectId =
-          decodeURIComponent(
-            path.substring(
-              "/api/client-link/"
-                .length
-            )
-          );
-
-        return handleGenerateClientLink(
-          request,
-          env,
-          projectId
-        );
-      }
-
-      // ======================================================
-      // LISTAR LINKS DO CLIENTE
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/client-link/"
-        ) &&
-        method === "GET"
-      ) {
-        const projectId =
-          decodeURIComponent(
-            path.substring(
-              "/api/client-link/"
-                .length
-            )
-          );
-
-        return handleListClientLinks(
-          env,
-          projectId
-        );
-      }
-
-      // ======================================================
-      // REVOGAR LINK
-      // ======================================================
-
-      if (
-        path.startsWith(
-          "/api/client-link/"
-        ) &&
-        path.endsWith(
-          "/revoke"
-        ) &&
-        method === "POST"
-      ) {
-        const base =
-          "/api/client-link/";
-
-        const jti =
-          decodeURIComponent(
-            path.substring(
-              base.length,
-              path.length -
-                "/revoke".length
-            ).replace(
-              /\/$/,
-              ""
-            )
-          );
-
-        return handleRevokeClientLink(
-          env,
-          jti
-        );
-      }
-
-      // ======================================================
-      // 404
-      // ======================================================
-
-      return notFound(
-        `Rota não encontrada: ${method} ${path}`
-      );
-
-    } catch (error) {
-
-      console.error(
-        "Worker error:",
-        error
-      );
-
-      return json({
-        error: true,
-        message:
-          "Erro interno no Worker",
-        detail:
-          String(error?.message || error),
-      }, 500);
     }
-  },
+
+
+    // ========================================================
+    // API INFO
+    // ========================================================
+
+    if (
+        path === "/api" &&
+        method === "GET"
+    ) {
+
+        return apiInfo(
+            env,
+            origin
+        );
+    }
+
+
+    // ========================================================
+    // LOGIN
+    // ========================================================
+
+    if (
+        path === "/api/login" &&
+        method === "POST"
+    ) {
+
+        return handleLogin(
+            request,
+            env,
+            origin
+        );
+    }
+
+
+    // ========================================================
+    // PUBLIC CONFIG
+    // ========================================================
+
+    const publicConfigMatch =
+        path.match(
+            /^\/api\/public\/config\/([^/]+)$/
+        );
+
+    if (
+        publicConfigMatch &&
+        method === "GET"
+    ) {
+
+        return publicConfig(
+            env,
+            origin,
+            decodeURIComponent(
+                publicConfigMatch[1]
+            )
+        );
+    }
+
+
+    // ========================================================
+    // PUBLIC LEADS
+    // ========================================================
+
+    const publicLeadMatch =
+        path.match(
+            /^\/api\/public\/leads\/([^/]+)$/
+        );
+
+    if (
+        publicLeadMatch &&
+        method === "POST"
+    ) {
+
+        return createLead(
+            request,
+            env,
+            origin,
+            decodeURIComponent(
+                publicLeadMatch[1]
+            )
+        );
+    }
+
+
+    // ========================================================
+    // CLIENT ACCESS
+    // ========================================================
+
+    const clientAccessMatch =
+        path.match(
+            /^\/api\/client-access\/([^/]+)$/
+        );
+
+    if (clientAccessMatch) {
+
+        const token =
+            decodeURIComponent(
+                clientAccessMatch[1]
+            );
+
+        if (method === "GET") {
+
+            return getClientAccess(
+                env,
+                origin,
+                token
+            );
+        }
+
+        if (
+            method === "PUT" ||
+            method === "POST"
+        ) {
+
+            return updateClientAccess(
+                request,
+                env,
+                origin,
+                token
+            );
+        }
+    }
+
+
+    // ========================================================
+    // AUTH
+    // ========================================================
+
+    const authError =
+        await requireAuth(
+            request,
+            env,
+            origin
+        );
+
+    if (authError) {
+        return authError;
+    }
+
+
+    // ========================================================
+    // DASHBOARD
+    // ========================================================
+
+    if (
+        path === "/api/dashboard/stats" &&
+        method === "GET"
+    ) {
+
+        return dashboardStats(
+            env,
+            origin
+        );
+    }
+
+
+    // ========================================================
+    // CLIENTES
+    // ========================================================
+
+    if (
+        path === "/api/data/clients"
+    ) {
+
+        if (method === "GET") {
+
+            return listClients(
+                env,
+                origin
+            );
+        }
+
+        if (method === "POST") {
+
+            return createClient(
+                request,
+                env,
+                origin
+            );
+        }
+
+        if (method === "PUT") {
+
+            return updateClient(
+                request,
+                env,
+                origin
+            );
+        }
+
+        if (method === "DELETE") {
+
+            return deleteClient(
+                env,
+                origin,
+                url
+            );
+        }
+    }
+
+
+    // ========================================================
+    // PROJETOS
+    // ========================================================
+
+    if (
+        path === "/api/data/projects"
+    ) {
+
+        if (method === "GET") {
+
+            return listProjects(
+                env,
+                origin
+            );
+        }
+
+        if (method === "POST") {
+
+            return createProject(
+                request,
+                env,
+                origin
+            );
+        }
+
+        if (method === "PUT") {
+
+            return updateProject(
+                request,
+                env,
+                origin
+            );
+        }
+
+        if (method === "DELETE") {
+
+            return deleteProject(
+                env,
+                origin,
+                url
+            );
+        }
+    }
+
+
+    // ========================================================
+    // PROJETO INDIVIDUAL
+    // ========================================================
+
+    const projectMatch =
+        path.match(
+            /^\/api\/data\/projects\/([^/]+)$/
+        );
+
+    if (
+        projectMatch &&
+        method === "GET"
+    ) {
+
+        return getProject(
+            env,
+            origin,
+            decodeURIComponent(
+                projectMatch[1]
+            )
+        );
+    }
+
+
+    // ========================================================
+    // LEADS
+    // ========================================================
+
+    const leadsMatch =
+        path.match(
+            /^\/api\/data\/leads\/([^/]+)$/
+        );
+
+    if (
+        leadsMatch &&
+        method === "GET"
+    ) {
+
+        return listLeads(
+            env,
+            origin,
+            decodeURIComponent(
+                leadsMatch[1]
+            )
+        );
+    }
+
+
+    // ========================================================
+    // CLIENT LINK
+    // ========================================================
+
+    const clientLinkMatch =
+        path.match(
+            /^\/api\/client-link\/([^/]+)$/
+        );
+
+    if (clientLinkMatch) {
+
+        const projectId =
+            decodeURIComponent(
+                clientLinkMatch[1]
+            );
+
+        if (method === "GET") {
+
+            return listClientLinks(
+                env,
+                origin,
+                projectId
+            );
+        }
+
+        if (method === "POST") {
+
+            return generateClientLink(
+                request,
+                env,
+                origin,
+                projectId
+            );
+        }
+    }
+
+
+    // ========================================================
+    // REVOKE CLIENT LINK
+    // ========================================================
+
+    const revokeMatch =
+        path.match(
+            /^\/api\/client-link\/([^/]+)\/revoke$/
+        );
+
+    if (
+        revokeMatch &&
+        method === "POST"
+    ) {
+
+        return revokeClientLink(
+            env,
+            origin,
+            decodeURIComponent(
+                revokeMatch[1]
+            )
+        );
+    }
+
+
+    // ========================================================
+    // 404
+    // ========================================================
+
+    return json(
+        {
+            error: true,
+
+            message:
+                "Endpoint não encontrado.",
+
+            path,
+
+            method
+        },
+        404,
+        origin
+    );
+}
+
+
+// ============================================================
+// ENTRYPOINT
+// ============================================================
+
+export default {
+
+    async fetch(
+        request,
+        env,
+        ctx
+    ) {
+
+        try {
+
+            return await router(
+                request,
+                env
+            );
+
+        } catch (error) {
+
+            console.error(
+                "V8 ADMIN UNIVERSAL ERROR:",
+                error
+            );
+
+            return json(
+                {
+                    error: true,
+
+                    message:
+                        "Erro interno do servidor.",
+
+                    detail:
+                        error?.message ||
+                        String(error)
+                },
+                500,
+                cors(request)
+            );
+        }
+    }
 };
+```
