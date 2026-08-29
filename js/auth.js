@@ -1,23 +1,22 @@
-// ============================================================
-// V8 ADMIN — UNIVERSAL
-// AUTENTICAÇÃO
-// ============================================================
+```javascript
+// ================================================================
+// V8 ADMIN — Universal | Autenticação do administrador
+// ================================================================
 
 const Auth = {
 
-  TOKEN_KEY: "v8_admin_token",
-  EXPIRES_KEY: "v8_admin_token_expires",
+  TOKEN_KEY:
+    "v8_admin_token",
 
-  // ==========================================================
+  EXPIRES_KEY:
+    "v8_admin_token_expires",
+
+
+  // ==============================================================
   // SALVAR SESSÃO
-  // ==========================================================
+  // ==============================================================
 
   saveSession(token, expiresAt) {
-
-    if (!token) {
-      console.error("❌ Token vazio.");
-      return false;
-    }
 
     localStorage.setItem(
       this.TOKEN_KEY,
@@ -26,27 +25,15 @@ const Auth = {
 
     localStorage.setItem(
       this.EXPIRES_KEY,
-      String(expiresAt || 0)
+      String(expiresAt)
     );
 
-    console.log("✅ Sessão salva.");
-
-    return true;
   },
 
-  // ==========================================================
-  // TOKEN
-  // ==========================================================
 
-  getToken() {
-    return localStorage.getItem(
-      this.TOKEN_KEY
-    );
-  },
-
-  // ==========================================================
+  // ==============================================================
   // VERIFICAR LOGIN
-  // ==========================================================
+  // ==============================================================
 
   isLoggedIn() {
 
@@ -62,33 +49,40 @@ const Auth = {
         ) || 0
       );
 
-    if (!token) {
-      return false;
-    }
+    /*
+     * Esta verificação é apenas para UX.
+     *
+     * A segurança real acontece no Worker,
+     * que valida assinatura e expiração do token
+     * em cada requisição protegida.
+     */
 
-    if (!expires) {
-      return false;
-    }
+    return (
+      Boolean(token) &&
+      Date.now() < expires
+    );
 
-    if (Date.now() >= expires) {
-
-      console.warn(
-        "⚠️ Sessão expirada."
-      );
-
-      this.clearSession();
-
-      return false;
-    }
-
-    return true;
   },
 
-  // ==========================================================
-  // LIMPAR SESSÃO
-  // ==========================================================
 
-  clearSession() {
+  // ==============================================================
+  // OBTER TOKEN
+  // ==============================================================
+
+  getToken() {
+
+    return localStorage.getItem(
+      this.TOKEN_KEY
+    );
+
+  },
+
+
+  // ==============================================================
+  // LOGOUT
+  // ==============================================================
+
+  logout() {
 
     localStorage.removeItem(
       this.TOKEN_KEY
@@ -97,81 +91,81 @@ const Auth = {
     localStorage.removeItem(
       this.EXPIRES_KEY
     );
-  },
-
-  // ==========================================================
-  // LOGOUT
-  // ==========================================================
-
-  logout() {
-
-    console.log(
-      "🚪 Encerrando sessão..."
-    );
-
-    this.clearSession();
 
     window.location.href =
       "login.html";
+
   },
 
-  // ==========================================================
-  // PROTEGER PÁGINA
-  // ==========================================================
+
+  // ==============================================================
+  // EXIGIR AUTENTICAÇÃO
+  // ==============================================================
 
   requireAuth() {
 
-    if (!this.isLoggedIn()) {
-
-      console.warn(
-        "🔐 Usuário não autenticado."
-      );
+    if (
+      !this.isLoggedIn()
+    ) {
 
       window.location.href =
         "login.html";
 
-      return false;
     }
 
-    return true;
   }
+
 };
 
 
-// ============================================================
-// LOGIN
-// ============================================================
+// ================================================================
+// LOGIN — login.html
+// ================================================================
 
-async function handleLoginSubmit(event) {
+async function handleLoginSubmit(
+  event
+) {
 
-  if (event) {
-    event.preventDefault();
-  }
+  event.preventDefault();
 
   const emailInput =
-    document.getElementById("email");
+    document.getElementById(
+      "email"
+    );
 
   const passwordInput =
-    document.getElementById("password");
+    document.getElementById(
+      "password"
+    );
 
   const errorBox =
-    document.getElementById("auth-error");
+    document.getElementById(
+      "auth-error"
+    );
 
   const submitBtn =
-    document.getElementById("login-submit");
+    document.getElementById(
+      "login-submit"
+    );
 
 
-  // ----------------------------------------------------------
-  // VERIFICA ELEMENTOS
-  // ----------------------------------------------------------
+  // --------------------------------------------------------------
+  // VALIDAÇÃO DOS ELEMENTOS
+  // --------------------------------------------------------------
 
-  if (!emailInput || !passwordInput) {
+  if (
+    !emailInput ||
+    !passwordInput ||
+    !errorBox ||
+    !submitBtn
+  ) {
 
     console.error(
-      "❌ Campos de login não encontrados."
+      "Elementos do formulário de login não encontrados."
     );
 
     return;
+
   }
 
 
@@ -182,62 +176,86 @@ async function handleLoginSubmit(event) {
     passwordInput.value;
 
 
-  // ----------------------------------------------------------
+  // --------------------------------------------------------------
   // LIMPAR ERRO
-  // ----------------------------------------------------------
+  // --------------------------------------------------------------
 
-  if (errorBox) {
+  errorBox.textContent =
+    "";
 
-    errorBox.textContent = "";
-
-    errorBox.classList.add(
-      "hidden"
-    );
-  }
-
-
-  // ----------------------------------------------------------
-  // VALIDAÇÃO
-  // ----------------------------------------------------------
-
-  if (!email || !password) {
-
-    showLoginError(
-      "Informe seu e-mail e sua senha."
-    );
-
-    return;
-  }
-
-
-  // ----------------------------------------------------------
-  // BOTÃO
-  // ----------------------------------------------------------
-
-  if (submitBtn) {
-
-    submitBtn.disabled = true;
-
-    submitBtn.textContent =
-      "Entrando...";
-  }
-
-
-  console.log(
-    "🔐 Tentando autenticar:",
-    email
+  errorBox.classList.add(
+    "hidden"
   );
 
 
-  // ==========================================================
-  // CHAMADA API
-  // ==========================================================
+  // --------------------------------------------------------------
+  // VALIDAR CAMPOS
+  // --------------------------------------------------------------
 
-  let res;
+  if (!email) {
+
+    errorBox.textContent =
+      "Informe seu e-mail.";
+
+    errorBox.classList.remove(
+      "hidden"
+    );
+
+    emailInput.focus();
+
+    return;
+
+  }
+
+
+  if (!password) {
+
+    errorBox.textContent =
+      "Informe sua senha.";
+
+    errorBox.classList.remove(
+      "hidden"
+    );
+
+    passwordInput.focus();
+
+    return;
+
+  }
+
+
+  // --------------------------------------------------------------
+  // BLOQUEAR BOTÃO
+  // --------------------------------------------------------------
+
+  submitBtn.disabled =
+    true;
+
+  submitBtn.textContent =
+    "Entrando...";
+
 
   try {
 
-    res =
+    // ------------------------------------------------------------
+    // API DE LOGIN
+    //
+    // IMPORTANTE:
+    // api.js precisa ser carregado ANTES deste arquivo.
+    // ------------------------------------------------------------
+
+    if (
+      typeof API === "undefined"
+    ) {
+
+      throw new Error(
+        "API não está disponível. Verifique a ordem dos scripts no login.html."
+      );
+
+    }
+
+
+    const res =
       await API.postPublic(
         "/api/login",
         {
@@ -246,178 +264,96 @@ async function handleLoginSubmit(event) {
         }
       );
 
-  } catch (error) {
 
-    console.error(
-      "❌ Erro durante login:",
-      error
-    );
+    // ------------------------------------------------------------
+    // ERRO DA API
+    // ------------------------------------------------------------
 
-    showLoginError(
-      "Não foi possível conectar ao servidor."
-    );
+    if (
+      !res ||
+      res.error ||
+      !res.token
+    ) {
 
-    restoreLoginButton();
+      errorBox.textContent =
+        res?.message ||
+        "E-mail ou senha inválidos.";
 
-    return;
-  }
+      errorBox.classList.remove(
+        "hidden"
+      );
 
+      return;
 
-  // ----------------------------------------------------------
-  // RESTAURA BOTÃO
-  // ----------------------------------------------------------
-
-  restoreLoginButton();
-
-
-  // ==========================================================
-  // ERRO DA API
-  // ==========================================================
-
-  if (
-    !res ||
-    res.error ||
-    !res.token
-  ) {
-
-    console.error(
-      "❌ Login recusado:",
-      res
-    );
-
-    showLoginError(
-      res?.message ||
-      "E-mail ou senha inválidos."
-    );
-
-    return;
-  }
+    }
 
 
-  // ==========================================================
-  // SALVA TOKEN
-  // ==========================================================
+    // ------------------------------------------------------------
+    // VALIDAR EXPIRAÇÃO
+    // ------------------------------------------------------------
 
-  const saved =
+    if (
+      !res.expiresAt
+    ) {
+
+      console.error(
+        "A API não retornou expiresAt."
+      );
+
+      errorBox.textContent =
+        "A API retornou uma sessão inválida.";
+
+      errorBox.classList.remove(
+        "hidden"
+      );
+
+      return;
+
+    }
+
+
+    // ------------------------------------------------------------
+    // SALVAR SESSÃO
+    // ------------------------------------------------------------
+
     Auth.saveSession(
       res.token,
       res.expiresAt
     );
 
 
-  if (!saved) {
+    // ------------------------------------------------------------
+    // ENTRAR NO PAINEL
+    // ------------------------------------------------------------
 
-    showLoginError(
-      "Não foi possível salvar a sessão."
+    window.location.href =
+      "index.html";
+
+
+  } catch (error) {
+
+    console.error(
+      "Erro durante login:",
+      error
     );
 
-    return;
+    errorBox.textContent =
+      error?.message ||
+      "Não foi possível realizar o login.";
+
+    errorBox.classList.remove(
+      "hidden"
+    );
+
+  } finally {
+
+    submitBtn.disabled =
+      false;
+
+    submitBtn.textContent =
+      "Entrar";
+
   }
 
-
-  console.log(
-    "🎉 Login realizado com sucesso."
-  );
-
-
-  // ==========================================================
-  // REDIRECIONA
-  // ==========================================================
-
-  window.location.href =
-    "index.html";
 }
-
-
-// ============================================================
-// MOSTRAR ERRO
-// ============================================================
-
-function showLoginError(message) {
-
-  const errorBox =
-    document.getElementById(
-      "auth-error"
-    );
-
-  if (!errorBox) {
-
-    alert(message);
-
-    return;
-  }
-
-  errorBox.textContent =
-    message;
-
-  errorBox.classList.remove(
-    "hidden"
-  );
-}
-
-
-// ============================================================
-// RESTAURAR BOTÃO
-// ============================================================
-
-function restoreLoginButton() {
-
-  const submitBtn =
-    document.getElementById(
-      "login-submit"
-    );
-
-  if (!submitBtn) {
-    return;
-  }
-
-  submitBtn.disabled = false;
-
-  submitBtn.textContent =
-    "Entrar";
-}
-
-
-// ============================================================
-// INICIALIZAÇÃO DO LOGIN
-// ============================================================
-
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-
-    const form =
-      document.getElementById(
-        "login-form"
-      );
-
-    // --------------------------------------------------------
-    // Se não existe formulário,
-    // provavelmente estamos no index.html
-    // --------------------------------------------------------
-
-    if (!form) {
-
-      console.log(
-        "ℹ️ Formulário de login não encontrado. Página administrativa."
-      );
-
-      return;
-    }
-
-
-    // --------------------------------------------------------
-    // Evita múltiplos listeners
-    // --------------------------------------------------------
-
-    form.addEventListener(
-      "submit",
-      handleLoginSubmit
-    );
-
-
-    console.log(
-      "🔐 Sistema de login V8 ADMIN iniciado."
-    );
-  }
-);
+```
