@@ -1,4 +1,3 @@
-```javascript
 // ================================================================
 // V8 ADMIN — Universal
 // Autenticação do administrador
