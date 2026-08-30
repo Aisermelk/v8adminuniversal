@@ -1,76 +1,55 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta
         name="viewport"
         content="width=device-width, initial-scale=1.0"
     >
-
     <meta
         name="robots"
         content="noindex, nofollow"
     >
-
     <title>V8 Admin — Login</title>
-
+    <link
+        rel="stylesheet"
+        href="css/variables.css"
+    >
     <link
         rel="stylesheet"
         href="css/style.css"
     >
-
 </head>
-
 <body class="login-page">
-
     <main class="login-container">
-
         <section class="login-card">
-
             <div class="login-brand">
-
                 <div class="login-logo">
                     V8
                 </div>
-
                 <div>
                     <h1>V8 Admin</h1>
-
                     <p>
                         Painel administrativo
                     </p>
                 </div>
-
             </div>
-
-
             <div class="login-header">
-
                 <h2>Entrar</h2>
-
                 <p>
                     Acesse o painel para gerenciar
                     seus projetos e clientes.
                 </p>
-
             </div>
-
-
             <form
                 id="login-form"
                 autocomplete="on"
                 novalidate
             >
-
                 <div class="field">
-
                     <label for="email">
                         E-mail
                     </label>
-
                     <input
                         type="email"
                         id="email"
@@ -79,16 +58,11 @@
                         autocomplete="username"
                         required
                     >
-
                 </div>
-
-
                 <div class="field">
-
                     <label for="password">
                         Senha
                     </label>
-
                     <input
                         type="password"
                         id="password"
@@ -97,18 +71,13 @@
                         autocomplete="current-password"
                         required
                     >
-
                 </div>
-
-
                 <div
                     id="auth-error"
                     class="auth-error hidden"
                     role="alert"
                     aria-live="polite"
                 ></div>
-
-
                 <button
                     type="submit"
                     id="login-submit"
@@ -116,36 +85,21 @@
                 >
                     Entrar
                 </button>
-
             </form>
-
-
             <div class="login-footer">
-
                 <span>
                     V8 Admin Universal
                 </span>
-
             </div>
-
         </section>
-
     </main>
-
-
     <!-- =====================================================
          API
     ====================================================== -->
-
     <script src="./js/api.js"></script>
-
-
     <!-- =====================================================
          AUTENTICAÇÃO
     ====================================================== -->
-
     <script src="./js/auth.js"></script>
-
 </body>
-
 </html>
