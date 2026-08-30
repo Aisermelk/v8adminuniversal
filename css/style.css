@@ -650,15 +650,17 @@ input:focus, select:focus, textarea:focus {
   width: 48px;
   height: 48px;
   border-radius: var(--radius-md);
-  background: var(--accent-soft);
-  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 16px;
   flex-shrink: 0;
+}
+
+.login-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(79, 107, 255, 0.5));
 }
 
 .login-brand h1 {
