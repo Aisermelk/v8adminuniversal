@@ -608,6 +608,10 @@ input:focus, select:focus, textarea:focus {
 
 .hamburger-btn svg { width: 20px; height: 20px; }
 
+.sidebar-overlay {
+  display: none;
+}
+
 .sidebar-topbar {
   display: none;
   align-items: center;
@@ -772,7 +776,6 @@ input:focus, select:focus, textarea:focus {
   .sidebar.open { transform: translateX(0); }
 
   .sidebar-overlay {
-    display: none;
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
