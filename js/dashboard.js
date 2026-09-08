@@ -73,6 +73,15 @@ const state = {
   _lastGeneratedToken:
     null,
 
+  clientSearch:
+    "",
+
+  projectSearch:
+    "",
+
+  leadsByProject:
+    {},
+
 };
 
 
@@ -127,6 +136,18 @@ function toast(
     3200
   );
 
+}
+
+
+// ================================================================
+// MANTER SÓ DÍGITOS (WhatsApp/telefone)
+// ================================================================
+
+function applyDigitsOnly(el) {
+  const cursorFromEnd = el.value.length - el.selectionStart;
+  el.value = el.value.replace(/\D/g, "");
+  const pos = Math.max(0, el.value.length - cursorFromEnd);
+  el.setSelectionRange(pos, pos);
 }
 
 
@@ -276,6 +297,8 @@ document.addEventListener(
 
       setupNav();
 
+      setupMobileMenu();
+
       setupThemeToggle();
 
 
@@ -371,6 +394,37 @@ function setupNav() {
 
 
 // ================================================================
+// MENU MOBILE (hamburger)
+// ================================================================
+
+function setupMobileMenu() {
+
+  const hamburger = $("hamburger-btn");
+  const sidebar = $("sidebar");
+  const overlay = $("sidebar-overlay");
+
+  if (!hamburger || !sidebar || !overlay) return;
+
+  function closeMenu() {
+    sidebar.classList.remove("open");
+    overlay.classList.remove("open");
+    hamburger.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleMenu() {
+    const isOpen = sidebar.classList.toggle("open");
+    overlay.classList.toggle("open", isOpen);
+    hamburger.setAttribute("aria-expanded", String(isOpen));
+  }
+
+  hamburger.addEventListener("click", toggleMenu);
+  overlay.addEventListener("click", closeMenu);
+
+  window._closeMobileMenu = closeMenu;
+}
+
+
+// ================================================================
 // TROCAR SEÇÃO
 // ================================================================
 
@@ -380,6 +434,10 @@ function switchSection(
 
   state.section =
     name;
+
+  if (typeof window._closeMobileMenu === "function") {
+    window._closeMobileMenu();
+  }
 
 
   document
@@ -458,7 +516,8 @@ async function refreshAllData() {
 
     const [
       clientsRes,
-      projectsRes
+      projectsRes,
+      statsRes
     ] =
       await Promise.all([
 
@@ -468,6 +527,10 @@ async function refreshAllData() {
 
         API.get(
           "/api/data/projects"
+        ),
+
+        API.get(
+          "/api/dashboard/stats"
         )
 
       ]);
@@ -487,6 +550,9 @@ async function refreshAllData() {
       )
         ? projectsRes
         : [];
+
+    state.leadsByProject =
+      (statsRes && !statsRes.error && statsRes.leadsByProject) || {};
 
 
     switchSection(
@@ -954,6 +1020,16 @@ function renderClients() {
 
   }
 
+  const term = (state.clientSearch || "").trim().toLowerCase();
+  const filtered = term
+    ? state.clients.filter((c) => (c.name || "").toLowerCase().includes(term))
+    : state.clients;
+
+  if (filtered.length === 0) {
+    wrap.innerHTML = `<div class="empty-state">Nenhum cliente encontrado para "${escapeHtml(term)}".</div>`;
+    return;
+  }
+
 
   wrap.innerHTML = `
 
@@ -967,18 +1043,6 @@ function renderClients() {
             Nome
           </th>
 
-          <th>
-            Contato
-          </th>
-
-          <th>
-            Projeto vinculado
-          </th>
-
-          <th>
-            Ações
-          </th>
-
         </tr>
 
       </thead>
@@ -986,66 +1050,20 @@ function renderClients() {
 
       <tbody>
 
-        ${state.clients
+        ${filtered
           .map(
             (c) => `
 
               <tr>
 
-                <td>
-
-                  ${escapeHtml(
-                    c.name ||
-                    ""
-                  )}
-
-                </td>
-
-
-                <td>
-
-                  ${escapeHtml(
-                    c.email ||
-                    c.phone ||
-                    "—"
-                  )}
-
-                </td>
-
-
-                <td>
-
-                  ${escapeHtml(
-                    projectNameById(
-                      c.projectId
-                    ) ||
-                    "—"
-                  )}
-
-                </td>
-
-
-                <td class="row-actions">
+                <td data-label="Nome">
 
                   <button
-                    class="icon-btn"
-                    onclick="openClientModal('${escapeHtml(
-                      c.id
-                    )}')"
-                    title="Editar"
+                    type="button"
+                    class="row-name-btn"
+                    onclick="openClientViewPopup('${escapeHtml(c.id)}')"
                   >
-                    ✏️
-                  </button>
-
-
-                  <button
-                    class="icon-btn"
-                    onclick="deleteClient('${escapeHtml(
-                      c.id
-                    )}')"
-                    title="Excluir"
-                  >
-                    🗑️
+                    ${escapeHtml(c.name || "")}
                   </button>
 
                 </td>
@@ -1062,6 +1080,43 @@ function renderClients() {
 
   `;
 
+}
+
+
+// ================================================================
+// BUSCA DE CLIENTES
+// ================================================================
+
+function handleClientSearch(value) {
+  state.clientSearch = value;
+  renderClients();
+}
+
+
+// ================================================================
+// POPUP DE VISUALIZAÇÃO — CLIENTE
+// ================================================================
+
+function openClientViewPopup(id) {
+
+  const client = state.clients.find((c) => c.id === id);
+  if (!client) return toast("Cliente não encontrado.", "error");
+
+  showModal(`
+    <div class="modal-header">
+      <h2>${escapeHtml(client.name || "")}</h2>
+      <button class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="view-row"><span class="k">E-mail</span><span class="v">${escapeHtml(client.email || "—")}</span></div>
+    <div class="view-row"><span class="k">Telefone</span><span class="v">${escapeHtml(client.phone || "—")}</span></div>
+    <div class="view-row"><span class="k">Projeto vinculado</span><span class="v">${escapeHtml(projectNameById(client.projectId) || "—")}</span></div>
+
+    <div style="display:flex;gap:8px;margin-top:20px">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="openClientModal('${escapeHtml(client.id)}')">Editar</button>
+      <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="confirmDeleteClient('${escapeHtml(client.id)}')">Excluir</button>
+    </div>
+  `);
 }
 
 
@@ -1263,6 +1318,7 @@ function openClientModal(
             client.phone ||
             ""
           )}"
+          oninput="applyDigitsOnly(this)"
         >
 
       </div>
@@ -1398,18 +1454,49 @@ async function saveClient() {
 
 
 // ================================================================
+// MODAL DE CONFIRMAÇÃO (substitui o confirm() nativo)
+// ================================================================
+
+function confirmModal(message, onConfirm, confirmLabel = "Confirmar") {
+  showModal(`
+    <div class="confirm-modal">
+      <div class="modal-header">
+        <h2>Confirmar ação</h2>
+        <button class="icon-btn" onclick="closeModal()">✕</button>
+      </div>
+      <p>${escapeHtml(message)}</p>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-danger" id="confirm-modal-yes">${escapeHtml(confirmLabel)}</button>
+      </div>
+    </div>
+  `, "420px");
+
+  $("confirm-modal-yes").addEventListener("click", () => {
+    closeModal();
+    onConfirm();
+  });
+}
+
+
+// ================================================================
 // EXCLUIR CLIENTE
 // ================================================================
+
+function confirmDeleteClient(id) {
+  const client = state.clients.find((c) => c.id === id);
+  confirmModal(
+    `Excluir "${client ? client.name : "este cliente"}"? Essa ação não pode ser desfeita.`,
+    () => deleteClient(id),
+    "Excluir"
+  );
+}
 
 async function deleteClient(
   id
 ) {
 
-  if (
-    !confirm(
-      "Excluir este cliente?"
-    )
-  ) {
+  {
 
     return;
 
@@ -1466,6 +1553,29 @@ const STATUS_BADGE = {
 
 
 // ================================================================
+// LEADS NÃO VISTOS (por projeto, via localStorage)
+// ================================================================
+
+function getLastSeenLeadsAt(projectId) {
+  return localStorage.getItem(`v8_leads_seen_${projectId}`) || null;
+}
+
+function markLeadsSeen(projectId) {
+  localStorage.setItem(`v8_leads_seen_${projectId}`, new Date().toISOString());
+}
+
+function getUnseenLeadsCount(projectId) {
+  const entry = state.leadsByProject?.[projectId];
+  if (!entry || !entry.latestCreatedAt) return 0;
+
+  const lastSeen = getLastSeenLeadsAt(projectId);
+  if (!lastSeen) return entry.count || 0;
+
+  return new Date(entry.latestCreatedAt) > new Date(lastSeen) ? (entry.count || 0) : 0;
+}
+
+
+// ================================================================
 // PROJETOS
 // ================================================================
 
@@ -1509,6 +1619,17 @@ function renderProjects() {
 
   }
 
+  const term = (state.projectSearch || "").trim().toLowerCase();
+  const list = [...state.projects].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const filtered = term
+    ? list.filter((p) => (p.name || "").toLowerCase().includes(term))
+    : list;
+
+  if (filtered.length === 0) {
+    wrap.innerHTML = `<div class="empty-state">Nenhum projeto encontrado para "${escapeHtml(term)}".</div>`;
+    return;
+  }
+
 
   wrap.innerHTML = `
 
@@ -1518,21 +1639,10 @@ function renderProjects() {
 
         <tr>
 
-          <th>
-            Projeto
-          </th>
-
-          <th>
-            ID do projeto
-          </th>
-
-          <th>
-            Status
-          </th>
-
-          <th>
-            Ações
-          </th>
+          <th style="width:56px"></th>
+          <th>Projeto</th>
+          <th>Status</th>
+          <th></th>
 
         </tr>
 
@@ -1541,91 +1651,38 @@ function renderProjects() {
 
       <tbody>
 
-        ${state.projects
+        ${filtered
           .map(
-            (p) => `
+            (p, i) => `
 
               <tr>
 
-                <td>
-
-                  ${escapeHtml(
-                    p.name ||
-                    ""
-                  )}
-
+                <td data-label="Ordem">
+                  <div class="reorder-btns">
+                    <button type="button" onclick="reorderProject('${escapeHtml(p.id)}', 'up')" ${i === 0 ? "disabled" : ""} title="Mover para cima">▲</button>
+                    <button type="button" onclick="reorderProject('${escapeHtml(p.id)}', 'down')" ${i === filtered.length - 1 ? "disabled" : ""} title="Mover para baixo">▼</button>
+                  </div>
                 </td>
 
-
-                <td>
-
-                  <span
-                    class="meta"
-                    title="${escapeHtml(
-                      p.id ||
-                      ""
-                    )}"
-                    style="
-                      font-family:monospace;
-                      font-size:11px;
-                      word-break:break-all;
-                    "
+                <td data-label="Projeto">
+                  <button
+                    type="button"
+                    class="row-name-btn"
+                    onclick="openProjectViewPopup('${escapeHtml(p.id)}')"
                   >
-
-                    ${escapeHtml(
-                      p.id ||
-                      "—"
-                    )}
-
-                  </span>
-
+                    ${escapeHtml(p.name || "")}
+                  </button>
+                  ${getUnseenLeadsCount(p.id) > 0 ? `<span class="leads-badge" title="Leads novos">${getUnseenLeadsCount(p.id)}</span>` : ""}
                 </td>
 
-
-                <td>
-
-                  <span
-                    class="badge ${
-                      STATUS_BADGE[
-                        p.status
-                      ] ||
-                      "badge-muted"
-                    }"
-                  >
-
-                    ${escapeHtml(
-                      p.status ||
-                      "Sem status"
-                    )}
-
+                <td data-label="Status">
+                  <span class="badge ${STATUS_BADGE[p.status] || "badge-muted"}">
+                    ${escapeHtml(p.status || "Sem status")}
                   </span>
-
                 </td>
-
 
                 <td class="row-actions">
-
-                  <button
-                    class="icon-btn"
-                    onclick="openProjectModal('${escapeHtml(
-                      p.id
-                    )}')"
-                    title="Editar"
-                  >
-                    ✏️
-                  </button>
-
-
-                  <button
-                    class="icon-btn"
-                    onclick="deleteProject('${escapeHtml(
-                      p.id
-                    )}')"
-                    title="Excluir"
-                  >
-                    🗑️
-                  </button>
-
+                  <button class="icon-btn" onclick="openProjectActionsMenu(event, '${escapeHtml(p.id)}')" title="Ações">⋮</button>
                 </td>
 
               </tr>
@@ -1640,6 +1697,116 @@ function renderProjects() {
 
   `;
 
+}
+
+
+// ================================================================
+// REORDENAR PROJETOS
+// ================================================================
+
+async function reorderProject(id, direction) {
+
+  const list = [...state.projects].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const idx = list.findIndex((p) => p.id === id);
+  if (idx === -1) return;
+
+  const swapWith = direction === "up" ? idx - 1 : idx + 1;
+  if (swapWith < 0 || swapWith >= list.length) return;
+
+  const a = list[idx];
+  const b = list[swapWith];
+  const orderA = a.order ?? 0;
+  const orderB = b.order ?? 0;
+
+  // troca as posições localmente pra resposta visual imediata
+  list[idx] = b;
+  list[swapWith] = a;
+  state.projects = list;
+  renderProjects();
+
+  const [resA, resB] = await Promise.all([
+    API.put("/api/data/projects", { id: a.id, order: orderB }),
+    API.put("/api/data/projects", { id: b.id, order: orderA }),
+  ]);
+
+  if (resA.error || resB.error) {
+    toast("Erro ao reordenar. Recarregando lista...", "error");
+  }
+
+  await refreshAllData();
+}
+
+
+// ================================================================
+// MENU DE AÇÕES — PROJETO
+// ================================================================
+
+function openProjectActionsMenu(event, id) {
+
+  event.stopPropagation();
+
+  document.querySelectorAll(".actions-menu").forEach((el) => el.remove());
+
+  const btn = event.currentTarget;
+  const wrap = document.createElement("div");
+  wrap.className = "actions-menu-wrap";
+
+  const menu = document.createElement("div");
+  menu.className = "actions-menu";
+  menu.innerHTML = `
+    <button onclick="openProjectViewPopup('${escapeHtml(id)}')">👁️ Visualizar</button>
+    <button onclick="openProjectModal('${escapeHtml(id)}')">✏️ Editar</button>
+    <button class="danger" onclick="confirmDeleteProject('${escapeHtml(id)}')">🗑️ Apagar</button>
+  `;
+
+  btn.parentElement.style.position = "relative";
+  btn.parentElement.appendChild(menu);
+
+  setTimeout(() => {
+    document.addEventListener("click", function closeOnce() {
+      menu.remove();
+      document.removeEventListener("click", closeOnce);
+    }, { once: true });
+  }, 0);
+}
+
+
+// ================================================================
+// POPUP DE VISUALIZAÇÃO — PROJETO
+// ================================================================
+
+function openProjectViewPopup(id) {
+
+  const project = state.projects.find((p) => p.id === id);
+  if (!project) return toast("Projeto não encontrado.", "error");
+
+  showModal(`
+    <div class="modal-header">
+      <h2>${escapeHtml(project.name || "")}</h2>
+      <button class="icon-btn" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="view-row"><span class="k">Status</span><span class="v"><span class="badge ${STATUS_BADGE[project.status] || "badge-muted"}">${escapeHtml(project.status || "—")}</span></span></div>
+    <div class="view-row"><span class="k">WhatsApp</span><span class="v">${escapeHtml(project.contact?.whatsapp || "—")}</span></div>
+    <div class="view-row"><span class="k">E-mail</span><span class="v">${escapeHtml(project.contact?.email || "—")}</span></div>
+    <div class="view-row"><span class="k">ID do projeto</span><span class="v" style="font-family:monospace;font-size:11px">${escapeHtml(project.id)}</span></div>
+    ${project.siteUrl ? `<div class="view-row"><span class="k">Site</span><span class="v"><a class="site-link" href="${escapeHtml(project.siteUrl)}" target="_blank" rel="noopener noreferrer">Abrir site ↗</a></span></div>` : ""}
+
+    <div style="display:flex;gap:8px;margin-top:20px">
+      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="openProjectModal('${escapeHtml(project.id)}')">Editar</button>
+      <button class="btn btn-danger" style="flex:1;justify-content:center" onclick="confirmDeleteProject('${escapeHtml(project.id)}')">Excluir</button>
+    </div>
+  `);
+}
+
+
+// ================================================================
+// BUSCA DE PROJETOS
+// ================================================================
+
+function handleProjectSearch(value) {
+  state.projectSearch = value;
+  renderProjects();
 }
 
 
@@ -1884,6 +2051,7 @@ function openProjectModal(
             <button class="tab" data-tab="content">Conteúdo</button>
             <button class="tab" data-tab="media">Mídia</button>
             <button class="tab" data-tab="location">Localização</button>
+            <button class="tab" data-tab="reviews">Avaliações</button>
             <button class="tab" data-tab="seo">SEO</button>
             <button class="tab" data-tab="scripts">Scripts</button>
           `
@@ -2095,6 +2263,23 @@ function renderProjectTab() {
       </div>
 
 
+      <div class="field">
+
+        <label>
+          URL do site publicado
+        </label>
+
+        <input
+          id="p-site-url"
+          value="${escapeHtml(draft.siteUrl || "")}"
+          placeholder="https://seusite.pages.dev"
+        >
+
+        ${draft.siteUrl ? `<a class="site-link" href="${escapeHtml(draft.siteUrl)}" target="_blank" rel="noopener noreferrer" style="margin-top:6px;display:inline-flex">Abrir site ↗</a>` : ""}
+
+      </div>
+
+
       <button
         class="btn btn-primary"
         style="
@@ -2219,6 +2404,7 @@ function renderProjectTab() {
               ""
             )}"
             placeholder="5511999999999"
+            oninput="applyDigitsOnly(this)"
           >
 
         </div>
@@ -2255,6 +2441,7 @@ function renderProjectTab() {
                 draft.contact.phone ||
                 ""
               )}"
+              oninput="applyDigitsOnly(this)"
             >
 
           </div>
@@ -2542,6 +2729,40 @@ function renderProjectTab() {
 
 
   // ==============================================================
+  // AVALIAÇÕES (GOOGLE)
+  // ==============================================================
+
+  if (state.projectTab === "reviews") {
+
+    draft.reviews = draft.reviews || {};
+    const r = draft.reviews;
+
+    el.innerHTML = `
+      <div class="field">
+        <label>Place ID do Google</label>
+        <input id="r-place-id" value="${escapeHtml(r.placeId || "")}" placeholder="ChIJ...">
+        <p style="font-size:11.5px;color:var(--text-muted);margin-top:6px">
+          Encontre o Place ID do seu negócio em
+          <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">developers.google.com/.../place-id</a>
+        </p>
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="r-enabled" ${r.enabled ? "checked" : ""}>
+        Ativar avaliações do Google neste site
+      </label>
+      <p style="font-size:11.5px;color:var(--text-muted);margin:10px 0 16px">
+        Requer o secret <code>GOOGLE_PLACES_API_KEY</code> configurado no Worker (uma vez só, vale pra todos os projetos).
+      </p>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveProject()">Salvar projeto</button>
+      ${state.editingProjectId ? `
+        <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:10px" onclick="previewGoogleReviews('${escapeHtml(state.editingProjectId)}')">Testar / pré-visualizar</button>
+        <div id="reviews-preview" style="margin-top:14px"></div>
+      ` : ""}
+    `;
+  }
+
+
+  // ==============================================================
   // SEO
   // ==============================================================
 
@@ -2763,6 +2984,47 @@ function renderLivePreview() {
 // SNIPPET DE RASTREAMENTO
 // ================================================================
 
+// ================================================================
+// PRÉ-VISUALIZAR AVALIAÇÕES DO GOOGLE
+// ================================================================
+
+async function previewGoogleReviews(projectId) {
+  const box = $("reviews-preview");
+  if (!box) return;
+
+  box.innerHTML = `<div class="empty-state">Buscando avaliações...</div>`;
+
+  const res = await API.get(`/api/public/reviews/${encodeURIComponent(projectId)}`);
+
+  if (!res.enabled) {
+    box.innerHTML = `<div class="empty-state">Preencha o Place ID e marque "Ativar", depois salve o projeto antes de testar.</div>`;
+    return;
+  }
+
+  if (res.error) {
+    box.innerHTML = `<div class="empty-state">Erro: ${escapeHtml(res.message || "não foi possível buscar")}</div>`;
+    return;
+  }
+
+  const stars = "★".repeat(Math.round(res.rating || 0)) + "☆".repeat(5 - Math.round(res.rating || 0));
+
+  box.innerHTML = `
+    <div class="reviews-summary">
+      <span class="stars">${stars}</span>
+      <strong>${(res.rating || 0).toFixed(1)}</strong>
+      <span class="meta">(${res.totalReviews || 0} avaliações)</span>
+    </div>
+    ${(res.reviews || []).map((rv) => `
+      <div class="review-item">
+        <div class="review-author">${escapeHtml(rv.author)} — ${"★".repeat(rv.rating)}</div>
+        <div class="meta">${escapeHtml(rv.relativeTime || "")}</div>
+        <p style="margin-top:4px">${escapeHtml(rv.text || "")}</p>
+      </div>
+    `).join("") || '<div class="empty-state">Sem comentários públicos retornados.</div>'}
+  `;
+}
+
+
 async function copyTrackingSnippet() {
 
   const pixel =
@@ -2958,6 +3220,12 @@ async function saveProject() {
         ?.value ||
       "Em desenvolvimento";
 
+    draft.siteUrl =
+      $("p-site-url")
+        ?.value
+        .trim() ||
+      "";
+
   }
 
 
@@ -3112,6 +3380,20 @@ async function saveProject() {
       address: $("l-address")?.value.trim() || "",
       mapsUrl: $("l-maps-url")?.value.trim() || "",
       embed: $("l-embed")?.value.trim() || "",
+    };
+
+  }
+
+
+  // --------------------------------------------------------------
+  // AVALIAÇÕES (GOOGLE)
+  // --------------------------------------------------------------
+
+  else if (state.projectTab === "reviews") {
+
+    draft.reviews = {
+      enabled: Boolean($("r-enabled")?.checked),
+      placeId: $("r-place-id")?.value.trim() || "",
     };
 
   }
@@ -3282,47 +3564,44 @@ async function saveProject() {
 // EXCLUIR PROJETO
 // ================================================================
 
+function confirmDeleteProject(id) {
+  const project = state.projects.find((p) => p.id === id);
+  closeModal();
+  confirmModal(
+    `Excluir "${project ? project.name : "este projeto"}"?\n\nIsso também remove leads e links de cliente associados. Essa ação não pode ser desfeita.`,
+    () => deleteProject(id),
+    "Excluir"
+  );
+}
+
 async function deleteProject(
   id
 ) {
 
-  if (
-    !confirm(
-      "Excluir este projeto?\n\n" +
-      "Isso também remove leads " +
-      "e links de cliente associados."
-    )
-  ) {
-
-    return;
-
-  }
+    const res =
+      await API.del(
+        `/api/data/projects?id=${encodeURIComponent(
+          id
+        )}`
+      );
 
 
-  const res =
-    await API.del(
-      `/api/data/projects?id=${encodeURIComponent(
-        id
-      )}`
+    if (
+      res.error
+    ) {
+
+      return toast(
+        res.message ||
+        "Erro ao excluir projeto.",
+        "error"
+      );
+
+    }
+
+
+    toast(
+      "Projeto excluído."
     );
-
-
-  if (
-    res.error
-  ) {
-
-    return toast(
-      res.message ||
-      "Erro ao excluir projeto.",
-      "error"
-    );
-
-  }
-
-
-  toast(
-    "Projeto excluído."
-  );
 
 
   await refreshAllData();
@@ -3852,6 +4131,8 @@ async function revokeClientLink(
 async function renderLeadsTab(
   el
 ) {
+
+  markLeadsSeen(state.editingProjectId);
 
   el.innerHTML = `
 
