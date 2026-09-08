@@ -13,12 +13,17 @@
 <body>
 
 <div class="client-edit-page">
-  <div class="brand-row">
-    <img src="assets/v8p.png" alt="Logo">
-    <strong id="client-project-name">Carregando...</strong>
+  <div class="brand-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+    <strong id="client-project-name" style="font-size:20px;font-family:var(--font-display)">Carregando...</strong>
+    <span style="font-size:12px;color:var(--text-muted)">Edite as informações liberadas para você abaixo</span>
   </div>
 
   <div id="client-content"></div>
+
+  <div style="display:flex;align-items:center;gap:6px;margin-top:32px;opacity:0.5">
+    <img src="assets/v8p.png" alt="" style="width:16px;height:16px;object-fit:contain">
+    <span style="font-size:11px;color:var(--text-faint)">powered by V8 ADMIN</span>
+  </div>
 </div>
 
 <script src="js/api.js"></script>
