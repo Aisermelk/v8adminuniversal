@@ -413,6 +413,24 @@ function normalizeProject(project = {}) {
             project.status ||
             "Em desenvolvimento",
 
+        order:
+            typeof project.order === "number"
+                ? project.order
+                : Date.now(),
+
+        siteUrl:
+            project.siteUrl || "",
+
+        reviews: {
+
+            enabled:
+                Boolean(project.reviews?.enabled),
+
+            placeId:
+                project.reviews?.placeId || ""
+
+        },
+
         tracking: {
 
             pixel:
@@ -794,6 +812,17 @@ async function dashboardStats(
                 }
             );
 
+    const leadsByProject = {};
+    for (const lead of leads) {
+        if (!lead.projectId) continue;
+        const entry = leadsByProject[lead.projectId] || { count: 0, latestCreatedAt: null };
+        entry.count += 1;
+        if (!entry.latestCreatedAt || new Date(lead.createdAt || 0) > new Date(entry.latestCreatedAt)) {
+            entry.latestCreatedAt = lead.createdAt || null;
+        }
+        leadsByProject[lead.projectId] = entry;
+    }
+
     return json(
         {
             ok: true,
@@ -807,7 +836,9 @@ async function dashboardStats(
             totalLeads:
                 leads.length,
 
-            recentLeads
+            recentLeads,
+
+            leadsByProject
         },
         200,
         origin
@@ -1071,8 +1102,14 @@ async function listProjects(
     const projects =
         await getProjects(env);
 
+    const sorted =
+        [...projects].sort(
+            (a, b) =>
+                (a.order ?? 0) - (b.order ?? 0)
+        );
+
     return json(
-        projects,
+        sorted,
         200,
         origin
     );
@@ -1403,6 +1440,12 @@ async function publicConfig(
                 status:
                     project.status,
 
+                siteUrl:
+                    project.siteUrl || "",
+
+                reviews:
+                    project.reviews || { enabled: false, placeId: "" },
+
                 tracking:
                     project.tracking || {},
 
@@ -1435,6 +1478,144 @@ async function publicConfig(
         200,
         origin
     );
+}
+
+
+// ============================================================
+// GOOGLE REVIEWS (nota + comentários), com cache no KV
+// ============================================================
+
+const GOOGLE_REVIEWS_CACHE_TTL = 60 * 60 * 24; // 24 horas
+
+async function publicGoogleReviews(
+    env,
+    origin,
+    projectId
+) {
+
+    const projects =
+        await getProjects(env);
+
+    const project =
+        projects.find(
+            p => p.id === projectId
+        );
+
+    if (!project) {
+        return json(
+            { error: true, message: "Projeto não encontrado." },
+            404,
+            origin
+        );
+    }
+
+    const placeId =
+        project.reviews?.placeId || "";
+
+    if (!project.reviews?.enabled || !placeId) {
+        return json(
+            { enabled: false },
+            200,
+            origin
+        );
+    }
+
+    const cacheKey =
+        `google_reviews:${projectId}`;
+
+    const cached =
+        await kvGet(env, cacheKey);
+
+    if (cached) {
+        return json(
+            { enabled: true, ...cached, cached: true },
+            200,
+            origin
+        );
+    }
+
+    if (!env.GOOGLE_PLACES_API_KEY) {
+        return json(
+            {
+                enabled: true,
+                error: true,
+                message: "GOOGLE_PLACES_API_KEY não configurado no Worker."
+            },
+            200,
+            origin
+        );
+    }
+
+    try {
+
+        const url =
+            "https://maps.googleapis.com/maps/api/place/details/json" +
+            `?place_id=${encodeURIComponent(placeId)}` +
+            "&fields=rating,user_ratings_total,reviews" +
+            `&language=pt-BR` +
+            `&key=${env.GOOGLE_PLACES_API_KEY}`;
+
+        const response =
+            await fetch(url);
+
+        const data =
+            await response.json();
+
+        if (data.status !== "OK") {
+            return json(
+                {
+                    enabled: true,
+                    error: true,
+                    message: "Google respondeu: " + data.status
+                },
+                200,
+                origin
+            );
+        }
+
+        const result = {
+
+            rating:
+                data.result?.rating || 0,
+
+            totalReviews:
+                data.result?.user_ratings_total || 0,
+
+            reviews:
+                (data.result?.reviews || []).slice(0, 5).map(r => ({
+                    author: r.author_name,
+                    rating: r.rating,
+                    text: r.text,
+                    relativeTime: r.relative_time_description,
+                    profilePhoto: r.profile_photo_url || ""
+                }))
+
+        };
+
+        await env.V8_KV.put(
+            cacheKey,
+            JSON.stringify(result),
+            { expirationTtl: GOOGLE_REVIEWS_CACHE_TTL }
+        );
+
+        return json(
+            { enabled: true, ...result, cached: false },
+            200,
+            origin
+        );
+
+    } catch (error) {
+
+        return json(
+            {
+                enabled: true,
+                error: true,
+                message: "Erro ao buscar avaliações: " + String(error)
+            },
+            200,
+            origin
+        );
+    }
 }
 
 
@@ -2341,6 +2522,30 @@ async function router(
             origin,
             decodeURIComponent(
                 publicLeadMatch[1]
+            )
+        );
+    }
+
+
+    // ========================================================
+    // PUBLIC GOOGLE REVIEWS
+    // ========================================================
+
+    const publicReviewsMatch =
+        path.match(
+            /^\/api\/public\/reviews\/([^/]+)$/
+        );
+
+    if (
+        publicReviewsMatch &&
+        method === "GET"
+    ) {
+
+        return publicGoogleReviews(
+            env,
+            origin,
+            decodeURIComponent(
+                publicReviewsMatch[1]
             )
         );
     }
