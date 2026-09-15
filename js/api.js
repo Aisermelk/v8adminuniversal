@@ -23,7 +23,10 @@ async function requestApi(path, options = {}, isPublic = false) {
 
   if (response.status === 401 && !isPublic) {
     window.Auth?.clearSession?.();
-    if (!location.pathname.endsWith("login.html")) location.href = "login.html";
+    if (!location.pathname.endsWith("login.html") && !window.__v8Redirecting) {
+      window.__v8Redirecting = true;
+      location.href = "login.html";
+    }
   }
 
   return data;
