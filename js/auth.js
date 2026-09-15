@@ -3,9 +3,10 @@ const Auth = {
   TOKEN_KEY: "v8_auth_token",
   EXPIRES_KEY: "v8_auth_expires",
   USER_KEY: "v8_auth_user",
+  _validationPromise: null,
 
   saveSession(token, expiresAt, user = null) {
-    localStorage.setItem(this.TOKEN_KEY, token);
+    localStorage.setItem(this.TOKEN_KEY, token || "");
     localStorage.setItem(this.EXPIRES_KEY, String(expiresAt || 0));
     if (user) localStorage.setItem(this.USER_KEY, JSON.stringify(user));
   },
@@ -18,26 +19,110 @@ const Auth = {
   isLoggedIn() {
     const token = this.getToken();
     const expires = Number(localStorage.getItem(this.EXPIRES_KEY) || 0);
-    return Boolean(token) && Date.now() < expires;
+    // Esta função é apenas uma checagem local rápida.
+    // A validade real é confirmada pelo Worker em validateSession().
+    return Boolean(token) && (!expires || Date.now() < expires);
   },
+
   clearSession() {
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.EXPIRES_KEY);
     localStorage.removeItem(this.USER_KEY);
   },
-  logout() { this.clearSession(); window.location.href = "login.html"; },
 
-  requireAdmin() {
-    if (!this.isLoggedIn()) { window.location.href = "login.html"; return false; }
-    const user = this.getUser();
-    if (user?.role === "CLIENTE") { window.location.href = "cliente.html"; return false; }
+  logout() {
+    this.clearSession();
+    window.location.replace("login.html");
+  },
+
+  /**
+   * Confirma a sessão no servidor. Isso evita o estado em que o navegador
+   * acredita que o token ainda é válido, mas o Worker já o rejeita (401).
+   * Não usa API.get() de propósito: uma sessão inválida não deve provocar
+   * redirecionamento automático durante a própria validação.
+   */
+  async validateSession() {
+    if (this._validationPromise) return this._validationPromise;
+
+    this._validationPromise = (async () => {
+      const token = this.getToken();
+      if (!token) return null;
+
+      const expires = Number(localStorage.getItem(this.EXPIRES_KEY) || 0);
+      if (expires && Date.now() >= expires) {
+        this.clearSession();
+        return null;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/me`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store"
+        });
+
+        let data = null;
+        try { data = await response.json(); } catch { data = null; }
+
+        if (!response.ok || !data || data.error || !data.user) {
+          this.clearSession();
+          return null;
+        }
+
+        // Atualiza somente os dados confiáveis do usuário retornados pelo Worker.
+        localStorage.setItem(this.USER_KEY, JSON.stringify(data.user));
+        return {
+          user: data.user,
+          permissions: Array.isArray(data.permissions) ? data.permissions : []
+        };
+      } catch (error) {
+        console.error("Erro ao validar sessão:", error);
+        // Falha de rede não deve apagar uma sessão válida. O carregamento
+        // das APIs tratará a indisponibilidade do servidor normalmente.
+        return null;
+      } finally {
+        this._validationPromise = null;
+      }
+    })();
+
+    return this._validationPromise;
+  },
+
+  async requireAdmin() {
+    const session = await this.validateSession();
+    if (!session) {
+      if (!location.pathname.endsWith("login.html")) {
+        window.location.replace("login.html");
+      }
+      return false;
+    }
+
+    if (session.user?.role === "CLIENTE") {
+      if (!location.pathname.endsWith("cliente.html")) {
+        window.location.replace("cliente.html");
+      }
+      return false;
+    }
+
     return true;
   },
 
-  requireClient() {
-    if (!this.isLoggedIn()) { window.location.href = "login.html"; return false; }
-    const user = this.getUser();
-    if (user?.role === "ADMIN") { window.location.href = "index.html"; return false; }
+  async requireClient() {
+    const session = await this.validateSession();
+    if (!session) {
+      if (!location.pathname.endsWith("login.html")) {
+        window.location.replace("login.html");
+      }
+      return false;
+    }
+
+    if (session.user?.role === "ADMIN") {
+      if (!location.pathname.endsWith("index.html")) {
+        window.location.replace("index.html");
+      }
+      return false;
+    }
+
     return true;
   }
 };
@@ -70,7 +155,7 @@ async function handleLoginSubmit(event) {
       return;
     }
     Auth.saveSession(res.token, Number(res.expiresAt || 0), res.user || null);
-    window.location.href = res.user?.role === "CLIENTE" ? "cliente.html" : "index.html";
+    window.location.replace(res.user?.role === "CLIENTE" ? "cliente.html" : "index.html");
   } catch {
     errorBox.textContent = "Não foi possível conectar ao servidor.";
     errorBox.classList.remove("hidden");
@@ -79,14 +164,20 @@ async function handleLoginSubmit(event) {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const form = document.getElementById("login-form");
-  if (form) {
-    if (Auth.isLoggedIn()) {
-      const user = Auth.getUser();
-      window.location.href = user?.role === "CLIENTE" ? "cliente.html" : "index.html";
+  if (!form) return;
+
+  // Nunca redirecionar apenas porque existe um token no LocalStorage.
+  // Primeiro confirme esse token no Worker. Isso elimina o loop:
+  // login.html -> index.html -> 401 -> login.html -> ...
+  if (Auth.getToken()) {
+    const session = await Auth.validateSession();
+    if (session?.user) {
+      window.location.replace(session.user.role === "CLIENTE" ? "cliente.html" : "index.html");
       return;
     }
-    form.addEventListener("submit", handleLoginSubmit);
   }
+
+  form.addEventListener("submit", handleLoginSubmit);
 });
