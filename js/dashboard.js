@@ -82,6 +82,9 @@ const state = {
   leadsByProject:
     {},
 
+  dashboardStats:
+    null,
+
 };
 
 
@@ -284,7 +287,7 @@ document.addEventListener(
         "undefined"
       ) {
 
-        Auth.requireAdmin();
+        if (!(await Auth.requireAdmin())) return;
 
       }
 
@@ -306,8 +309,11 @@ document.addEventListener(
       // PAINEL INICIAL
       // ----------------------------------------------------------
 
+      // Apenas alterna a seção. A renderização acontece depois que os dados
+      // forem carregados, evitando uma chamada prematura de /stats.
       switchSection(
-        "dashboard"
+        "dashboard",
+        false
       );
 
 
@@ -429,7 +435,8 @@ function setupMobileMenu() {
 // ================================================================
 
 function switchSection(
-  name
+  name,
+  shouldRender = true
 ) {
 
   state.section =
@@ -473,6 +480,8 @@ function switchSection(
       }
     );
 
+
+  if (!shouldRender) return;
 
   if (
     name ===
@@ -550,6 +559,9 @@ async function refreshAllData() {
       )
         ? projectsRes
         : [];
+
+    state.dashboardStats =
+      (statsRes && !statsRes.error) ? statsRes : null;
 
     state.leadsByProject =
       (statsRes && !statsRes.error && statsRes.leadsByProject) || {};
@@ -720,30 +732,9 @@ async function renderDashboard() {
   `;
 
 
-  let stats;
-
-
-  try {
-
-    stats =
-      await API.get(
-        "/api/dashboard/stats"
-      );
-
-
-  } catch (error) {
-
-    console.error(
-      "Erro ao buscar estatísticas:",
-      error
-    );
-
-
-    stats = {
-      error: true
-    };
-
-  }
+  // As estatísticas já são carregadas por refreshAllData().
+  // Reutilizamos o resultado para não fazer uma segunda requisição /stats.
+  const stats = state.dashboardStats;
 
 
   // --------------------------------------------------------------
