@@ -31,7 +31,10 @@ const KEYS = {
     clients: "data:clients",
     projects: "data:projects",
     leads: "data:leads",
-    clientLinks: "data:client-links"
+    clientLinks: "data:client-links",
+    products: "data:products",
+    categories: "data:categories",
+    orders: "data:orders"
 };
 
 
@@ -102,6 +105,26 @@ async function sha256(value) {
         .join("");
 }
 
+// HMAC-SHA256 para novos tokens. Mantém o verificador legado abaixo
+// para não invalidar sessões emitidas pela versão anterior.
+async function hmacSha256(value, secret) {
+    const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+    );
+    const signature = await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(value)
+    );
+    return Array.from(new Uint8Array(signature))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+}
+
 
 // ============================================================
 // UUID
@@ -114,162 +137,140 @@ function uuid() {
 
 
 // ============================================================
-// TOKEN ADMIN
+// AUTENTICAÇÃO / SESSÕES
 // ============================================================
 
-async function createToken(env) {
+const PASSWORD_ITERATIONS = 120000;
 
-    const now =
-        Date.now();
+function base64UrlEncode(value) {
+    const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+    let binary = "";
+    for (const b of bytes) binary += String.fromCharCode(b);
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
 
-    const expiresAt =
-        now + TOKEN_TTL;
+function base64UrlDecode(value) {
+    const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+    return atob(normalized + padding);
+}
 
-    const payload = {
-        sub:
-            env.ADMIN_EMAIL || "admin",
+async function pbkdf2Hash(password, saltBytes, iterations = PASSWORD_ITERATIONS) {
+    const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(password),
+        "PBKDF2",
+        false,
+        ["deriveBits"]
+    );
+    const bits = await crypto.subtle.deriveBits(
+        { name: "PBKDF2", salt: saltBytes, iterations, hash: "SHA-256" },
+        key,
+        256
+    );
+    return base64UrlEncode(new Uint8Array(bits));
+}
 
-        iat:
-            now,
-
-        exp:
-            expiresAt,
-
-        type:
-            "admin"
-    };
-
-    const encoded =
-        btoa(
-            JSON.stringify(payload)
-        );
-
-    const signature =
-        await sha256(
-            encoded +
-            String(env.TOKEN_SECRET || "")
-        );
-
+async function hashPassword(password) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
     return {
-        token:
-            `${encoded}.${signature}`,
-
-        expiresAt
+        passwordSalt: base64UrlEncode(salt),
+        passwordHash: await pbkdf2Hash(password, salt, PASSWORD_ITERATIONS),
+        passwordIterations: PASSWORD_ITERATIONS
     };
 }
 
+async function verifyPassword(password, storedHash, storedSalt, storedIterations) {
+    if (!storedHash || !storedSalt) return false;
+    try {
+        const saltBinary = base64UrlDecode(storedSalt);
+        const salt = Uint8Array.from(saltBinary, c => c.charCodeAt(0));
+        const hash = await pbkdf2Hash(password, salt, Number(storedIterations) || PASSWORD_ITERATIONS);
+        return hash === storedHash;
+    } catch {
+        return false;
+    }
+}
 
-// ============================================================
-// VALIDAR TOKEN
-// ============================================================
+async function createToken(env, user) {
+    const now = Date.now();
+    const expiresAt = now + TOKEN_TTL;
+    const payload = {
+        sub: String(user.id),
+        iat: now,
+        exp: expiresAt,
+        type: user.role === "CLIENTE" ? "client" : "admin",
+        role: user.role === "CLIENTE" ? "CLIENTE" : "ADMIN",
+        clientId: user.clientId || (user.role === "CLIENTE" ? user.id : null)
+    };
+    const encoded = base64UrlEncode(JSON.stringify(payload));
+    const signature = await hmacSha256(encoded, String(env.TOKEN_SECRET || ""));
+    return { token: `${encoded}.${signature}`, expiresAt, user: payload };
+}
 
 async function verifyToken(request, env) {
-
-    const auth =
-        request.headers.get(
-            "Authorization"
-        );
-
-    if (!auth) {
-        return false;
-    }
-
-    if (!auth.startsWith("Bearer ")) {
-        return false;
-    }
-
-    const token =
-        auth.slice(7).trim();
-
-    const parts =
-        token.split(".");
-
-    if (parts.length !== 2) {
-        return false;
-    }
-
-    const encoded =
-        parts[0];
-
-    const signature =
-        parts[1];
-
-    const expected =
-        await sha256(
-            encoded +
-            String(env.TOKEN_SECRET || "")
-        );
-
-    if (signature !== expected) {
-        return false;
-    }
-
+    const auth = request.headers.get("Authorization");
+    if (!auth?.startsWith("Bearer ")) return null;
+    const token = auth.slice(7).trim();
+    const parts = token.split(".");
+    if (parts.length !== 2) return null;
+    const [encoded, signature] = parts;
+    const secret = String(env.TOKEN_SECRET || "");
+    if (!secret) return null;
+    const expectedHmac = await hmacSha256(encoded, secret);
+    const expectedLegacy = await sha256(encoded + secret);
+    if (signature !== expectedHmac && signature !== expectedLegacy) return null;
     let payload;
-
-    try {
-
-        payload =
-            JSON.parse(
-                atob(encoded)
-            );
-
-    } catch {
-
-        return false;
+    try { payload = JSON.parse(base64UrlDecode(encoded)); } catch { return null; }
+    if (!payload?.exp || Date.now() >= payload.exp) return null;
+    if (!["admin", "client"].includes(payload.type)) return null;
+    if (payload.type === "admin") {
+        return { ...payload, role: "ADMIN", id: payload.sub };
     }
-
-    if (!payload) {
-        return false;
-    }
-
-    if (!payload.exp) {
-        return false;
-    }
-
-    if (Date.now() >= payload.exp) {
-        return false;
-    }
-
-    if (payload.type !== "admin") {
-        return false;
-    }
-
-    return true;
+    const clients = await getClients(env);
+    const client = clients.find(c => c.id === payload.clientId || c.id === payload.sub);
+    if (!client || client.status === "inactive") return null;
+    return { ...payload, role: "CLIENTE", id: client.id, clientId: client.id, client };
 }
 
-
-// ============================================================
-// AUTH
-// ============================================================
-
-async function requireAuth(
-    request,
-    env,
-    origin
-) {
-
-    const valid =
-        await verifyToken(
-            request,
-            env
-        );
-
-    if (!valid) {
-
-        return json(
-            {
-                error: true,
-                message:
-                    "Não autorizado."
-            },
-            401,
-            origin
-        );
-    }
-
-    return null;
+async function requireAuth(request, env, origin) {
+    const user = await verifyToken(request, env);
+    if (!user) return { error: json({ error: true, message: "Não autorizado." }, 401, origin) };
+    return { user };
 }
 
+function safeClient(client = {}) {
+    const { passwordHash, passwordSalt, passwordIterations, ...safe } = client;
+    return {
+        ...safe,
+        role: "CLIENTE",
+        status: safe.status || "active",
+        projectIds: Array.isArray(safe.projectIds) ? safe.projectIds : (safe.projectId ? [safe.projectId] : []),
+        permissions: Array.isArray(safe.permissions) ? safe.permissions : ["projects", "content", "leads", "settings", "account"]
+    };
+}
+
+function clientProjectIds(client = {}) {
+    return [...new Set([
+        ...(Array.isArray(client.projectIds) ? client.projectIds : []),
+        ...(client.projectId ? [client.projectId] : [])
+    ].map(String).filter(Boolean))];
+}
+
+function hasClientPermission(client, permission) {
+    const permissions = Array.isArray(client?.permissions) ? client.permissions : ["projects", "content", "leads", "settings", "account"];
+    return permissions.includes("all") || permissions.includes(permission);
+}
+
+async function getAuthenticatedClient(user, env) {
+    if (!user || user.role !== "CLIENTE") return null;
+    const clients = await getClients(env);
+    return clients.find(c => c.id === user.clientId);
+}
+
+async function clientOwnsProject(client, projectId) {
+    return clientProjectIds(client).includes(String(projectId));
+}
 
 // ============================================================
 // KV GET
@@ -388,252 +389,165 @@ async function getClientLinks(env) {
     );
 }
 
+async function getProducts(env) { return await kvGet(env, KEYS.products, []); }
+async function getCategories(env) { return await kvGet(env, KEYS.categories, []); }
+async function getOrders(env) { return await kvGet(env, KEYS.orders, []); }
+
+function isStoreProject(project) {
+    return project?.type === "LOJA";
+}
+
+function normalizeProduct(input = {}, projectId) {
+    const now = new Date().toISOString();
+    return {
+        ...input,
+        id: input.id || uuid(),
+        projectId,
+        name: String(input.name || ""),
+        slug: String(input.slug || slugify(input.name || "")),
+        description: String(input.description || ""),
+        price: Number.isFinite(Number(input.price)) ? Number(input.price) : 0,
+        salePrice: input.salePrice === null || input.salePrice === "" || input.salePrice === undefined
+            ? null : Number(input.salePrice),
+        image: String(input.image || ""),
+        images: Array.isArray(input.images) ? input.images : [],
+        categoryId: String(input.categoryId || ""),
+        stock: Math.max(0, Number(input.stock) || 0),
+        status: input.status === "inactive" ? "inactive" : "active",
+        featured: Boolean(input.featured),
+        createdAt: input.createdAt || now,
+        updatedAt: now
+    };
+}
+
+function normalizeCategory(input = {}, projectId) {
+    const now = new Date().toISOString();
+    return {
+        ...input,
+        id: input.id || uuid(),
+        projectId,
+        name: String(input.name || ""),
+        slug: String(input.slug || slugify(input.name || "")),
+        status: input.status === "inactive" ? "inactive" : "active",
+        createdAt: input.createdAt || now,
+        updatedAt: now
+    };
+}
+
+function normalizeOrder(input = {}, projectId) {
+    const now = new Date().toISOString();
+    const allowed = ["pending", "confirmed", "processing", "completed", "cancelled"];
+    return {
+        ...input,
+        id: input.id || uuid(),
+        projectId,
+        customer: input.customer && typeof input.customer === "object" ? input.customer : {},
+        items: Array.isArray(input.items) ? input.items : [],
+        total: Number(input.total) || 0,
+        status: allowed.includes(input.status) ? input.status : "pending",
+        createdAt: input.createdAt || now,
+        updatedAt: now
+    };
+}
+
 
 // ============================================================
 // DATA NORMALIZATION
 // ============================================================
 
 function normalizeProject(project = {}) {
-
-    const now =
-        new Date().toISOString();
+    const now = new Date().toISOString();
+    const previous = project || {};
 
     return {
-
-        id:
-            project.id ||
-            uuid(),
-
-        name:
-            String(
-                project.name || ""
-            ),
-
-        status:
-            project.status ||
-            "Em desenvolvimento",
-
-        order:
-            typeof project.order === "number"
-                ? project.order
-                : Date.now(),
-
-        siteUrl:
-            project.siteUrl || "",
-
+        ...previous,
+        id: previous.id || uuid(),
+        name: String(previous.name || ""),
+        slug: String(previous.slug || slugify(previous.name || "")),
+        type: ["PAGE", "SITE", "LOJA"].includes(previous.type)
+            ? previous.type
+            : "SITE",
+        status: previous.status || "Em desenvolvimento",
+        order: typeof previous.order === "number" ? previous.order : Date.now(),
+        domain: String(previous.domain || ""),
+        siteUrl: String(previous.siteUrl || ""),
         reviews: {
-
-            enabled:
-                Boolean(project.reviews?.enabled),
-
-            placeId:
-                project.reviews?.placeId || ""
-
+            ...(previous.reviews || {}),
+            enabled: Boolean(previous.reviews?.enabled),
+            placeId: previous.reviews?.placeId || ""
         },
-
         tracking: {
-
-            pixel:
-                project.tracking?.pixel ||
-                "",
-
-            tag:
-                project.tracking?.tag ||
-                "",
-
-            analytics:
-                project.tracking?.analytics ||
-                ""
-
+            ...(previous.tracking || {}),
+            pixel: previous.tracking?.pixel || "",
+            tag: previous.tracking?.tag || "",
+            analytics: previous.tracking?.analytics || ""
         },
-
         contact: {
-
-            whatsapp:
-                project.contact?.whatsapp ||
-                "",
-
-            email:
-                project.contact?.email ||
-                "",
-
-            phone:
-                project.contact?.phone ||
-                ""
-
+            ...(previous.contact || {}),
+            whatsapp: previous.contact?.whatsapp || "",
+            email: previous.contact?.email || "",
+            phone: previous.contact?.phone || ""
         },
-
         social: {
-
-            facebook:
-                project.social?.facebook ||
-                "",
-
-            instagram:
-                project.social?.instagram ||
-                "",
-
-            tiktok:
-                project.social?.tiktok ||
-                "",
-
-            youtube:
-                project.social?.youtube ||
-                "",
-
-            linkedin:
-                project.social?.linkedin ||
-                ""
-
+            ...(previous.social || {}),
+            facebook: previous.social?.facebook || "",
+            instagram: previous.social?.instagram || "",
+            tiktok: previous.social?.tiktok || "",
+            youtube: previous.social?.youtube || "",
+            linkedin: previous.social?.linkedin || ""
         },
-
-        formspree:
-            project.formspree ||
-            "",
-
-        content: {
-
-            name:
-                project.content?.name || "",
-
-            job:
-                project.content?.job || "",
-
-            headline:
-                project.content?.headline || "",
-
-            description:
-                project.content?.description || "",
-
-            specialization:
-                project.content?.specialization || "",
-
-            experience:
-                project.content?.experience || "",
-
-            address:
-                project.content?.address || "",
-
-            registration:
-                project.content?.registration || ""
-
-        },
-
+        formspree: previous.formspree || "",
+        content: { ...(previous.content || {}) },
         media: {
-
-            galleryEnabled:
-                Boolean(project.media?.galleryEnabled),
-
-            galleryImages:
-                Array.isArray(project.media?.galleryImages)
-                    ? project.media.galleryImages
-                    : [],
-
-            videoEnabled:
-                Boolean(project.media?.videoEnabled),
-
-            video:
-                project.media?.video || ""
-
+            ...(previous.media || {}),
+            galleryEnabled: Boolean(previous.media?.galleryEnabled),
+            galleryImages: Array.isArray(previous.media?.galleryImages) ? previous.media.galleryImages : [],
+            videoEnabled: Boolean(previous.media?.videoEnabled),
+            video: previous.media?.video || ""
         },
-
-        location: {
-
-            enabled:
-                Boolean(project.location?.enabled),
-
-            address:
-                project.location?.address || "",
-
-            mapsUrl:
-                project.location?.mapsUrl || "",
-
-            embed:
-                project.location?.embed || ""
-
-        },
-
+        location: { ...(previous.location || {}) },
         seo: {
-
-            title:
-                project.seo?.title || "",
-
-            description:
-                project.seo?.description || "",
-
-            ogImage:
-                project.seo?.ogImage || "",
-
-            canonical:
-                project.seo?.canonical || "",
-
-            keywords:
-                project.seo?.keywords || "",
-
-            robots:
-                project.seo?.robots || "index, follow"
-
+            ...(previous.seo || {}),
+            robots: previous.seo?.robots || "index, follow"
         },
-
-        scripts: {
-
-            head:
-                project.scripts?.head || "",
-
-            body:
-                project.scripts?.body || "",
-
-            footer:
-                project.scripts?.footer || ""
-
-        },
-
-        createdAt:
-            project.createdAt ||
-            now,
-
-        updatedAt:
-            now
+        scripts: { ...(previous.scripts || {}) },
+        createdAt: previous.createdAt || now,
+        updatedAt: now
     };
 }
 
+function slugify(value) {
+    return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+}
 
 function normalizeClient(client = {}) {
-
-    const now =
-        new Date().toISOString();
-
+    const now = new Date().toISOString();
+    const legacyProjectId = String(client.projectId || "");
+    const projectIds = Array.isArray(client.projectIds)
+        ? [...new Set(client.projectIds.map(String).filter(Boolean))]
+        : (legacyProjectId ? [legacyProjectId] : []);
     return {
-
-        id:
-            client.id ||
-            uuid(),
-
-        name:
-            String(
-                client.name || ""
-            ),
-
-        email:
-            String(
-                client.email || ""
-            ),
-
-        phone:
-            String(
-                client.phone || ""
-            ),
-
-        projectId:
-            client.projectId ||
-            "",
-
-        createdAt:
-            client.createdAt ||
-            now,
-
-        updatedAt:
-            now
+        ...client,
+        id: client.id || uuid(),
+        name: String(client.name || "").trim(),
+        email: String(client.email || "").trim().toLowerCase(),
+        phone: String(client.phone || "").trim(),
+        role: "CLIENTE",
+        status: client.status === "inactive" ? "inactive" : "active",
+        projectId: legacyProjectId || projectIds[0] || "",
+        projectIds,
+        permissions: Array.isArray(client.permissions) && client.permissions.length
+            ? [...new Set(client.permissions.map(String))]
+            : ["projects", "content", "leads", "settings", "account"],
+        createdAt: client.createdAt || now,
+        updatedAt: now
     };
 }
 
@@ -642,122 +556,143 @@ function normalizeClient(client = {}) {
 // LOGIN
 // ============================================================
 
-async function handleLogin(
-    request,
-    env,
-    origin
-) {
-
-    let body;
-
-    try {
-
-        body =
-            await request.json();
-
-    } catch {
-
-        return json(
-            {
-                error: true,
-                message:
-                    "Dados de login inválidos."
-            },
-            400,
-            origin
-        );
-    }
-
-    const email =
-        String(
-            body?.email || ""
-        )
-        .trim()
-        .toLowerCase();
-
-    const password =
-        String(
-            body?.password || ""
-        );
-
-    const configuredEmail =
-        String(
-            env.ADMIN_EMAIL || ""
-        )
-        .trim()
-        .toLowerCase();
-
-    const configuredPassword =
-        String(
-            env.ADMIN_PASS || ""
-        );
-
-    if (
-        !email ||
-        !password
-    ) {
-
-        return json(
-            {
-                error: true,
-                message:
-                    "Informe e-mail e senha."
-            },
-            400,
-            origin
-        );
-    }
-
-    if (
-        !configuredEmail ||
-        !configuredPassword ||
-        !env.TOKEN_SECRET
-    ) {
-
-        return json(
-            {
-                error: true,
-                message:
-                    "Configuração de autenticação incompleta no Worker."
-            },
-            500,
-            origin
-        );
-    }
-
-    if (
-        email !== configuredEmail ||
-        password !== configuredPassword
-    ) {
-
-        return json(
-            {
-                error: true,
-                message:
-                    "E-mail ou senha inválidos."
-            },
-            401,
-            origin
-        );
-    }
-
-    const session =
-        await createToken(env);
-
-    return json(
-        {
-            ok: true,
-
-            token:
-                session.token,
-
-            expiresAt:
-                session.expiresAt
-        },
-        200,
-        origin
-    );
+async function checkLoginRateLimit(env, request) {
+    if (!env.V8_KV) return true;
+    const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
+    const key = `security:login:${await sha256(ip.split(",")[0].trim())}`;
+    const current = await kvGet(env, key, { count: 0 });
+    if (Number(current.count || 0) >= 5) return false;
+    await env.V8_KV.put(key, JSON.stringify({ count: Number(current.count || 0) + 1 }), { expirationTtl: 15 * 60 });
+    return true;
 }
+
+async function clearLoginRateLimit(env, request) {
+    if (!env.V8_KV) return;
+    const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For") || "unknown";
+    const key = `security:login:${await sha256(ip.split(",")[0].trim())}`;
+    await kvDelete(env, key);
+}
+
+async function handleLogin(request, env, origin) {
+    if (!(await checkLoginRateLimit(env, request))) {
+        return json({ error: true, message: "Muitas tentativas. Tente novamente em alguns minutos." }, 429, origin);
+    }
+    let body;
+    try { body = await request.json(); }
+    catch { return json({ error: true, message: "Dados de login inválidos." }, 400, origin); }
+
+    const email = String(body?.email || "").trim().toLowerCase();
+    const password = String(body?.password || "");
+    if (!email || !password) return json({ error: true, message: "Informe e-mail e senha." }, 400, origin);
+    if (!env.TOKEN_SECRET) return json({ error: true, message: "TOKEN_SECRET não configurado no Worker." }, 500, origin);
+
+    const adminEmail = String(env.ADMIN_EMAIL || "").trim().toLowerCase();
+    const adminPass = String(env.ADMIN_PASS || "");
+    if (email === adminEmail && adminPass && password === adminPass) {
+        await clearLoginRateLimit(env, request);
+        const session = await createToken(env, { id: adminEmail || "admin", role: "ADMIN" });
+        return json({ ok: true, token: session.token, expiresAt: session.expiresAt, user: { id: adminEmail || "admin", name: "Administrador", role: "ADMIN" } }, 200, origin);
+    }
+
+    const clients = await getClients(env);
+    const client = clients.find(c => String(c.email || "").trim().toLowerCase() === email);
+    if (client && client.status !== "inactive" && await verifyPassword(password, client.passwordHash, client.passwordSalt, client.passwordIterations)) {
+        await clearLoginRateLimit(env, request);
+        const session = await createToken(env, { id: client.id, role: "CLIENTE", clientId: client.id });
+        return json({
+            ok: true,
+            token: session.token,
+            expiresAt: session.expiresAt,
+            user: { id: client.id, name: client.name, email: client.email, role: "CLIENTE", clientId: client.id }
+        }, 200, origin);
+    }
+    return json({ error: true, message: "E-mail ou senha inválidos." }, 401, origin);
+}
+
+async function authMe(request, env, origin) {
+    const user = await verifyToken(request, env);
+    if (!user) return json({ error: true, message: "Sessão inválida ou expirada." }, 401, origin);
+    if (user.role === "CLIENTE") {
+        const client = await getAuthenticatedClient(user, env);
+        if (!client) return json({ error: true, message: "Conta do cliente não encontrada." }, 401, origin);
+        return json({ ok: true, user: { id: client.id, name: client.name, email: client.email, role: "CLIENTE", clientId: client.id }, permissions: client.permissions || [] }, 200, origin);
+    }
+    return json({ ok: true, user: { id: user.id, name: "Administrador", role: "ADMIN" }, permissions: ["all"] }, 200, origin);
+}
+
+async function clientProjects(request, env, origin, user) {
+    const client = await getAuthenticatedClient(user, env);
+    if (!client) return json({ error: true, message: "Cliente não encontrado." }, 404, origin);
+    if (!hasClientPermission(client, "projects")) return json({ error: true, message: "Permissão insuficiente." }, 403, origin);
+    const projects = await getProjects(env);
+    const ids = new Set(clientProjectIds(client));
+    return json(projects.filter(p => ids.has(String(p.id))).map(p => ({ ...p, clientId: undefined })), 200, origin);
+}
+
+async function clientProject(request, env, origin, user, projectId) {
+    const client = await getAuthenticatedClient(user, env);
+    if (!client || !(await clientOwnsProject(client, projectId))) return json({ error: true, message: "Projeto não encontrado." }, 404, origin);
+    const projects = await getProjects(env);
+    const index = projects.findIndex(p => p.id === projectId);
+    if (index < 0) return json({ error: true, message: "Projeto não encontrado." }, 404, origin);
+    if (request.method === "GET") return json({ ok: true, project: projects[index] }, 200, origin);
+    if (request.method !== "PUT") return json({ error: true, message: "Método não permitido." }, 405, origin);
+    if (!hasClientPermission(client, "content") && !hasClientPermission(client, "settings")) return json({ error: true, message: "Você não possui permissão para editar este projeto." }, 403, origin);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: true, message: "JSON inválido." }, 400, origin); }
+    const current = projects[index];
+    const updated = JSON.parse(JSON.stringify(current));
+    const editableGroups = [];
+    if (hasClientPermission(client, "content") && body.content && typeof body.content === "object") editableGroups.push("content");
+    if (hasClientPermission(client, "settings") && body.settings && typeof body.settings === "object") editableGroups.push("settings");
+    if (hasClientPermission(client, "settings") && body.contact && typeof body.contact === "object") editableGroups.push("contact");
+    if (hasClientPermission(client, "settings") && body.social && typeof body.social === "object") editableGroups.push("social");
+    for (const group of editableGroups) {
+        updated[group] = { ...(updated[group] || {}), ...body[group] };
+    }
+    updated.id = current.id;
+    updated.clientId = current.clientId || client.id;
+    updated.createdAt = current.createdAt;
+    updated.updatedAt = new Date().toISOString();
+    projects[index] = normalizeProject(updated);
+    await kvPut(env, KEYS.projects, projects);
+    return json({ ok: true, project: projects[index] }, 200, origin);
+}
+
+async function clientLeads(env, origin, user, projectId) {
+    const client = await getAuthenticatedClient(user, env);
+    if (!client || !hasClientPermission(client, "leads")) return json({ error: true, message: "Permissão insuficiente." }, 403, origin);
+    if (!(await clientOwnsProject(client, projectId))) return json({ error: true, message: "Projeto não encontrado." }, 404, origin);
+    const leads = await getLeads(env);
+    return json(leads.filter(l => l.projectId === projectId).sort((a,b) => new Date(b.createdAt||0)-new Date(a.createdAt||0)), 200, origin);
+}
+
+async function clientAccount(request, env, origin, user) {
+    const clients = await getClients(env);
+    const index = clients.findIndex(c => c.id === user.clientId);
+    if (index < 0) return json({ error: true, message: "Cliente não encontrado." }, 404, origin);
+    if (request.method === "GET") return json({ ok: true, client: safeClient(clients[index]) }, 200, origin);
+    if (request.method !== "PUT") return json({ error: true, message: "Método não permitido." }, 405, origin);
+    const current = clients[index];
+    if (!hasClientPermission(current, "account")) return json({ error: true, message: "Permissão insuficiente." }, 403, origin);
+    let body;
+    try { body = await request.json(); } catch { return json({ error: true, message: "JSON inválido." }, 400, origin); }
+    const next = { ...current };
+    if (body.name !== undefined) next.name = String(body.name).trim().slice(0,160);
+    if (body.phone !== undefined) next.phone = String(body.phone).trim().slice(0,60);
+    if (body.password) {
+        if (String(body.password).length < 8) return json({ error: true, message: "A nova senha deve ter pelo menos 8 caracteres." }, 400, origin);
+        const pass = await hashPassword(String(body.password));
+        Object.assign(next, pass);
+    }
+    next.email = current.email;
+    next.id = current.id;
+    next.updatedAt = new Date().toISOString();
+    clients[index] = next;
+    await kvPut(env, KEYS.clients, clients);
+    return json({ ok: true, client: safeClient(next) }, 200, origin);
+}
+
 
 
 // ============================================================
@@ -823,21 +758,23 @@ async function dashboardStats(
         leadsByProject[lead.projectId] = entry;
     }
 
+    const typeCounts = projects.reduce((acc, project) => {
+        const type = ["PAGE", "SITE", "LOJA"].includes(project.type) ? project.type : "SITE";
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+    }, { PAGE: 0, SITE: 0, LOJA: 0 });
+
+    const ecommerce = await storeStats(env, projects.map(p => p.id));
+
     return json(
         {
             ok: true,
-
-            totalProjects:
-                projects.length,
-
-            totalClients:
-                clients.length,
-
-            totalLeads:
-                leads.length,
-
+            totalProjects: projects.length,
+            totalClients: clients.length,
+            totalLeads: leads.length,
+            ...typeCounts,
+            ...ecommerce,
             recentLeads,
-
             leadsByProject
         },
         200,
@@ -859,7 +796,7 @@ async function listClients(
         await getClients(env);
 
     return json(
-        clients,
+        clients.map(safeClient),
         200,
         origin
     );
@@ -896,12 +833,14 @@ async function createClient(
         );
     }
 
-    const clients =
-        await getClients(env);
-
-    const client =
-        normalizeClient(body);
-
+    const clients = await getClients(env);
+    const email = String(body?.email || "").trim().toLowerCase();
+    if (!email) return json({ error: true, message: "E-mail do cliente é obrigatório." }, 400, origin);
+    if (clients.some(c => String(c.email || "").toLowerCase() === email)) return json({ error: true, message: "Já existe um cliente com este e-mail." }, 409, origin);
+    const password = String(body?.password || "");
+    if (password.length < 8) return json({ error: true, message: "A senha do cliente deve ter pelo menos 8 caracteres." }, 400, origin);
+    const client = normalizeClient({ ...body, email });
+    Object.assign(client, await hashPassword(password));
     clients.push(client);
 
     await kvPut(
@@ -913,7 +852,7 @@ async function createClient(
     return json(
         {
             ok: true,
-            client
+            client: safeClient(client)
         },
         201,
         origin
@@ -986,21 +925,20 @@ async function updateClient(
         );
     }
 
-    clients[index] = {
-
-        ...clients[index],
-
-        ...body,
-
-        id:
-            clients[index].id,
-
-        createdAt:
-            clients[index].createdAt,
-
-        updatedAt:
-            new Date().toISOString()
-    };
+    const current = clients[index];
+    const next = normalizeClient({ ...current, ...body, id: current.id, createdAt: current.createdAt });
+    if (String(body.email || current.email).trim().toLowerCase() !== String(current.email || "").toLowerCase()) {
+        const email = String(body.email || "").trim().toLowerCase();
+        if (!email) return json({ error: true, message: "E-mail obrigatório." }, 400, origin);
+        if (clients.some((c, i) => i !== index && String(c.email || "").toLowerCase() === email)) return json({ error: true, message: "Já existe um cliente com este e-mail." }, 409, origin);
+        next.email = email;
+    }
+    if (body.password !== undefined && String(body.password) !== "") {
+        if (String(body.password).length < 8) return json({ error: true, message: "A senha deve ter pelo menos 8 caracteres." }, 400, origin);
+        Object.assign(next, await hashPassword(String(body.password)));
+    }
+    next.updatedAt = new Date().toISOString();
+    clients[index] = next;
 
     await kvPut(
         env,
@@ -1011,8 +949,7 @@ async function updateClient(
     return json(
         {
             ok: true,
-            client:
-                clients[index]
+            client: safeClient(clients[index])
         },
         200,
         origin
@@ -1437,8 +1374,17 @@ async function publicConfig(
                 name:
                     project.name,
 
+                slug:
+                    project.slug || "",
+
+                type:
+                    project.type || "SITE",
+
                 status:
                     project.status,
+
+                domain:
+                    project.domain || "",
 
                 siteUrl:
                     project.siteUrl || "",
@@ -1713,6 +1659,7 @@ async function createLead(
     const leads =
         await getLeads(env);
 
+    const limit = (value, max) => String(value || "").trim().slice(0, max);
     const lead = {
 
         id:
@@ -1720,25 +1667,12 @@ async function createLead(
 
         projectId,
 
-        name:
-            String(
-                body?.name || ""
-            ),
-
-        email:
-            String(
-                body?.email || ""
-            ),
-
-        phone:
-            String(
-                body?.phone || ""
-            ),
-
-        message:
-            String(
-                body?.message || ""
-            ),
+        name: limit(body?.name, 160),
+        email: limit(body?.email, 240),
+        phone: limit(body?.phone, 60),
+        message: limit(body?.message, 3000),
+        source: limit(body?.source, 120),
+        status: "new",
 
         createdAt:
             new Date().toISOString()
@@ -1794,10 +1728,16 @@ async function generateClientLink(
         );
     }
 
-    const fields =
-        Array.isArray(body?.fields)
-            ? body.fields
-            : [];
+    const allowedFields = new Set([
+        "tracking.pixel", "tracking.tag", "tracking.analytics",
+        "contact.whatsapp", "contact.email", "contact.phone",
+        "social.facebook", "social.instagram", "social.tiktok",
+        "social.youtube", "social.linkedin", "formspree"
+    ]);
+
+    const fields = Array.isArray(body?.fields)
+        ? [...new Set(body.fields.filter(field => allowedFields.has(field)))]
+        : [];
 
     if (!fields.length) {
 
@@ -1840,12 +1780,13 @@ async function generateClientLink(
     const token =
         `${uuid()}-${uuid()}`;
 
+    const tokenHash = await sha256(token);
+
     const link = {
-
         jti,
-
-        token,
-
+        tokenHash,
+        // token é retornado apenas na criação; links antigos ainda podem
+        // possuir "token" e continuam sendo validados por compatibilidade.
         projectId,
 
         fields,
@@ -1988,9 +1929,11 @@ async function validateClientLink(
     const links =
         await getClientLinks(env);
 
+    const tokenHash = await sha256(token);
     const link =
         links.find(
             item =>
+                item.tokenHash === tokenHash ||
                 item.token === token
         );
 
@@ -2116,6 +2059,16 @@ async function getClientAccess(
 
             allowedFields:
                 link.fields,
+
+            // aliases mantidos para compatibilidade com editar.html
+            fields:
+                link.fields,
+
+            data:
+                project,
+
+            projectName:
+                project.name,
 
             config:
                 project
@@ -2294,6 +2247,72 @@ async function updateClientAccess(
 
 
 // ============================================================
+// E-COMMERCE — MVP
+// ============================================================
+
+async function ensureStoreProject(env, origin, projectId) {
+    const projects = await getProjects(env);
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return { error: json({ error: true, message: "Projeto não encontrado." }, 404, origin) };
+    if (!isStoreProject(project)) return { error: json({ error: true, message: "Recurso disponível somente para projetos LOJA." }, 403, origin) };
+    return { project };
+}
+
+async function listStoreCollection(env, origin, projectId, kind) {
+    const check = await ensureStoreProject(env, origin, projectId);
+    if (check.error) return check.error;
+    const source = kind === "products" ? await getProducts(env) : kind === "categories" ? await getCategories(env) : await getOrders(env);
+    return json(source.filter(item => item.projectId === projectId), 200, origin);
+}
+
+async function upsertStoreItem(request, env, origin, projectId, kind) {
+    const check = await ensureStoreProject(env, origin, projectId);
+    if (check.error) return check.error;
+    let body;
+    try { body = await request.json(); } catch { return json({ error: true, message: "JSON inválido." }, 400, origin); }
+
+    const key = kind === "products" ? KEYS.products : kind === "categories" ? KEYS.categories : KEYS.orders;
+    const all = kind === "products" ? await getProducts(env) : kind === "categories" ? await getCategories(env) : await getOrders(env);
+    const index = body?.id ? all.findIndex(item => item.id === body.id && item.projectId === projectId) : -1;
+    const item = kind === "products"
+        ? normalizeProduct(body, projectId)
+        : kind === "categories"
+            ? normalizeCategory(body, projectId)
+            : normalizeOrder(body, projectId);
+
+    if (index >= 0) {
+        item.id = all[index].id;
+        item.createdAt = all[index].createdAt;
+        all[index] = item;
+    } else {
+        all.push(item);
+    }
+    await kvPut(env, key, all);
+    return json({ ok: true, [kind === "products" ? "product" : kind === "categories" ? "category" : "order"]: item }, index >= 0 ? 200 : 201, origin);
+}
+
+async function deleteStoreItem(env, origin, projectId, kind, id) {
+    const check = await ensureStoreProject(env, origin, projectId);
+    if (check.error) return check.error;
+    const key = kind === "products" ? KEYS.products : kind === "categories" ? KEYS.categories : KEYS.orders;
+    const all = kind === "products" ? await getProducts(env) : kind === "categories" ? await getCategories(env) : await getOrders(env);
+    const next = all.filter(item => !(item.id === id && item.projectId === projectId));
+    if (next.length === all.length) return json({ error: true, message: "Registro não encontrado." }, 404, origin);
+    await kvPut(env, key, next);
+    return json({ ok: true }, 200, origin);
+}
+
+async function storeStats(env, projectIds) {
+    const [products, categories, orders] = await Promise.all([getProducts(env), getCategories(env), getOrders(env)]);
+    const ids = new Set(projectIds);
+    return {
+        totalProducts: products.filter(p => ids.has(p.projectId)).length,
+        totalCategories: categories.filter(c => ids.has(c.projectId)).length,
+        totalOrders: orders.filter(o => ids.has(o.projectId)).length
+    };
+}
+
+// ============================================================
 // API — INFO
 // ============================================================
 
@@ -2310,7 +2329,7 @@ async function apiInfo(
                 "V8 Admin Universal",
 
             version:
-                "1.0.0",
+                "2.0.1",
 
             worker:
                 "v8adminuniversal",
@@ -2319,6 +2338,15 @@ async function apiInfo(
 
                 login:
                     "POST /api/login",
+
+                session:
+                    "GET /api/auth/me",
+
+                clientArea:
+                    "/api/client/projects",
+
+                clientAccount:
+                    "/api/client/account",
 
                 dashboard:
                     "GET /api/dashboard/stats",
@@ -2592,18 +2620,40 @@ async function router(
 
 
     // ========================================================
+    // LOJA — LEITURA PÚBLICA / PEDIDO
+    // ========================================================
+    const publicStoreMatch = path.match(/^\/api\/public\/store\/(products|categories|orders)\/([^/]+)$/);
+    if (publicStoreMatch) {
+        const kind = publicStoreMatch[1];
+        const projectId = decodeURIComponent(publicStoreMatch[2]);
+        if (method === "GET" && (kind === "products" || kind === "categories")) {
+            return listStoreCollection(env, origin, projectId, kind);
+        }
+        if (method === "POST" && kind === "orders") {
+            return upsertStoreItem(request, env, origin, projectId, "orders");
+        }
+    }
+
+    // ========================================================
     // AUTH
     // ========================================================
 
-    const authError =
-        await requireAuth(
-            request,
-            env,
-            origin
-        );
+    const authResult = await requireAuth(request, env, origin);
+    if (authResult.error) return authResult.error;
+    const authUser = authResult.user;
 
-    if (authError) {
-        return authError;
+    // ========================================================
+    // SESSÃO / ÁREA DO CLIENTE
+    // ========================================================
+    if (path === "/api/auth/me" && method === "GET") return authMe(request, env, origin);
+    if (authUser.role === "CLIENTE") {
+        if (path === "/api/client/projects" && method === "GET") return clientProjects(request, env, origin, authUser);
+        const clientProjectMatch = path.match(/^\/api\/client\/projects\/([^/]+)$/);
+        if (clientProjectMatch && (method === "GET" || method === "PUT")) return clientProject(request, env, origin, authUser, decodeURIComponent(clientProjectMatch[1]));
+        const clientLeadsMatch = path.match(/^\/api\/client\/leads\/([^/]+)$/);
+        if (clientLeadsMatch && method === "GET") return clientLeads(env, origin, authUser, decodeURIComponent(clientLeadsMatch[1]));
+        if (path === "/api/client/account" && (method === "GET" || method === "PUT")) return clientAccount(request, env, origin, authUser);
+        return json({ error: true, message: "Acesso restrito à área do cliente." }, 403, origin);
     }
 
 
@@ -2762,6 +2812,20 @@ async function router(
 
 
     // ========================================================
+    // E-COMMERCE
+    // ========================================================
+
+    const storeMatch = path.match(/^\/api\/store\/(products|categories|orders)\/([^/]+)(?:\/([^/]+))?$/);
+    if (storeMatch) {
+        const kind = storeMatch[1];
+        const projectId = decodeURIComponent(storeMatch[2]);
+        const itemId = storeMatch[3] ? decodeURIComponent(storeMatch[3]) : null;
+        if (method === "GET" && !itemId) return listStoreCollection(env, origin, projectId, kind);
+        if ((method === "POST" || method === "PUT") && !itemId) return upsertStoreItem(request, env, origin, projectId, kind);
+        if (method === "DELETE" && itemId) return deleteStoreItem(env, origin, projectId, kind, itemId);
+    }
+
+    // ========================================================
     // CLIENT LINK
     // ========================================================
 
@@ -2876,9 +2940,8 @@ export default {
                     message:
                         "Erro interno do servidor.",
 
-                    detail:
-                        error?.message ||
-                        String(error)
+                    requestId:
+                        crypto.randomUUID()
                 },
                 500,
                 cors(request)
