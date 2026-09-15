@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#09070F">
+  <title>V8 — Área do Cliente</title>
+  <link rel="icon" type="image/png" href="assets/v8p.png">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/cliente.css">
+</head>
+<body class="client-page">
+<div class="client-shell">
+  <div class="client-mobilebar">
+    <div class="client-brand"><img src="assets/v8p.png" alt="V8"><strong>V8</strong><span>Área do Cliente</span></div>
+    <button id="client-menu" class="icon-btn" aria-label="Abrir menu">☰</button>
+  </div>
+  <aside class="client-sidebar" id="client-sidebar">
+    <div class="client-brand client-brand-desktop"><img src="assets/v8p.png" alt="V8"><div><strong>V8</strong><span>Área do Cliente</span></div></div>
+    <div class="client-userbox"><div class="client-avatar" id="user-avatar">C</div><div><strong id="user-name">Cliente</strong><small id="user-email">—</small></div></div>
+    <nav class="client-nav">
+      <button class="client-nav-item active" data-section="overview">Visão geral</button>
+      <button class="client-nav-item" data-section="projects">Meus projetos</button>
+      <button class="client-nav-item" data-section="leads">Leads</button>
+      <button class="client-nav-item" data-section="account">Minha conta</button>
+    </nav>
+    <button class="client-logout" id="logout-btn">Sair</button>
+  </aside>
+  <main class="client-main">
+    <header class="client-header"><div><p class="eyebrow">V8 ADMIN UNIVERSAL</p><h1 id="page-title">Visão geral</h1><p id="page-subtitle">Acompanhe seus projetos e informações.</p></div><button class="btn btn-ghost" id="refresh-btn">Atualizar</button></header>
+
+    <section class="client-section active" id="section-overview">
+      <div class="client-stats"><article class="client-stat"><span>Projetos</span><strong id="stat-projects">0</strong></article><article class="client-stat"><span>Leads</span><strong id="stat-leads">0</strong></article><article class="client-stat"><span>Status</span><strong id="stat-status">Ativo</strong></article></div>
+      <div class="client-panel"><div class="panel-heading"><div><h2>Seus projetos</h2><p>Projetos vinculados à sua conta.</p></div><button class="btn btn-primary btn-sm" data-go="projects">Ver projetos</button></div><div id="overview-projects" class="project-grid"></div></div>
+    </section>
+
+    <section class="client-section" id="section-projects">
+      <div class="client-panel"><div class="panel-heading"><div><h2>Meus projetos</h2><p>Visualize e edite somente os projetos liberados para sua conta.</p></div></div><div id="projects-list" class="project-grid"></div></div>
+      <div class="client-panel hidden" id="project-editor-panel"><div class="panel-heading"><div><h2 id="editor-title">Editar projeto</h2><p>Altere apenas os campos permitidos pela sua conta.</p></div><button class="btn btn-ghost btn-sm" id="close-editor">Fechar</button></div><div id="project-editor"></div></div>
+    </section>
+
+    <section class="client-section" id="section-leads">
+      <div class="client-panel"><div class="panel-heading"><div><h2>Leads</h2><p>Contatos recebidos pelos seus projetos.</p></div></div><div class="table-wrap client-table-wrap"><table><thead><tr><th>Data</th><th>Nome</th><th>Contato</th><th>Projeto</th><th>Status</th></tr></thead><tbody id="leads-table"><tr><td colspan="5" class="muted-cell">Carregando...</td></tr></tbody></table></div></div>
+    </section>
+
+    <section class="client-section" id="section-account">
+      <div class="client-panel account-panel"><div class="panel-heading"><div><h2>Minha conta</h2><p>Atualize seus dados pessoais e sua senha.</p></div></div><form id="account-form"><div class="field"><label>Nome</label><input id="account-name" autocomplete="name"></div><div class="field"><label>E-mail de acesso</label><input id="account-email" type="email" readonly></div><div class="field"><label>Telefone</label><input id="account-phone" autocomplete="tel"></div><div class="field"><label>Nova senha</label><input id="account-password" type="password" minlength="8" placeholder="Deixe em branco para manter a atual" autocomplete="new-password"></div><div id="account-message" class="form-message hidden"></div><button class="btn btn-primary" type="submit">Salvar alterações</button></form></div>
+    </section>
+  </main>
+</div>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/client.js"></script>
+</body>
+</html>
