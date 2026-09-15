@@ -1,0 +1,13 @@
+# Secrets locais
+.dev.vars
+.env
+.env.*
+!.env.example
+
+# Cloudflare/local
+.wrangler/
+node_modules/
+
+# Sistema
+.DS_Store
+Thumbs.db
