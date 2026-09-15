@@ -82,9 +82,6 @@ const state = {
   leadsByProject:
     {},
 
-  dashboardStats:
-    null,
-
 };
 
 
@@ -287,7 +284,7 @@ document.addEventListener(
         "undefined"
       ) {
 
-        if (!(await Auth.requireAdmin())) return;
+        Auth.requireAuth();
 
       }
 
@@ -309,11 +306,8 @@ document.addEventListener(
       // PAINEL INICIAL
       // ----------------------------------------------------------
 
-      // Apenas alterna a seção. A renderização acontece depois que os dados
-      // forem carregados, evitando uma chamada prematura de /stats.
       switchSection(
-        "dashboard",
-        false
+        "dashboard"
       );
 
 
@@ -435,8 +429,7 @@ function setupMobileMenu() {
 // ================================================================
 
 function switchSection(
-  name,
-  shouldRender = true
+  name
 ) {
 
   state.section =
@@ -480,8 +473,6 @@ function switchSection(
       }
     );
 
-
-  if (!shouldRender) return;
 
   if (
     name ===
@@ -559,9 +550,6 @@ async function refreshAllData() {
       )
         ? projectsRes
         : [];
-
-    state.dashboardStats =
-      (statsRes && !statsRes.error) ? statsRes : null;
 
     state.leadsByProject =
       (statsRes && !statsRes.error && statsRes.leadsByProject) || {};
@@ -732,9 +720,30 @@ async function renderDashboard() {
   `;
 
 
-  // As estatísticas já são carregadas por refreshAllData().
-  // Reutilizamos o resultado para não fazer uma segunda requisição /stats.
-  const stats = state.dashboardStats;
+  let stats;
+
+
+  try {
+
+    stats =
+      await API.get(
+        "/api/dashboard/stats"
+      );
+
+
+  } catch (error) {
+
+    console.error(
+      "Erro ao buscar estatísticas:",
+      error
+    );
+
+
+    stats = {
+      error: true
+    };
+
+  }
 
 
   // --------------------------------------------------------------
@@ -784,10 +793,22 @@ async function renderDashboard() {
       </div>
 
 
-      <div class="stat-card"><div class="value">${Number(stats.PAGE || 0)}</div><div class="label">PAGE</div></div>
-      <div class="stat-card"><div class="value">${Number(stats.SITE || 0)}</div><div class="label">SITE</div></div>
-      <div class="stat-card"><div class="value">${Number(stats.LOJA || 0)}</div><div class="label">LOJA</div></div>
-      <div class="stat-card"><div class="value">${Number(stats.totalLeads || 0)}</div><div class="label">Leads recebidos</div></div>
+      <div class="stat-card">
+
+        <div class="value">
+
+          ${Number(
+            stats.totalLeads ||
+            0
+          )}
+
+        </div>
+
+        <div class="label">
+          Leads recebidos
+        </div>
+
+      </div>
 
     `;
 
@@ -1125,43 +1146,219 @@ function projectNameById(
 // MODAL CLIENTE
 // ================================================================
 
-function openClientModal(id = null) {
-  state.editingClientId = id;
-  const client = id ? state.clients.find(c => c.id === id) : {
-    name: "", email: "", phone: "", projectIds: [], status: "active",
-    permissions: ["projects", "content", "leads", "settings", "account"]
-  };
-  if (!client) return toast("Cliente não encontrado.", "error");
+function openClientModal(
+  id = null
+) {
 
-  const selectedIds = new Set(Array.isArray(client.projectIds) ? client.projectIds : (client.projectId ? [client.projectId] : []));
-  const permissions = Array.isArray(client.permissions) ? client.permissions : ["projects", "content", "leads", "settings", "account"];
-  const projectOptions = state.projects.map(p => `<option value="${escapeHtml(p.id)}" ${selectedIds.has(p.id) ? "selected" : ""}>${escapeHtml(p.name || p.id)}</option>`).join("");
-  const checked = key => permissions.includes("all") || permissions.includes(key) ? "checked" : "";
+  state.editingClientId =
+    id;
+
+
+  const client =
+    id
+
+      ? state.clients.find(
+          (c) =>
+            c.id === id
+        )
+
+      : {
+
+          name:
+            "",
+
+          email:
+            "",
+
+          phone:
+            "",
+
+          projectId:
+            ""
+
+        };
+
+
+  if (
+    !client
+  ) {
+
+    toast(
+      "Cliente não encontrado.",
+      "error"
+    );
+
+    return;
+
+  }
+
+
+  const projectOptions =
+    state.projects
+      .map(
+        (p) => `
+
+          <option
+            value="${escapeHtml(
+              p.id
+            )}"
+            ${
+              p.id ===
+              client.projectId
+                ? "selected"
+                : ""
+            }
+          >
+
+            ${escapeHtml(
+              p.name
+            )}
+
+          </option>
+
+        `
+      )
+      .join("");
+
 
   showModal(`
-    <div class="modal-header"><h2>${id ? "Editar cliente" : "Novo cliente"}</h2><button class="icon-btn" onclick="closeModal()">✕</button></div>
-    ${id ? `<div class="field"><label>ID do cliente</label><input value="${escapeHtml(id)}" readonly></div>` : ""}
-    <div class="field"><label>Nome</label><input id="client-name" value="${escapeHtml(client.name || "")}" autocomplete="name"></div>
-    <div class="field-row">
-      <div class="field"><label>E-mail de acesso</label><input id="client-email" type="email" value="${escapeHtml(client.email || "")}" autocomplete="username"></div>
-      <div class="field"><label>Telefone</label><input id="client-phone" value="${escapeHtml(client.phone || "")}" oninput="applyDigitsOnly(this)"></div>
+
+    <div class="modal-header">
+
+      <h2>
+
+        ${
+          id
+            ? "Editar cliente"
+            : "Novo cliente"
+        }
+
+      </h2>
+
+
+      <button
+        class="icon-btn"
+        onclick="closeModal()"
+      >
+        ✕
+      </button>
+
     </div>
-    <div class="field-row">
-      <div class="field"><label>${id ? "Nova senha (opcional)" : "Senha de acesso"}</label><input id="client-password" type="password" minlength="8" placeholder="Mínimo 8 caracteres" autocomplete="new-password"></div>
-      <div class="field"><label>Status</label><select id="client-status"><option value="active" ${client.status !== "inactive" ? "selected" : ""}>Ativo</option><option value="inactive" ${client.status === "inactive" ? "selected" : ""}>Bloqueado</option></select></div>
+
+
+    ${
+      id
+        ? `
+
+          <div class="field">
+
+            <label>
+              ID do cliente
+            </label>
+
+            <input
+              value="${escapeHtml(
+                id
+              )}"
+              readonly
+            >
+
+          </div>
+
+        `
+        : ""
+    }
+
+
+    <div class="field">
+
+      <label>
+        Nome
+      </label>
+
+      <input
+        id="client-name"
+        value="${escapeHtml(
+          client.name ||
+          ""
+        )}"
+      >
+
     </div>
-    <div class="field"><label>Projetos vinculados</label><select id="client-projects" multiple size="6">${projectOptions}</select><small class="field-help">Use Ctrl/Cmd para selecionar vários projetos.</small></div>
-    <div class="field"><label>Permissões da área do cliente</label>
-      <div class="permission-grid">
-        <label><input type="checkbox" value="projects" ${checked("projects")}> Ver projetos</label>
-        <label><input type="checkbox" value="content" ${checked("content")}> Editar conteúdo</label>
-        <label><input type="checkbox" value="leads" ${checked("leads")}> Ver leads</label>
-        <label><input type="checkbox" value="settings" ${checked("settings")}> Editar configurações</label>
-        <label><input type="checkbox" value="account" ${checked("account")}> Minha conta</label>
+
+
+    <div class="field-row">
+
+      <div class="field">
+
+        <label>
+          E-mail
+        </label>
+
+        <input
+          id="client-email"
+          value="${escapeHtml(
+            client.email ||
+            ""
+          )}"
+        >
+
       </div>
+
+
+      <div class="field">
+
+        <label>
+          Telefone
+        </label>
+
+        <input
+          id="client-phone"
+          value="${escapeHtml(
+            client.phone ||
+            ""
+          )}"
+          oninput="applyDigitsOnly(this)"
+        >
+
+      </div>
+
     </div>
-    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveClient()">${id ? "Salvar alterações" : "Criar acesso do cliente"}</button>
+
+
+    <div class="field">
+
+      <label>
+        Projeto vinculado
+      </label>
+
+
+      <select id="client-project">
+
+        <option value="">
+          — nenhum —
+        </option>
+
+        ${projectOptions}
+
+      </select>
+
+    </div>
+
+
+    <button
+      class="btn btn-primary"
+      style="
+        width:100%;
+        justify-content:center
+      "
+      onclick="saveClient()"
+    >
+      Salvar cliente
+    </button>
+
   `);
+
 }
 
 
@@ -1170,32 +1367,115 @@ function openClientModal(id = null) {
 // ================================================================
 
 async function saveClient() {
-  const projectSelect = $("client-projects");
-  const selectedProjectIds = Array.from(projectSelect?.selectedOptions || []).map(o => o.value);
-  const permissions = Array.from(document.querySelectorAll('.permission-grid input[type="checkbox"]:checked')).map(i => i.value);
-  const body = {
-    name: $("client-name")?.value.trim() || "",
-    email: $("client-email")?.value.trim() || "",
-    phone: $("client-phone")?.value.trim() || "",
-    status: $("client-status")?.value || "active",
-    projectIds: selectedProjectIds,
-    projectId: selectedProjectIds[0] || "",
-    permissions: permissions.length ? permissions : ["projects"]
-  };
-  const password = $("client-password")?.value || "";
-  if (password) body.password = password;
-  if (!body.name) return toast("Informe o nome do cliente.", "error");
-  if (!body.email) return toast("Informe o e-mail de acesso.", "error");
-  if (!state.editingClientId && password.length < 8) return toast("Defina uma senha com pelo menos 8 caracteres.", "error");
 
-  const res = state.editingClientId
-    ? await API.put("/api/data/clients", { id: state.editingClientId, ...body })
-    : await API.post("/api/data/clients", body);
-  if (res.error) return toast(res.message || "Erro ao salvar cliente.", "error");
+  const body = {
+
+    name:
+      $("client-name")
+        ?.value
+        .trim() ||
+      "",
+
+    email:
+      $("client-email")
+        ?.value
+        .trim() ||
+      "",
+
+    phone:
+      $("client-phone")
+        ?.value
+        .trim() ||
+      "",
+
+    projectId:
+      $("client-project")
+        ?.value ||
+      ""
+
+  };
+
+
+  if (
+    !body.name
+  ) {
+
+    return toast(
+      "Informe o nome do cliente.",
+      "error"
+    );
+
+  }
+
+
+  const res =
+    state.editingClientId
+
+      ? await API.put(
+          "/api/data/clients",
+          {
+            id:
+              state.editingClientId,
+
+            ...body
+          }
+        )
+
+      : await API.post(
+          "/api/data/clients",
+          body
+        );
+
+
+  if (
+    res.error
+  ) {
+
+    return toast(
+      res.message ||
+      "Erro ao salvar cliente.",
+      "error"
+    );
+
+  }
+
+
   closeModal();
-  toast("Cliente salvo com sucesso.");
-  await loadAllData();
-  renderCurrentSection();
+
+
+  toast(
+    "Cliente salvo com sucesso."
+  );
+
+
+  await refreshAllData();
+
+}
+
+
+// ================================================================
+// MODAL DE CONFIRMAÇÃO (substitui o confirm() nativo)
+// ================================================================
+
+function confirmModal(message, onConfirm, confirmLabel = "Confirmar") {
+  showModal(`
+    <div class="confirm-modal">
+      <div class="modal-header">
+        <h2>Confirmar ação</h2>
+        <button class="icon-btn" onclick="closeModal()">✕</button>
+      </div>
+      <p>${escapeHtml(message)}</p>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-danger" id="confirm-modal-yes">${escapeHtml(confirmLabel)}</button>
+      </div>
+    </div>
+  `, "420px");
+
+  $("confirm-modal-yes").addEventListener("click", () => {
+    closeModal();
+    onConfirm();
+  });
 }
 
 
@@ -1361,7 +1641,6 @@ function renderProjects() {
 
           <th style="width:56px"></th>
           <th>Projeto</th>
-          <th>Tipo</th>
           <th>Status</th>
           <th></th>
 
@@ -1394,10 +1673,6 @@ function renderProjects() {
                     ${escapeHtml(p.name || "")}
                   </button>
                   ${getUnseenLeadsCount(p.id) > 0 ? `<span class="leads-badge" title="Leads novos">${getUnseenLeadsCount(p.id)}</span>` : ""}
-                </td>
-
-                <td data-label="Tipo">
-                  <span class="badge badge-muted">${escapeHtml(p.type || "SITE")}</span>
                 </td>
 
                 <td data-label="Status">
@@ -1511,7 +1786,6 @@ function openProjectViewPopup(id) {
       <button class="icon-btn" onclick="closeModal()">✕</button>
     </div>
 
-    <div class="view-row"><span class="k">Tipo</span><span class="v"><span class="badge badge-muted">${escapeHtml(project.type || "SITE")}</span></span></div>
     <div class="view-row"><span class="k">Status</span><span class="v"><span class="badge ${STATUS_BADGE[project.status] || "badge-muted"}">${escapeHtml(project.status || "—")}</span></span></div>
     <div class="view-row"><span class="k">WhatsApp</span><span class="v">${escapeHtml(project.contact?.whatsapp || "—")}</span></div>
     <div class="view-row"><span class="k">E-mail</span><span class="v">${escapeHtml(project.contact?.email || "—")}</span></div>
@@ -1786,16 +2060,6 @@ function openProjectModal(
 
 
       ${
-        id && draft.type === "LOJA"
-          ? `
-            <button class="tab" data-tab="products">Produtos</button>
-            <button class="tab" data-tab="categories">Categorias</button>
-            <button class="tab" data-tab="orders">Pedidos</button>
-          `
-          : ""
-      }
-
-      ${
         id
           ? `
 
@@ -1913,11 +2177,6 @@ function renderProjectTab() {
 
   }
 
-  draft.type =
-    ["PAGE", "SITE", "LOJA"].includes(draft.type)
-      ? draft.type
-      : "SITE";
-
 
   draft.tracking =
     draft.tracking ||
@@ -1959,14 +2218,6 @@ function renderProjectTab() {
 
       </div>
 
-
-      <div class="field">
-        <label for="p-type">Tipo de projeto</label>
-        <select id="p-type">
-          ${["PAGE","SITE","LOJA"].map(type => `<option value="${type}" ${draft.type === type ? "selected" : ""}>${type}${type === "PAGE" ? " — Landing Page" : type === "SITE" ? " — Site Institucional" : " — E-commerce"}</option>`).join("")}
-        </select>
-        <p class="meta" style="margin-top:6px">O tipo controla os recursos disponíveis. Projetos antigos são tratados como SITE.</p>
-      </div>
 
       <div class="field">
 
@@ -2564,14 +2815,6 @@ function renderProjectTab() {
 
 
   // ==============================================================
-  // E-COMMERCE
-  // ==============================================================
-
-  if (["products", "categories", "orders"].includes(state.projectTab)) {
-    renderStoreTab(el, state.projectTab, draft.id);
-  }
-
-  // ==============================================================
   // ACESSO
   // ==============================================================
 
@@ -2972,11 +3215,6 @@ async function saveProject() {
       "";
 
 
-    draft.type =
-      $("p-type")
-        ?.value ||
-      "SITE";
-
     draft.status =
       $("p-status")
         ?.value ||
@@ -3330,7 +3568,7 @@ function confirmDeleteProject(id) {
   const project = state.projects.find((p) => p.id === id);
   closeModal();
   confirmModal(
-    `Excluir "${project ? project.name : "este projeto"}"?\n\nLeads e links de cliente associados serão preservados. Essa ação não pode ser desfeita.`,
+    `Excluir "${project ? project.name : "este projeto"}"?\n\nIsso também remove leads e links de cliente associados. Essa ação não pode ser desfeita.`,
     () => deleteProject(id),
     "Excluir"
   );
@@ -4106,94 +4344,4 @@ function closeModal() {
 
   }
 
-}
-
-
-// ================================================================
-// E-COMMERCE — UI MVP
-// ================================================================
-
-async function renderStoreTab(el, kind, projectId) {
-  const labels = { products: "Produtos", categories: "Categorias", orders: "Pedidos" };
-  el.innerHTML = `<div class="loading">Carregando ${labels[kind].toLowerCase()}...</div>`;
-  const res = await API.get(`/api/store/${kind}/${encodeURIComponent(projectId)}`);
-  if (res.error) {
-    el.innerHTML = `<div class="empty-state">${escapeHtml(res.message || "Não foi possível carregar.")}</div>`;
-    return;
-  }
-  const items = Array.isArray(res) ? res : [];
-  const key = kind === "products" ? "product" : kind === "categories" ? "category" : "order";
-
-  if (kind === "products") {
-    el.innerHTML = `
-      <div class="form-section">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-          <div><h3>Produtos</h3><p class="meta">${items.length} cadastrado(s)</p></div>
-          <button class="btn btn-primary btn-sm" onclick="openStoreItemModal('${kind}','${projectId}')">+ Produto</button>
-        </div>
-      </div>
-      ${items.length ? `<div class="table-wrap"><table><thead><tr><th>Produto</th><th>Preço</th><th>Estoque</th><th>Status</th><th></th></tr></thead><tbody>
-      ${items.map(item => `<tr><td data-label="Produto">${escapeHtml(item.name)}</td><td data-label="Preço">R$ ${Number(item.salePrice ?? item.price).toFixed(2).replace(".", ",")}</td><td data-label="Estoque">${Number(item.stock || 0)}</td><td data-label="Status">${item.status === "active" ? "Ativo" : "Inativo"}</td><td><button class="btn btn-ghost btn-sm" onclick="openStoreItemModal('products','${projectId}','${item.id}')">Editar</button> <button class="btn btn-ghost btn-sm" onclick="deleteStoreItem('products','${projectId}','${item.id}')">Excluir</button></td></tr>`).join("")}
-      </tbody></table></div>` : `<div class="empty-state"><strong>Nenhum produto</strong>Cadastre o primeiro produto desta loja.</div>`}
-    `;
-    return;
-  }
-
-  if (kind === "categories") {
-    el.innerHTML = `
-      <div class="form-section">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-          <div><h3>Categorias</h3><p class="meta">${items.length} cadastrada(s)</p></div>
-          <button class="btn btn-primary btn-sm" onclick="openStoreItemModal('${kind}','${projectId}')">+ Categoria</button>
-        </div>
-      </div>
-      ${items.length ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead><tbody>${items.map(item => `<tr><td data-label="Nome">${escapeHtml(item.name)}</td><td data-label="Status">${item.status === "active" ? "Ativa" : "Inativa"}</td><td><button class="btn btn-ghost btn-sm" onclick="openStoreItemModal('categories','${projectId}','${item.id}')">Editar</button> <button class="btn btn-ghost btn-sm" onclick="deleteStoreItem('categories','${projectId}','${item.id}')">Excluir</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state"><strong>Nenhuma categoria</strong>Crie categorias para organizar os produtos.</div>`}
-    `;
-    return;
-  }
-
-  el.innerHTML = `
-    <div class="form-section"><h3>Pedidos</h3><p class="meta">${items.length} pedido(s)</p></div>
-    ${items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Cliente</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>${items.map(item => `<tr><td data-label="ID">${escapeHtml(item.id.slice(0,8))}…</td><td data-label="Cliente">${escapeHtml(item.customer?.name || "—")}</td><td data-label="Total">R$ ${Number(item.total || 0).toFixed(2).replace(".", ",")}</td><td data-label="Status">${escapeHtml(item.status)}</td><td><button class="btn btn-ghost btn-sm" onclick="openStoreItemModal('orders','${projectId}','${item.id}')">Editar</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty-state"><strong>Nenhum pedido</strong>Os pedidos poderão ser recebidos pela API da loja.</div>`}
-  `;
-}
-
-async function openStoreItemModal(kind, projectId, itemId = "") {
-  const res = await API.get(`/api/store/${kind}/${encodeURIComponent(projectId)}`);
-  const items = Array.isArray(res) ? res : [];
-  const item = items.find(x => x.id === itemId) || {};
-  const title = kind === "products" ? "Produto" : kind === "categories" ? "Categoria" : "Pedido";
-
-  let fields = "";
-  if (kind === "products") fields = `
-    <div class="field"><label>Nome</label><input id="store-name" value="${escapeHtml(item.name || "")}"></div>
-    <div class="field"><label>Descrição</label><textarea id="store-description" rows="3">${escapeHtml(item.description || "")}</textarea></div>
-    <div class="field-row"><div class="field"><label>Preço</label><input id="store-price" type="number" step="0.01" min="0" value="${item.price ?? 0}"></div><div class="field"><label>Preço promocional</label><input id="store-sale" type="number" step="0.01" min="0" value="${item.salePrice ?? ""}"></div></div>
-    <div class="field-row"><div class="field"><label>Estoque</label><input id="store-stock" type="number" min="0" value="${item.stock ?? 0}"></div><div class="field"><label>Imagem (URL)</label><input id="store-image" value="${escapeHtml(item.image || "")}"></div></div>
-    <label class="checkbox-row"><input id="store-featured" type="checkbox" ${item.featured ? "checked" : ""}> Destaque</label>`;
-  else if (kind === "categories") fields = `<div class="field"><label>Nome</label><input id="store-name" value="${escapeHtml(item.name || "")}"></div><label class="checkbox-row"><input id="store-active" type="checkbox" ${item.status !== "inactive" ? "checked" : ""}> Ativa</label>`;
-  else fields = `<div class="field"><label>Nome do cliente</label><input id="store-customer" value="${escapeHtml(item.customer?.name || "")}"></div><div class="field"><label>Total</label><input id="store-total" type="number" step="0.01" min="0" value="${item.total ?? 0}"></div><div class="field"><label>Status</label><select id="store-status">${["pending","confirmed","processing","completed","cancelled"].map(s => `<option ${item.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>`;
-
-  showModal(`<div class="modal-header"><h2>${itemId ? "Editar" : "Novo"} ${title}</h2><button class="icon-btn" onclick="closeModal()">✕</button></div>${fields}<button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveStoreItem('${kind}','${projectId}','${itemId}')">Salvar</button>`, "520px");
-}
-
-async function saveStoreItem(kind, projectId, itemId) {
-  let body = { id: itemId || undefined };
-  if (kind === "products") body = { ...body, name: $("store-name")?.value.trim(), description: $("store-description")?.value.trim(), price: Number($("store-price")?.value || 0), salePrice: $("store-sale")?.value === "" ? null : Number($("store-sale")?.value), stock: Number($("store-stock")?.value || 0), image: $("store-image")?.value.trim(), featured: Boolean($("store-featured")?.checked) };
-  else if (kind === "categories") body = { ...body, name: $("store-name")?.value.trim(), status: $("store-active")?.checked ? "active" : "inactive" };
-  else body = { ...body, customer: { name: $("store-customer")?.value.trim() }, total: Number($("store-total")?.value || 0), status: $("store-status")?.value || "pending", items: [] };
-
-  const res = await API.put(`/api/store/${kind}/${encodeURIComponent(projectId)}`, body);
-  if (res.error) return toast(res.message || "Erro ao salvar.", "error");
-  closeModal();
-  toast("Salvo com sucesso.");
-  renderStoreTab($("project-tab-content"), kind, projectId);
-}
-
-async function deleteStoreItem(kind, projectId, itemId) {
-  if (!confirm("Excluir este registro?")) return;
-  const res = await API.del(`/api/store/${kind}/${encodeURIComponent(projectId)}/${encodeURIComponent(itemId)}`);
-  if (res.error) return toast(res.message || "Erro ao excluir.", "error");
-  toast("Excluído.");
-  renderStoreTab($("project-tab-content"), kind, projectId);
 }
