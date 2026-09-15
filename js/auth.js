@@ -1,353 +1,92 @@
-// ================================================================
-// V8 ADMIN — Universal
-// Autenticação do administrador
-// ================================================================
-
+/* V8 ADMIN UNIVERSAL — autenticação universal ADMIN / CLIENTE */
 const Auth = {
+  TOKEN_KEY: "v8_auth_token",
+  EXPIRES_KEY: "v8_auth_expires",
+  USER_KEY: "v8_auth_user",
 
-  TOKEN_KEY: "v8_admin_token",
-  EXPIRES_KEY: "v8_admin_token_expires",
-
-  // --------------------------------------------------------------
-  // SALVAR SESSÃO
-  // --------------------------------------------------------------
-
-  saveSession(token, expiresAt) {
-
-    localStorage.setItem(
-      this.TOKEN_KEY,
-      token
-    );
-
-    localStorage.setItem(
-      this.EXPIRES_KEY,
-      String(expiresAt)
-    );
+  saveSession(token, expiresAt, user = null) {
+    localStorage.setItem(this.TOKEN_KEY, token);
+    localStorage.setItem(this.EXPIRES_KEY, String(expiresAt || 0));
+    if (user) localStorage.setItem(this.USER_KEY, JSON.stringify(user));
   },
 
-  // --------------------------------------------------------------
-  // VERIFICAR LOGIN
-  // --------------------------------------------------------------
-
+  getToken() { return localStorage.getItem(this.TOKEN_KEY) || ""; },
+  getUser() {
+    try { return JSON.parse(localStorage.getItem(this.USER_KEY) || "null"); }
+    catch { return null; }
+  },
   isLoggedIn() {
+    const token = this.getToken();
+    const expires = Number(localStorage.getItem(this.EXPIRES_KEY) || 0);
+    return Boolean(token) && Date.now() < expires;
+  },
+  clearSession() {
+    localStorage.removeItem(this.TOKEN_KEY);
+    localStorage.removeItem(this.EXPIRES_KEY);
+    localStorage.removeItem(this.USER_KEY);
+  },
+  logout() { this.clearSession(); window.location.href = "login.html"; },
 
-    const token =
-      localStorage.getItem(
-        this.TOKEN_KEY
-      );
-
-    const expires =
-      Number(
-        localStorage.getItem(
-          this.EXPIRES_KEY
-        ) || 0
-      );
-
-    return (
-      Boolean(token) &&
-      Date.now() < expires
-    );
+  requireAdmin() {
+    if (!this.isLoggedIn()) { window.location.href = "login.html"; return false; }
+    const user = this.getUser();
+    if (user?.role === "CLIENTE") { window.location.href = "cliente.html"; return false; }
+    return true;
   },
 
-  // --------------------------------------------------------------
-  // PEGAR TOKEN
-  // --------------------------------------------------------------
-
-  getToken() {
-
-    return localStorage.getItem(
-      this.TOKEN_KEY
-    );
-  },
-
-  // --------------------------------------------------------------
-  // LOGOUT
-  // --------------------------------------------------------------
-
-  logout() {
-
-    localStorage.removeItem(
-      this.TOKEN_KEY
-    );
-
-    localStorage.removeItem(
-      this.EXPIRES_KEY
-    );
-
-    window.location.href =
-      "login.html";
-  },
-
-  // --------------------------------------------------------------
-  // PROTEGER PÁGINA
-  // --------------------------------------------------------------
-
-  requireAuth() {
-
-    if (
-      !this.isLoggedIn()
-    ) {
-
-      window.location.href =
-        "login.html";
-
-      return false;
-    }
-
+  requireClient() {
+    if (!this.isLoggedIn()) { window.location.href = "login.html"; return false; }
+    const user = this.getUser();
+    if (user?.role === "ADMIN") { window.location.href = "index.html"; return false; }
     return true;
   }
-
 };
 
-
-// ================================================================
-// LOGIN
-// ================================================================
-
 async function handleLoginSubmit(event) {
-
   event.preventDefault();
+  const emailInput = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const errorBox = document.getElementById("auth-error");
+  const submitBtn = document.getElementById("login-submit");
+  if (!emailInput || !passwordInput || !errorBox || !submitBtn) return;
 
-  const emailInput =
-    document.getElementById("email");
-
-  const passwordInput =
-    document.getElementById("password");
-
-  const errorBox =
-    document.getElementById("auth-error");
-
-  const submitBtn =
-    document.getElementById("login-submit");
-
-
-  // --------------------------------------------------------------
-  // VERIFICA ELEMENTOS
-  // --------------------------------------------------------------
-
-  if (
-    !emailInput ||
-    !passwordInput ||
-    !errorBox ||
-    !submitBtn
-  ) {
-
-    console.error(
-      "Elementos do formulário de login não encontrados."
-    );
-
-    return;
-  }
-
-
-  const email =
-    emailInput.value.trim();
-
-  const password =
-    passwordInput.value;
-
-
-  // --------------------------------------------------------------
-  // LIMPA ERRO
-  // --------------------------------------------------------------
-
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
   errorBox.textContent = "";
+  errorBox.classList.add("hidden");
 
-  errorBox.classList.add(
-    "hidden"
-  );
-
-
-  // --------------------------------------------------------------
-  // VALIDAÇÃO
-  // --------------------------------------------------------------
-
-  if (!email) {
-
-    errorBox.textContent =
-      "Informe seu e-mail.";
-
-    errorBox.classList.remove(
-      "hidden"
-    );
-
-    emailInput.focus();
-
-    return;
-  }
-
-
-  if (!password) {
-
-    errorBox.textContent =
-      "Informe sua senha.";
-
-    errorBox.classList.remove(
-      "hidden"
-    );
-
-    passwordInput.focus();
-
-    return;
-  }
-
-
-  // --------------------------------------------------------------
-  // BOTÃO
-  // --------------------------------------------------------------
+  if (!email) { errorBox.textContent = "Informe seu e-mail."; errorBox.classList.remove("hidden"); emailInput.focus(); return; }
+  if (!password) { errorBox.textContent = "Informe sua senha."; errorBox.classList.remove("hidden"); passwordInput.focus(); return; }
 
   submitBtn.disabled = true;
-
-  submitBtn.textContent =
-    "Entrando...";
-
-
+  submitBtn.textContent = "Entrando...";
   try {
-
-    // ------------------------------------------------------------
-    // CHAMADA À API
-    // ------------------------------------------------------------
-
-    const res =
-      await API.postPublic(
-        "/api/login",
-        {
-          email,
-          password
-        }
-      );
-
-
-    console.log(
-      "Resposta do login:",
-      res
-    );
-
-
-    // ------------------------------------------------------------
-    // ERRO DA API
-    // ------------------------------------------------------------
-
-    if (
-      !res ||
-      res.error ||
-      !res.token
-    ) {
-
-      errorBox.textContent =
-        res?.message ||
-        "E-mail ou senha inválidos.";
-
-      errorBox.classList.remove(
-        "hidden"
-      );
-
+    const res = await API.postPublic("/api/login", { email, password });
+    if (!res || res.error || !res.token) {
+      errorBox.textContent = res?.message || "E-mail ou senha inválidos.";
+      errorBox.classList.remove("hidden");
       submitBtn.disabled = false;
-
-      submitBtn.textContent =
-        "Entrar";
-
+      submitBtn.textContent = "Entrar";
       return;
     }
-
-
-    // ------------------------------------------------------------
-    // EXPIRAÇÃO
-    // ------------------------------------------------------------
-
-    const expiresAt =
-      Number(
-        res.expiresAt || 0
-      );
-
-
-    if (
-      !expiresAt
-    ) {
-
-      console.error(
-        "A API não retornou expiresAt.",
-        res
-      );
-
-      errorBox.textContent =
-        "A API não retornou a validade da sessão.";
-
-      errorBox.classList.remove(
-        "hidden"
-      );
-
-      submitBtn.disabled = false;
-
-      submitBtn.textContent =
-        "Entrar";
-
-      return;
-    }
-
-
-    // ------------------------------------------------------------
-    // SALVA SESSÃO
-    // ------------------------------------------------------------
-
-    Auth.saveSession(
-      res.token,
-      expiresAt
-    );
-
-
-    // ------------------------------------------------------------
-    // REDIRECIONA
-    // ------------------------------------------------------------
-
-    window.location.href =
-      "index.html";
-
-  } catch (error) {
-
-    console.error(
-      "Erro durante login:",
-      error
-    );
-
-    errorBox.textContent =
-      "Não foi possível conectar ao servidor.";
-
-    errorBox.classList.remove(
-      "hidden"
-    );
-
+    Auth.saveSession(res.token, Number(res.expiresAt || 0), res.user || null);
+    window.location.href = res.user?.role === "CLIENTE" ? "cliente.html" : "index.html";
+  } catch {
+    errorBox.textContent = "Não foi possível conectar ao servidor.";
+    errorBox.classList.remove("hidden");
     submitBtn.disabled = false;
-
-    submitBtn.textContent =
-      "Entrar";
+    submitBtn.textContent = "Entrar";
   }
-
 }
 
-
-// ================================================================
-// LOGIN FORM
-// ================================================================
-
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-
-    const form =
-      document.getElementById(
-        "login-form"
-      );
-
-    if (!form) {
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("login-form");
+  if (form) {
+    if (Auth.isLoggedIn()) {
+      const user = Auth.getUser();
+      window.location.href = user?.role === "CLIENTE" ? "cliente.html" : "index.html";
       return;
     }
-
-
-    form.addEventListener(
-      "submit",
-      handleLoginSubmit
-    );
-
+    form.addEventListener("submit", handleLoginSubmit);
   }
-);
+});
