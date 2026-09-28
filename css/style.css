@@ -1005,3 +1005,6 @@ input:focus, select:focus, textarea:focus {
 .project-actions-menu button.danger { color: var(--danger); }
 
 .badge-danger { background: var(--danger-soft); color: var(--danger); }
+
+.row-clickable { cursor: pointer; }
+.row-clickable:hover { background: var(--bg-elevated); }
