@@ -263,15 +263,10 @@ async function requireAuth(
 ========================================================= */
 
 const CLIENT_EDITABLE_FIELDS = {
-    content: [
-        "name",
-        "job",
-        "headline",
-        "description",
-        "specialization",
-        "experience",
-        "address",
-        "registration"
+    tracking: [
+        "pixel",
+        "tag",
+        "analytics"
     ],
     contact: [
         "whatsapp",
@@ -285,16 +280,44 @@ const CLIENT_EDITABLE_FIELDS = {
         "youtube",
         "linkedin"
     ],
+    content: [
+        "name",
+        "job",
+        "headline",
+        "description",
+        "specialization",
+        "experience",
+        "address",
+        "registration"
+    ],
+    media: [
+        "galleryEnabled",
+        "galleryImages",
+        "videoEnabled",
+        "video"
+    ],
     location: [
         "enabled",
         "address",
-        "mapsUrl"
+        "mapsUrl",
+        "embed"
+    ],
+    reviews: [
+        "enabled",
+        "placeId"
     ],
     seo: [
         "title",
         "description",
         "ogImage",
-        "keywords"
+        "canonical",
+        "keywords",
+        "robots"
+    ],
+    scripts: [
+        "head",
+        "body",
+        "footer"
     ]
 };
 
@@ -308,6 +331,41 @@ const CLIENT_URL_FIELDS = new Set([
     "seo.ogImage"
 ]);
 
+/*
+ * Acesso por produto.
+ *
+ * Página = informações básicas + configurações + conteúdo.
+ * Site   = todas as opções atuais do projeto, exceto a própria concessão de acesso.
+ * Loja   = tudo do Site + o espaço reservado para recursos futuros de e-commerce.
+ *
+ * Os nomes dos escopos são estáveis de propósito: novos campos de e-commerce
+ * poderão ser adicionados depois sem precisar recriar a permissão da Loja.
+ */
+const CLIENT_ACCESS_SCOPES = {
+    page: [
+        "name", "status", "siteUrl",
+        "tracking", "contact", "social", "formspree", "content"
+    ],
+    site: [
+        "name", "status", "siteUrl",
+        "tracking", "contact", "social", "formspree", "content",
+        "media", "location", "reviews", "seo", "scripts"
+    ],
+    loja: [
+        "name", "status", "siteUrl",
+        "tracking", "contact", "social", "formspree", "content",
+        "media", "location", "reviews", "seo", "scripts",
+        "ecommerce"
+    ]
+};
+
+const CLIENT_ROOT_FIELDS = new Set([
+    "name",
+    "status",
+    "siteUrl",
+    "formspree"
+]);
+
 function sanitizeAccess(access) {
     const list =
         Array.isArray(access?.editable)
@@ -319,8 +377,16 @@ function sanitizeAccess(access) {
             return false;
         }
 
+        if (Object.prototype.hasOwnProperty.call(CLIENT_ACCESS_SCOPES, item)) {
+            return true;
+        }
+
         const [section, field] =
             item.split(".");
+
+        if (CLIENT_ROOT_FIELDS.has(section)) {
+            return field === undefined;
+        }
 
         const fields =
             CLIENT_EDITABLE_FIELDS[section];
@@ -336,8 +402,24 @@ function sanitizeAccess(access) {
     });
 
     return {
-        editable: [...new Set(valid)]
+        editable: [...new Set(valid)],
+        configured: access?.configured === true
     };
+}
+
+function expandClientAccess(access) {
+    const sanitized = sanitizeAccess(access);
+    const expanded = new Set();
+
+    for (const item of sanitized.editable) {
+        if (CLIENT_ACCESS_SCOPES[item]) {
+            CLIENT_ACCESS_SCOPES[item].forEach(value => expanded.add(value));
+        } else {
+            expanded.add(item);
+        }
+    }
+
+    return expanded;
 }
 
 async function clientUpdateProject(
@@ -367,8 +449,7 @@ async function clientUpdateProject(
     }
 
     const editable =
-        sanitizeAccess(project.access)
-            .editable;
+        expandClientAccess(project.access);
 
     const body =
         await readJson(request);
@@ -376,6 +457,33 @@ async function clientUpdateProject(
     const changes = {};
     let applied = 0;
     let blocked = 0;
+
+    /* Campos de nível do projeto. */
+    for (const field of CLIENT_ROOT_FIELDS) {
+        if (!(field in body)) continue;
+
+        const allowed =
+            editable.has(field);
+
+        if (!allowed) {
+            blocked++;
+            continue;
+        }
+
+        let value = String(body[field] ?? "")
+            .trim()
+            .slice(0, 5000);
+
+        if (field === "siteUrl" && value && !/^https?:\/\//i.test(value)) {
+            return json({
+                success: false,
+                error: "Informe um link começando com http:// ou https://."
+            }, 400, origin);
+        }
+
+        changes[field] = value;
+        applied++;
+    }
 
     for (
         const [section, fields]
@@ -402,8 +510,8 @@ async function clientUpdateProject(
                 `${section}.${field}`;
 
             const allowed =
-                editable.includes(section) ||
-                editable.includes(path);
+                editable.has(section) ||
+                editable.has(path);
 
             if (!allowed) {
                 blocked++;
@@ -413,11 +521,15 @@ async function clientUpdateProject(
             let value;
 
             if (
-                section === "location" &&
-                field === "enabled"
+                (section === "location" && field === "enabled") ||
+                (section === "reviews" && field === "enabled") ||
+                (section === "media" && (field === "galleryEnabled" || field === "videoEnabled"))
             ) {
-                value =
-                    !!incoming[field];
+                value = !!incoming[field];
+            } else if (section === "media" && field === "galleryImages") {
+                value = Array.isArray(incoming[field])
+                    ? incoming[field].map(v => String(v ?? "").trim()).filter(Boolean).slice(0, 100)
+                    : [];
             } else {
                 value =
                     String(
@@ -547,6 +659,11 @@ function normalizeProject(
     const scripts =
         data.scripts ??
         existing.scripts ??
+        {};
+
+    const ecommerce =
+        data.ecommerce ??
+        existing.ecommerce ??
         {};
 
     const access =
@@ -698,6 +815,11 @@ function normalizeProject(
             footer:
                 scripts.footer || ""
         },
+
+        /* Espaço reservado para os módulos futuros de e-commerce. */
+        ecommerce: ecommerce && typeof ecommerce === "object"
+            ? ecommerce
+            : {},
 
         createdAt:
             data.createdAt ||
@@ -1185,7 +1307,8 @@ function projectConfig(project) {
         location: project.location,
         seo: project.seo,
         access: project.access,
-        scripts: project.scripts
+        scripts: project.scripts,
+        ecommerce: project.ecommerce
     };
 }
 
