@@ -202,22 +202,38 @@ button {
 }
 
 .stat-card {
+  display: block;
+  width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 18px 20px;
+  padding: 20px;
+  text-align: left;
+  font-family: inherit;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .08);
+}
+
+.stat-card-click {
+  cursor: pointer;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.stat-card-click:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .stat-card .value {
+  display: block;
   font-family: var(--font-display);
   font-size: 28px;
   font-weight: 700;
 }
 
 .stat-card .label {
+  display: block;
   color: var(--text-muted);
-  font-size: 12.5px;
-  margin-top: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
 }
 
 .section-title {
