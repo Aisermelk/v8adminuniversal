@@ -1445,6 +1445,12 @@ async function d1CreateLead(
         return null;
     }
 
+    const metadata = { ...(data.metadata || {}) };
+    for (const key of ["status", "source", "notes", "nextContact", "assignedTo"]) {
+        if (key in data) metadata[key] = String(data[key] ?? "").trim().slice(0, 5000);
+    }
+    if ("value" in data) metadata.value = Math.max(0, Number(data.value || 0));
+    if ("tags" in data) metadata.tags = Array.isArray(data.tags) ? data.tags.map(v => String(v).trim()).filter(Boolean).slice(0, 30) : [];
     const lead = {
         id: uuid(),
         projectId,
@@ -1452,7 +1458,7 @@ async function d1CreateLead(
         email: data.email || "",
         phone: data.phone || "",
         message: data.message || "",
-        metadata: data.metadata || {},
+        metadata,
         createdAt: now()
     };
 
@@ -3183,7 +3189,7 @@ async function router(
             ROUTES.publicConfig
         );
 
-    if (match && (method === "GET" || method === "POST")) {
+    if (match && method === "GET") {
         return publicConfig(
             env,
             match[1],
@@ -3470,7 +3476,7 @@ async function router(
 
     if (
         match &&
-        method === "GET"
+        (method === "GET" || method === "POST")
     ) {
         const projectId =
             match[1];
@@ -3499,8 +3505,13 @@ async function router(
         }
 
         if (method === "POST") {
-            if (user.type !== "admin") return json({ success: false, error: "Acesso restrito ao administrador." }, 403, origin);
-            const created = await d1CreateLead(env, projectId, await readJson(request));
+            if (user.type === "client" && !hasClientModuleAccess(project, "leads")) {
+                return json({ success: false, error: "Acesso a Leads não liberado para este projeto." }, 403, origin);
+            }
+            if (user.type !== "admin" && user.type !== "client") return json({ success: false, error: "Acesso restrito." }, 403, origin);
+            const body = await readJson(request);
+            if (user.type === "client") body.metadata = { ...(body.metadata || {}), source: body.metadata?.source || "manual" };
+            const created = await d1CreateLead(env, projectId, body);
             return json({ success: true, lead: rowToLead({ ...created, project_id: created.projectId, metadata_json: JSON.stringify(created.metadata), created_at: created.createdAt }) }, 201, origin);
         }
 
@@ -3516,10 +3527,12 @@ async function router(
 
     const leadItemMatch = path.match(ROUTES.leadItem);
     if (leadItemMatch) {
-        if (user.type !== "admin") return json({ success: false, error: "Acesso restrito ao administrador." }, 403, origin);
         const [, projectId, leadId] = leadItemMatch;
         const project = await d1GetProject(env, projectId);
         if (!project) return json({ success: false, error: "Projeto não encontrado." }, 404, origin);
+        if (user.type !== "admin" && !(user.type === "client" && hasClientModuleAccess(project, "leads"))) {
+            return json({ success: false, error: "Acesso a Leads não liberado para este projeto." }, 403, origin);
+        }
         if (method === "GET") {
             const result = await env.V8_D1.prepare(`SELECT * FROM leads WHERE id=? AND project_id=? LIMIT 1`).bind(leadId, projectId).first();
             return result ? json({ success: true, lead: rowToLead(result) }, 200, origin) : json({ success: false, error: "Lead não encontrado." }, 404, origin);
@@ -3529,6 +3542,7 @@ async function router(
             return updated ? json({ success: true, lead: updated }, 200, origin) : json({ success: false, error: "Lead não encontrado." }, 404, origin);
         }
         if (method === "DELETE") {
+            if (user.type !== "admin") return json({ success: false, error: "Exclusão de lead restrita ao administrador." }, 403, origin);
             return json({ success: await d1DeleteLead(env, projectId, leadId) }, 200, origin);
         }
     }
