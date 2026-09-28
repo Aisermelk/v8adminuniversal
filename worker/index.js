@@ -561,7 +561,10 @@ function rowToProject(
             {}
         );
 
+    // Os campos da linha do banco vêm por último para que um "id" ou
+    // "name" antigo dentro do config_json (migração do KV) nunca os sobrescreva.
     const project = {
+        ...config,
         id: row.id,
         clientId: row.client_id,
         name: row.name,
@@ -569,7 +572,6 @@ function rowToProject(
         order: row.project_order,
         projectOrder: row.project_order,
         siteUrl: row.site_url,
-        ...config,
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
