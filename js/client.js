@@ -210,8 +210,10 @@
   function allowedFields(project) {
     const scopes = projectScopes(project);
     const list = [];
+    // "Informações básicas" (nome, status, URL do site) nunca é editável pelo
+    // cliente, mesmo com o módulo Configuração liberado — só o administrador edita.
     if (scopes.configuracao) {
-      ["general", "tracking", "contact", "social"].forEach(section => Object.keys(FIELD_CATALOG[section]?.fields || {}).forEach(field => list.push([section, field])));
+      ["tracking", "contact", "social"].forEach(section => Object.keys(FIELD_CATALOG[section]?.fields || {}).forEach(field => list.push([section, field])));
     }
     Object.entries(FIELD_CATALOG).forEach(([section, info]) => {
       if (section === "general" || section === "tracking" || section === "contact" || section === "social") return;
