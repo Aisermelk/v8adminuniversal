@@ -66,15 +66,67 @@
 
   async function loadLeads() {
     state.leads = [];
-    if (!can("leads")) return;
+    if (!can("leads")) {
+      $("stat-leads").textContent = "0";
+      return;
+    }
     for (const project of state.projects) {
       if (!hasModule(project, "leads")) continue;
       const res = await API.get(`/api/data/leads/${encodeURIComponent(project.id)}`);
       const list = Array.isArray(res) ? res : res?.leads;
-      if (Array.isArray(list)) state.leads.push(...list.map(l => ({ ...l, projectName: project.name })));
+      if (Array.isArray(list)) state.leads.push(...list.map(l => ({ ...l, projectId: l.projectId || project.id, projectName: project.name })));
     }
     state.leads.sort((a,b) => new Date(b.createdAt||0)-new Date(a.createdAt||0));
-    $("#stat-leads").textContent = state.leads.length;
+    $("stat-leads").textContent = state.leads.length;
+  }
+
+  function renderLeads() {
+    const list = $("leads-list");
+    const add = $("client-add-lead");
+    if (!list) return;
+    const allowed = can("leads") && state.projects.some(p => hasModule(p, "leads"));
+    add?.classList.toggle("hidden", !allowed);
+    if (!allowed) { list.innerHTML = `<div class="empty-state"><strong>CRM não liberado</strong><p>O gerenciamento de leads não está liberado para sua conta.</p></div>`; return; }
+    if (!state.leads.length) { list.innerHTML = `<div class="empty-state"><strong>Nenhum lead</strong><p>Adicione manualmente um lead recebido pelo WhatsApp ou outro canal.</p></div>`; return; }
+    list.innerHTML = state.leads.map(lead => `
+      <div class="client-lead-row">
+        <strong>${esc(lead.name || "Lead sem nome")}</strong>
+        <button class="icon-btn" title="Editar lead" aria-label="Editar lead" data-edit-client-lead="${esc(lead.id)}" data-project-id="${esc(lead.projectId)}">✎</button>
+      </div>
+    `).join("");
+    list.querySelectorAll("[data-edit-client-lead]").forEach(btn => btn.addEventListener("click", () => openClientLeadEditor(btn.dataset.editClientLead, btn.dataset.projectId)));
+  }
+
+  function openClientLeadEditor(id = null, projectId = "") {
+    const lead = id ? state.leads.find(l => String(l.id) === String(id) && String(l.projectId) === String(projectId)) : null;
+    const projects = state.projects.filter(p => hasModule(p, "leads"));
+    if (!projects.length) return;
+    const selectedProject = projectId || projects[0].id;
+    showClientLeadModal(lead, selectedProject);
+  }
+
+  function showClientLeadModal(lead, projectId) {
+    const projects = state.projects.filter(p => hasModule(p, "leads"));
+    const options = projects.map(p => `<option value="${esc(p.id)}" ${String(p.id) === String(projectId) ? "selected" : ""}>${esc(p.name || "Projeto")}</option>`).join("");
+    const stages = [["novo","Novo"],["contato","Contato"],["qualificado","Qualificado"],["proposta","Proposta"],["ganho","Ganho"],["perdido","Perdido"]];
+    const stageOptions = stages.map(([v,l]) => `<option value="${v}" ${(lead?.status || "novo") === v ? "selected" : ""}>${l}</option>`).join("");
+    const content = `<div class="crm-detail client-crm-detail"><div class="crm-detail-head"><div><p class="eyebrow">CRM</p><h2>${lead ? "Editar lead" : "Adicionar lead"}</h2><p>Cadastre contatos recebidos manualmente.</p></div></div><div class="crm-form-grid"><label>Projeto<select id="client-lead-project" ${lead ? "disabled" : ""}>${options}</select></label><label>Nome<input id="client-lead-name" value="${esc(lead?.name || "")}" required></label><label>Telefone<input id="client-lead-phone" value="${esc(lead?.phone || "")}"></label><label>E-mail<input id="client-lead-email" type="email" value="${esc(lead?.email || "")}"></label><label>Status<select id="client-lead-status">${stageOptions}</select></label><label>Valor potencial<input id="client-lead-value" type="number" min="0" step="0.01" value="${esc(lead?.value || 0)}"></label><label class="crm-full">Observações<textarea id="client-lead-notes">${esc(lead?.notes || lead?.message || "")}</textarea></label></div><div class="modal-actions modal-save-bar"><button class="btn btn-primary modal-save-floating" id="client-lead-save">${lead ? "Salvar alterações" : "Adicionar lead"}</button></div></div>`;
+    const overlay = document.createElement("div"); overlay.id = "client-lead-modal"; overlay.className = "modal-overlay"; overlay.innerHTML = `<div class="modal" style="max-width:680px"><button class="modal-close" id="client-lead-close" aria-label="Fechar">×</button>${content}</div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+    $("client-lead-close").onclick = () => overlay.remove();
+    $("client-lead-save").onclick = async () => {
+      const btn = $("client-lead-save"); btn.disabled = true; btn.textContent = "Salvando...";
+      try {
+        const pid = $("client-lead-project").value;
+        const body = { name: $("client-lead-name").value.trim(), phone: $("client-lead-phone").value.trim(), email: $("client-lead-email").value.trim(), message: $("client-lead-notes").value.trim(), status: $("client-lead-status").value, value: Number($("client-lead-value").value || 0), notes: $("client-lead-notes").value.trim(), source: "manual" };
+        if (!body.name) { alert("Informe o nome do lead."); return; }
+        const res = lead ? await API.put(`/api/data/leads/${encodeURIComponent(pid)}/${encodeURIComponent(lead.id)}`, body) : await API.post(`/api/data/leads/${encodeURIComponent(pid)}`, body);
+        if (res?.error || res?.success === false) throw new Error(res?.error || res?.message || "Não foi possível salvar o lead.");
+        overlay.remove(); await loadLeads(); renderLeads(); renderOverview();
+      } catch (e) { alert(e.message || "Não foi possível salvar o lead."); }
+      finally { btn.disabled = false; btn.textContent = lead ? "Salvar alterações" : "Adicionar lead"; }
+    };
   }
 
   function projectCard(p) {
@@ -95,35 +147,6 @@
     bindProjectButtons();
   }
 
-  function renderLeads() {
-    const tbody = $("leads-table");
-    if (!state.projects.some(p => hasModule(p, "leads"))) { tbody.innerHTML = `<tr><td colspan="5" class="muted-cell">A visualização de leads não está liberada para nenhum projeto.</td></tr>`; return; }
-    if (!state.leads.length) { tbody.innerHTML = `<tr><td colspan="5" class="muted-cell">Nenhum lead recebido ainda.</td></tr>`; return; }
-
-    const grouped = new Map();
-    state.leads.forEach(lead => {
-      const key = String(lead.projectId || "sem-projeto");
-      if (!grouped.has(key)) grouped.set(key, { name: lead.projectName || "Sem projeto", leads: [] });
-      grouped.get(key).leads.push(lead);
-    });
-
-    tbody.innerHTML = [...grouped.values()].flatMap(group => [
-      `<tr class="client-lead-project"><td colspan="5"><strong>${esc(group.name)}</strong><span>${group.leads.length} lead${group.leads.length === 1 ? "" : "s"}</span></td></tr>`,
-      ...group.leads.map(l => `<tr><td>${formatDate(l.createdAt)}</td><td>${esc(l.name || "—")}</td><td>${esc(l.email || l.phone || "—")}</td><td>${esc(l.projectName || "—")}</td><td>${esc(l.status || "new")}</td></tr>`)
-    ]).join("");
-  }
-
-  function formatDate(v) { const d = new Date(v); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" }); }
-
-  function flattenObject(obj, prefix = "", out = []) {
-    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return out;
-    Object.entries(obj).forEach(([key, value]) => {
-      const path = prefix ? `${prefix}.${key}` : key;
-      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") out.push({ path, value });
-      else if (value && typeof value === "object" && !Array.isArray(value)) flattenObject(value, path, out);
-    });
-    return out;
-  }
 
   function setPath(obj, path, value) {
     const keys = path.split("."); let cur = obj;
@@ -256,32 +279,15 @@
 
   function showFatal(msg) { document.querySelector(".client-main").innerHTML = `<div class="client-panel"><h2>Não foi possível carregar</h2><p>${esc(msg)}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></div>`; }
 
-  function applyClientTheme() {
-    const theme = localStorage.getItem("v8_client_theme") || localStorage.getItem("v8_theme") || "dark";
-    document.documentElement.setAttribute("data-theme", theme);
-    const toggle = $("client-theme-toggle");
-    if (toggle) toggle.checked = theme === "light";
-  }
-
-  function setupClientTheme() {
-    const toggle = $("client-theme-toggle");
-    if (!toggle) return;
-    toggle.addEventListener("change", () => {
-      const theme = toggle.checked ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", theme);
-      localStorage.setItem("v8_client_theme", theme);
-      localStorage.setItem("v8_theme", theme);
-    });
-  }
 
   document.addEventListener("DOMContentLoaded", async () => {
     if (!Auth.requireClient()) return;
-    applyClientTheme();
-    setupClientTheme();
+    document.documentElement.setAttribute("data-theme", "dark");
     $$(".client-nav-item").forEach(b => b.addEventListener("click", () => switchSection(b.dataset.section)));
     $$('[data-go="projects"]').forEach(b => b.addEventListener("click", () => switchSection("projects")));
     $("#refresh-btn").addEventListener("click", load);
     $("#close-editor").addEventListener("click", () => $("#project-editor-panel").classList.add("hidden"));
+    $("#client-add-lead")?.addEventListener("click", () => openClientLeadEditor());
     $("#logout-btn").addEventListener("click", () => Auth.logout());
     $("#account-form").addEventListener("submit", saveAccount);
     $("#client-menu").addEventListener("click", () => $("#client-sidebar").classList.toggle("open"));
