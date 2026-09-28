@@ -84,10 +84,21 @@
   }
 
   function renderLeads() {
-    const tbody = $("#leads-table");
+    const tbody = $("leads-table");
     if (!can("leads")) { tbody.innerHTML = `<tr><td colspan="5" class="muted-cell">A visualização de leads não está liberada para sua conta.</td></tr>`; return; }
     if (!state.leads.length) { tbody.innerHTML = `<tr><td colspan="5" class="muted-cell">Nenhum lead recebido ainda.</td></tr>`; return; }
-    tbody.innerHTML = state.leads.map(l => `<tr><td>${formatDate(l.createdAt)}</td><td>${esc(l.name || "—")}</td><td>${esc(l.email || l.phone || "—")}</td><td>${esc(l.projectName || "—")}</td><td>${esc(l.status || "new")}</td></tr>`).join("");
+
+    const grouped = new Map();
+    state.leads.forEach(lead => {
+      const key = String(lead.projectId || "sem-projeto");
+      if (!grouped.has(key)) grouped.set(key, { name: lead.projectName || "Sem projeto", leads: [] });
+      grouped.get(key).leads.push(lead);
+    });
+
+    tbody.innerHTML = [...grouped.values()].flatMap(group => [
+      `<tr class="client-lead-project"><td colspan="5"><strong>${esc(group.name)}</strong><span>${group.leads.length} lead${group.leads.length === 1 ? "" : "s"}</span></td></tr>`,
+      ...group.leads.map(l => `<tr><td>${formatDate(l.createdAt)}</td><td>${esc(l.name || "—")}</td><td>${esc(l.email || l.phone || "—")}</td><td>${esc(l.projectName || "—")}</td><td>${esc(l.status || "new")}</td></tr>`)
+    ]).join("");
   }
 
   function formatDate(v) { const d = new Date(v); return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" }); }
@@ -107,49 +118,55 @@
     keys.forEach((key, i) => { if (i === keys.length - 1) cur[key] = value; else { if (!cur[key] || typeof cur[key] !== "object" || Array.isArray(cur[key])) cur[key] = {}; cur = cur[key]; } });
   }
 
-  // Campos que o administrador pode liberar (mesmo catálogo do painel)
+  // Catálogo completo do editor. Os escopos Página/Site/Loja determinam o que aparece.
   const FIELD_CATALOG = {
-    content: {
-      label: "Conteúdo",
-      fields: {
-        name: "Nome", job: "Profissão / cargo", headline: "Título principal",
-        description: "Descrição", specialization: "Especialização",
-        experience: "Experiência", address: "Endereço", registration: "Registro profissional"
-      }
-    },
+    general: { label: "Informações básicas", fields: { name: "Nome", status: "Status", siteUrl: "URL do site" } },
+    tracking: { label: "Configurações / Tracking", fields: { pixel: "Meta Pixel", tag: "Google Tag / GTM", analytics: "Google Analytics" } },
     contact: { label: "Contato", fields: { whatsapp: "WhatsApp", email: "E-mail", phone: "Telefone" } },
-    social: {
-      label: "Redes sociais",
-      fields: { facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", linkedin: "LinkedIn" }
-    },
-    location: { label: "Localização", fields: { enabled: "Exibir mapa", address: "Endereço", mapsUrl: "Link do Google Maps" } },
-    seo: {
-      label: "SEO",
-      fields: { title: "Título", description: "Descrição", ogImage: "Imagem de compartilhamento", keywords: "Palavras-chave" }
-    }
+    social: { label: "Redes sociais", fields: { facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", linkedin: "LinkedIn" } },
+    content: { label: "Conteúdo", fields: { name: "Nome", job: "Profissão / cargo", headline: "Título principal", description: "Descrição", specialization: "Especialização", experience: "Experiência", address: "Endereço", registration: "Registro profissional" } },
+    media: { label: "Mídia", fields: { galleryEnabled: "Ativar galeria", galleryImages: "Imagens da galeria", videoEnabled: "Ativar vídeo", video: "Vídeo" } },
+    location: { label: "Localização", fields: { enabled: "Exibir mapa", address: "Endereço", mapsUrl: "Link do Google Maps", embed: "Código do mapa" } },
+    reviews: { label: "Avaliações", fields: { enabled: "Ativar avaliações", placeId: "Google Place ID" } },
+    seo: { label: "SEO", fields: { title: "Título", description: "Descrição", ogImage: "Imagem de compartilhamento", canonical: "Canonical", keywords: "Palavras-chave", robots: "Robots" } },
+    scripts: { label: "Scripts", fields: { head: "Head", body: "Body", footer: "Footer" } }
   };
 
-  const LONG_FIELDS = new Set(["content.description", "content.experience", "seo.description", "seo.keywords"]);
+  const PAGE_SECTIONS = new Set(["general", "tracking", "contact", "social", "content"]);
+  const SITE_SECTIONS = new Set(Object.keys(FIELD_CATALOG));
+  const LONG_FIELDS = new Set(["content.description", "content.experience", "seo.description", "seo.keywords", "media.galleryImages", "location.embed", "scripts.head", "scripts.body", "scripts.footer"]);
+
+  function projectScopes(project) {
+    const editable = project?.access?.editable || [];
+    return { page: editable.includes("page") || editable.includes("site") || editable.includes("loja"), site: editable.includes("site") || editable.includes("loja"), loja: editable.includes("loja") };
+  }
 
   function allowedFields(project) {
     const editable = project?.access?.editable || [];
+    const scopes = projectScopes(project);
     const list = [];
     Object.entries(FIELD_CATALOG).forEach(([section, info]) => {
-      Object.keys(info.fields).forEach(field => {
-        if (editable.includes(section) || editable.includes(`${section}.${field}`)) list.push([section, field]);
-      });
+      const sectionAllowed = (scopes.page && PAGE_SECTIONS.has(section)) || (scopes.site && SITE_SECTIONS.has(section));
+      if (!sectionAllowed) return;
+      Object.keys(info.fields).forEach(field => list.push([section, field]));
     });
+    if (!list.length) {
+      Object.entries(FIELD_CATALOG).forEach(([section, info]) => Object.keys(info.fields).forEach(field => {
+        if (editable.includes(section) || editable.includes(`${section}.${field}`)) list.push([section, field]);
+      }));
+    }
     return list;
   }
 
   function openEditor(id) {
     const p = state.projects.find(x => x.id === id); if (!p) return;
     const allowed = allowedFields(p);
+    const scopes = projectScopes(p);
     $("#project-editor-panel").classList.remove("hidden");
     $("#editor-title").textContent = `Editar — ${p.name || "Projeto"}`;
 
     if (!allowed.length) {
-      $("#project-editor").innerHTML = `<p class="muted-cell">Nenhum campo deste projeto foi liberado para edição.</p>`;
+      $("#project-editor").innerHTML = `<p class="muted-cell">Nenhum recurso foi liberado para este projeto.</p>`;
       return;
     }
 
@@ -158,10 +175,17 @@
       if (!fields.length) return "";
       const inputs = fields.map(([sec, field]) => {
         const label = info.fields[field];
-        const value = p[sec]?.[field];
+        const value = sec === "general" ? p[field] : p[sec]?.[field];
         const path = `${sec}.${field}`;
-        if (sec === "location" && field === "enabled") {
+        if (sec === "general" && field === "status") {
+          const options = ["Em produção", "Em desenvolvimento", "Pausado"];
+          return `<label>${esc(label)}<select data-section="${sec}" data-field="${field}">${options.map(v => `<option ${String(value || "") === v ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
+        }
+        if ((sec === "location" && field === "enabled") || (sec === "reviews" && field === "enabled") || (sec === "media" && (field === "galleryEnabled" || field === "videoEnabled"))) {
           return `<label><span><input type="checkbox" data-section="${sec}" data-field="${field}" ${value ? "checked" : ""}> ${esc(label)}</span></label>`;
+        }
+        if (field === "galleryImages") {
+          return `<label>${esc(label)}<textarea data-section="${sec}" data-field="${field}" placeholder="Uma URL por linha">${esc(Array.isArray(value) ? value.join("\n") : "")}</textarea></label>`;
         }
         if (LONG_FIELDS.has(path)) {
           return `<label>${esc(label)}<textarea data-section="${sec}" data-field="${field}">${esc(value || "")}</textarea></label>`;
@@ -171,25 +195,33 @@
       return `<div class="editor-group"><h3>${esc(info.label)}</h3><div class="editor-fields">${inputs}</div></div>`;
     }).join("");
 
-    $("#project-editor").innerHTML = `<div class="editor-grid">${groups}</div><p class="muted-cell">Os demais campos são gerenciados pelo administrador.</p><div class="editor-footer"><button class="btn btn-primary" id="save-project">Salvar alterações</button></div>`;
+    const lojaNote = scopes.loja ? `<div class="ecommerce-access-note"><strong>Loja</strong><span>Permissão preparada para os futuros módulos de e-commerce. Novos recursos poderão usar este mesmo acesso.</span></div>` : "";
+    $("#project-editor").innerHTML = `<div class="editor-grid">${groups}</div>${lojaNote}<p class="muted-cell">As opções não liberadas continuam ocultas para o cliente.</p><div class="editor-footer"><button class="btn btn-primary" id="save-project">Salvar alterações</button></div>`;
     $("#save-project").onclick = () => saveProject(p.id);
     $("#project-editor-panel").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function saveProject(id) {
     const body = {};
-    $$("#project-editor [data-section]").forEach(el => {
-      const section = el.dataset.section;
-      body[section] = body[section] || {};
-      body[section][el.dataset.field] = el.type === "checkbox" ? el.checked : el.value.trim();
+    $$("#project-editor [data-section][data-field]").forEach(input => {
+      const section = input.dataset.section;
+      const field = input.dataset.field;
+      let value;
+      if (input.type === "checkbox") value = input.checked;
+      else if (section === "media" && field === "galleryImages") value = input.value.split("\n").map(v => v.trim()).filter(Boolean);
+      else value = input.value;
+      if (section === "general") body[field] = value;
+      else { body[section] ||= {}; body[section][field] = value; }
     });
     const btn = $("#save-project"); btn.disabled = true; btn.textContent = "Salvando...";
-    const res = await API.put(`/api/client/projects/${encodeURIComponent(id)}`, body);
-    btn.disabled = false; btn.textContent = "Salvar alterações";
-    if (!res || res.success === false || res.error) return alert(res?.error || res?.message || "Não foi possível salvar.");
-    const index = state.projects.findIndex(p => p.id === id);
-    if (index >= 0 && res.project) state.projects[index] = res.project;
-    renderProjects(); renderOverview(); openEditor(id); alert("Alterações salvas com sucesso.");
+    try {
+      const res = await API.put(`/api/client/projects/${encodeURIComponent(id)}`, body);
+      if (!res || res.success === false || res.error) return alert(res?.error || res?.message || "Não foi possível salvar.");
+      const index = state.projects.findIndex(p => p.id === id);
+      if (index >= 0 && res.project) state.projects[index] = res.project;
+      renderProjects(); renderOverview(); openEditor(id); alert("Alterações salvas com sucesso.");
+    } catch (error) { console.error(error); alert("Erro ao salvar o projeto."); }
+    finally { btn.disabled = false; btn.textContent = "Salvar alterações"; }
   }
 
   function bindProjectButtons() { $$('[data-edit-project]').forEach(b => b.addEventListener("click", () => openEditor(b.dataset.editProject))); }
