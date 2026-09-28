@@ -1042,3 +1042,7 @@ input:focus, select:focus, textarea:focus {
 @media(max-width:720px){.client-access-modules{grid-template-columns:1fr}.crm-toolbar{align-items:stretch;flex-direction:column}.crm-filters{flex-direction:column;align-items:stretch}.crm-toolbar select{width:100%}.crm-form-grid{grid-template-columns:1fr}.crm-form-grid .crm-full{grid-column:auto}.crm-activity-add{flex-direction:column;align-items:stretch}}
 .project-row-actions{align-items:center;gap:6px}.project-row-actions .btn{display:inline-flex;align-items:center;gap:6px}.project-row-actions .icon-btn{width:34px;height:34px}
 @media(max-width:760px){.project-row-actions .btn span{display:none}.project-row-actions .btn{padding:7px 9px}}
+
+/* V8 PADRÃO — clientes e popups */
+.client-row-actions{align-items:center;gap:6px}.client-row-actions .btn{display:inline-flex;align-items:center;gap:6px}.client-row-actions .icon-btn{width:34px;height:34px}.modal-save-floating{position:sticky;bottom:0;z-index:5;box-shadow:0 -8px 20px rgba(0,0,0,.16),0 6px 16px rgba(79,107,255,.2)}.modal .modal-actions.modal-save-bar{position:sticky;bottom:-1px;z-index:4;margin:18px -2px -2px;padding:12px 2px 2px;background:linear-gradient(to bottom,transparent,var(--bg-card) 25%);justify-content:flex-end}
+@media(max-width:760px){.client-row-actions .btn span{display:none}.client-row-actions .btn{padding:7px 9px}}
