@@ -16,6 +16,8 @@
 .client-lead-project td{background:var(--bg-elevated);border-top:1px solid var(--border);padding:11px 10px}.client-lead-project strong{font-size:12px}.client-lead-project span{float:right;font-size:10px;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:3px 7px}
 
 /* Tema e acabamento compartilhados com o Admin */
-.client-sidebar-footer{margin-top:auto;display:grid;gap:8px}.client-theme-toggle{display:flex;align-items:center;gap:8px;padding:9px 10px;color:var(--text-muted);font-size:11px;border:1px solid var(--border);border-radius:9px;background:var(--bg-elevated);cursor:pointer}.client-theme-toggle input{accent-color:var(--accent)}
+.client-sidebar-footer{margin-top:auto;display:grid;gap:8px}
 .client-logout{border-radius:9px!important;transition:transform .15s,background .15s!important}.client-logout:hover{transform:translateY(-1px)}
 .client-page .btn{border-radius:9px}.client-page .client-panel,.client-page .client-stat,.client-page .project-card{box-shadow:0 6px 22px rgba(0,0,0,.08)}
+
+.client-leads-list{display:grid;gap:6px}.client-lead-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:7px 10px 7px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-elevated)}.client-lead-row:hover{border-color:var(--accent)}.client-lead-row strong{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.client-lead-row .icon-btn{width:30px;height:30px;flex:0 0 30px}.client-crm-detail{padding-bottom:2px}.client-page .modal-save-bar{position:sticky;bottom:-1px;z-index:4;justify-content:flex-end;margin:18px -2px -2px;padding:12px 2px 2px;background:linear-gradient(to bottom,transparent,var(--bg-card) 25%)}
