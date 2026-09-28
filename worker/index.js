@@ -256,6 +256,250 @@ async function requireAuth(
    NORMALIZATION
    ========================================================= */
 
+/* =========================================================
+   PERMISSÕES DE EDIÇÃO DO CLIENTE
+   Só estes campos podem ser liberados pelo administrador.
+   Scripts, tracking, reviews, mídia e embed ficam sempre só com o admin.
+========================================================= */
+
+const CLIENT_EDITABLE_FIELDS = {
+    content: [
+        "name",
+        "job",
+        "headline",
+        "description",
+        "specialization",
+        "experience",
+        "address",
+        "registration"
+    ],
+    contact: [
+        "whatsapp",
+        "email",
+        "phone"
+    ],
+    social: [
+        "facebook",
+        "instagram",
+        "tiktok",
+        "youtube",
+        "linkedin"
+    ],
+    location: [
+        "enabled",
+        "address",
+        "mapsUrl"
+    ],
+    seo: [
+        "title",
+        "description",
+        "ogImage",
+        "keywords"
+    ]
+};
+
+const CLIENT_URL_FIELDS = new Set([
+    "social.facebook",
+    "social.instagram",
+    "social.tiktok",
+    "social.youtube",
+    "social.linkedin",
+    "location.mapsUrl",
+    "seo.ogImage"
+]);
+
+function sanitizeAccess(access) {
+    const list =
+        Array.isArray(access?.editable)
+            ? access.editable
+            : [];
+
+    const valid = list.filter(item => {
+        if (typeof item !== "string") {
+            return false;
+        }
+
+        const [section, field] =
+            item.split(".");
+
+        const fields =
+            CLIENT_EDITABLE_FIELDS[section];
+
+        if (!fields) {
+            return false;
+        }
+
+        return (
+            field === undefined ||
+            fields.includes(field)
+        );
+    });
+
+    return {
+        editable: [...new Set(valid)]
+    };
+}
+
+async function clientUpdateProject(
+    request,
+    env,
+    user,
+    projectId,
+    origin
+) {
+    const project =
+        await getProjectForUser(
+            env,
+            projectId,
+            user
+        );
+
+    if (!project) {
+        return json(
+            {
+                success: false,
+                error:
+                    "Projeto não encontrado."
+            },
+            404,
+            origin
+        );
+    }
+
+    const editable =
+        sanitizeAccess(project.access)
+            .editable;
+
+    const body =
+        await readJson(request);
+
+    const changes = {};
+    let applied = 0;
+    let blocked = 0;
+
+    for (
+        const [section, fields]
+        of Object.entries(
+            CLIENT_EDITABLE_FIELDS
+        )
+    ) {
+        const incoming =
+            body?.[section];
+
+        if (
+            !incoming ||
+            typeof incoming !== "object"
+        ) {
+            continue;
+        }
+
+        for (const field of fields) {
+            if (!(field in incoming)) {
+                continue;
+            }
+
+            const path =
+                `${section}.${field}`;
+
+            const allowed =
+                editable.includes(section) ||
+                editable.includes(path);
+
+            if (!allowed) {
+                blocked++;
+                continue;
+            }
+
+            let value;
+
+            if (
+                section === "location" &&
+                field === "enabled"
+            ) {
+                value =
+                    !!incoming[field];
+            } else {
+                value =
+                    String(
+                        incoming[field] ?? ""
+                    )
+                        .trim()
+                        .slice(0, 5000);
+
+                if (
+                    value &&
+                    CLIENT_URL_FIELDS.has(path) &&
+                    !/^https?:\/\//i.test(value)
+                ) {
+                    return json(
+                        {
+                            success: false,
+                            error:
+                                "Informe um link começando com http:// ou https://."
+                        },
+                        400,
+                        origin
+                    );
+                }
+            }
+
+            if (!changes[section]) {
+                changes[section] = {
+                    ...project[section]
+                };
+            }
+
+            changes[section][field] =
+                value;
+
+            applied++;
+        }
+    }
+
+    if (blocked && !applied) {
+        return json(
+            {
+                success: false,
+                error:
+                    "Você não tem permissão para editar estes campos."
+            },
+            403,
+            origin
+        );
+    }
+
+    if (!applied) {
+        return json(
+            {
+                success: true,
+                project,
+                applied: 0,
+                blocked
+            },
+            200,
+            origin
+        );
+    }
+
+    const updated =
+        await d1UpdateProject(
+            env,
+            projectId,
+            changes
+        );
+
+    return json(
+        {
+            success: true,
+            project: updated,
+            applied,
+            blocked
+        },
+        200,
+        origin
+    );
+}
+
 function normalizeProject(
     data = {},
     existing = {}
@@ -303,6 +547,11 @@ function normalizeProject(
     const scripts =
         data.scripts ??
         existing.scripts ??
+        {};
+
+    const access =
+        data.access ??
+        existing.access ??
         {};
 
     return {
@@ -435,6 +684,9 @@ function normalizeProject(
             robots:
                 seo.robots || ""
         },
+
+        access:
+            sanitizeAccess(access),
 
         scripts: {
             head:
@@ -932,6 +1184,7 @@ function projectConfig(project) {
         media: project.media,
         location: project.location,
         seo: project.seo,
+        access: project.access,
         scripts: project.scripts
     };
 }
@@ -2946,6 +3199,45 @@ async function router(
             request,
             env,
             user,
+            origin
+        );
+    }
+
+    /* =====================================================
+       CLIENT — EDITAR PROJETO (somente campos liberados)
+       ===================================================== */
+
+    const clientProjectMatch =
+        path.match(
+            /^\/api\/client\/projects\/([^/]+)$/
+        );
+
+    if (
+        clientProjectMatch &&
+        (
+            method === "PUT" ||
+            method === "POST"
+        )
+    ) {
+        if (user.type !== "client") {
+            return json(
+                {
+                    success: false,
+                    error:
+                        "Acesso restrito ao cliente."
+                },
+                403,
+                origin
+            );
+        }
+
+        return clientUpdateProject(
+            request,
+            env,
+            user,
+            decodeURIComponent(
+                clientProjectMatch[1]
+            ),
             origin
         );
     }
