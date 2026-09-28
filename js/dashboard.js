@@ -12,6 +12,7 @@ const state = {
   clientSearch: "",
   projectSearch: "",
   leadSearch: "",
+  crmProjectId: "",
   editingClientId: null,
   editingProjectId: null,
   projectTab: "geral",
@@ -70,6 +71,7 @@ function defaultProject() {
     reviews: {},
     seo: {},
     scripts: {},
+    ecommerce: {},
     formspree: ""
   };
 }
@@ -88,7 +90,8 @@ function normalizeProject(project = {}) {
     location: { ...base.location, ...(project.location || {}) },
     reviews: { ...base.reviews, ...(project.reviews || {}) },
     seo: { ...base.seo, ...(project.seo || {}) },
-    scripts: { ...base.scripts, ...(project.scripts || {}) }
+    scripts: { ...base.scripts, ...(project.scripts || {}) },
+    ecommerce: { ...base.ecommerce, ...(project.ecommerce || {}) }
   };
 }
 
@@ -102,6 +105,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     applyTheme();
     setupNavigation();
+    $("new-lead-btn")?.addEventListener("click", openNewLeadCRM);
     setupMobile();
     setupTheme();
 
@@ -261,49 +265,102 @@ function handleLeadSearch(value) {
   renderLeads();
 }
 
+const CRM_STAGES = [
+  ["novo", "Novo"], ["contato", "Contato"], ["qualificado", "Qualificado"],
+  ["proposta", "Proposta"], ["ganho", "Ganho"], ["perdido", "Perdido"]
+];
+
 function renderLeads() {
   const wrap = $("leads-table-wrap");
   if (!wrap) return;
-
   const search = (state.leadSearch || "").toLowerCase().trim();
-
-  const leads = [...state.leads]
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    .filter(lead =>
-      !search ||
-      String(lead.name || "").toLowerCase().includes(search) ||
-      String(lead.email || "").toLowerCase().includes(search) ||
-      String(lead.projectName || projectName(lead.projectId) || "").toLowerCase().includes(search)
-    );
-
-  if (!leads.length) {
-    wrap.innerHTML = `<div class="empty-state">Nenhum lead encontrado.</div>`;
-    return;
-  }
-
-  wrap.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Data</th>
-          <th>Nome</th>
-          <th>Contato</th>
-          <th>Projeto</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${leads.map(lead => `
-          <tr>
-            <td>${escapeHtml(formatLeadDate(lead.createdAt))}</td>
-            <td>${escapeHtml(lead.name || "—")}</td>
-            <td>${escapeHtml(lead.email || lead.phone || "—")}</td>
-            <td>${escapeHtml(lead.projectName || projectName(lead.projectId))}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  `;
+  const selected = state.crmProjectId;
+  const projects = [...state.projects].sort((a,b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
+  const leads = state.leads.filter(lead => {
+    if (selected && String(lead.projectId) !== String(selected)) return false;
+    const text = [lead.name, lead.email, lead.phone, lead.message, lead.projectName || projectName(lead.projectId), lead.status, ...(lead.tags || [])].join(" ").toLowerCase();
+    return !search || text.includes(search);
+  });
+  const counts = Object.fromEntries(CRM_STAGES.map(([k]) => [k, leads.filter(l => (l.status || "novo") === k).length]));
+  wrap.outerHTML = `<div id="leads-table-wrap" class="crm-shell">
+    <div class="crm-toolbar">
+      <div class="crm-filters"><select id="crm-project-filter" onchange="setCrmProject(this.value)"><option value="">Todos os projetos</option>${projects.map(p => `<option value="${escapeHtml(p.id)}" ${String(selected) === String(p.id) ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}</select><span class="crm-summary">${leads.length} lead${leads.length === 1 ? "" : "s"}</span></div>
+      <div class="crm-summary-value">Pipeline: <strong>${formatMoney(leads.reduce((n,l) => n + Number(l.value || 0), 0))}</strong></div>
+    </div>
+    <div class="crm-board">${CRM_STAGES.map(([key,label]) => `
+      <section class="crm-column crm-${key}"><header><div><strong>${label}</strong><span>${counts[key]}</span></div></header><div class="crm-dropzone">
+        ${leads.filter(l => (l.status || "novo") === key).map(crmLeadCard).join("") || `<div class="crm-empty">Nenhum lead</div>`}
+      </div></section>`).join("")}</div>
+  </div>`;
 }
+
+function crmLeadCard(lead) {
+  return `<article class="crm-lead-card" onclick="openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')">
+    <div class="crm-lead-top"><strong>${escapeHtml(lead.name || "Sem nome")}</strong><button class="icon-btn crm-card-action" onclick="event.stopPropagation();openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')" aria-label="Editar lead">✎</button></div>
+    <p>${escapeHtml(lead.email || lead.phone || "Sem contato")}</p>
+    <div class="crm-lead-meta">${lead.projectName ? `<span>${escapeHtml(lead.projectName)}</span>` : ""}${Number(lead.value || 0) ? `<span>${formatMoney(lead.value)}</span>` : ""}</div>
+    ${(lead.tags || []).slice(0,3).map(tag => `<span class="crm-tag">${escapeHtml(tag)}</span>`).join("")}
+    ${lead.nextContact ? `<small class="crm-next">Próximo contato: ${escapeHtml(lead.nextContact)}</small>` : ""}
+  </article>`;
+}
+
+function setCrmProject(value) { state.crmProjectId = value; renderLeads(); }
+window.setCrmProject = setCrmProject;
+function formatMoney(value) { return Number(value || 0).toLocaleString("pt-BR", { style:"currency", currency:"BRL" }); }
+
+function openNewLeadCRM() {
+  const projects = state.projects.map(p => `<option value="${escapeHtml(p.id)}" ${String(state.crmProjectId) === String(p.id) ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("");
+  showModal(`<div class="crm-detail"><div class="crm-detail-head"><div><p class="eyebrow">CRM</p><h2>Novo lead</h2><p>Cadastre manualmente um contato no projeto escolhido.</p></div></div>
+    <div class="crm-form-grid"><label class="crm-full">Projeto<select id="new-lead-project">${projects}</select></label><label>Nome<input id="new-lead-name"></label><label>E-mail<input id="new-lead-email" type="email"></label><label>Telefone<input id="new-lead-phone"></label><label>Valor potencial<input id="new-lead-value" type="number" min="0" step="0.01"></label><label class="crm-full">Mensagem<textarea id="new-lead-message"></textarea></label></div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="createLeadCRM()">Criar lead</button></div></div>`, "680px");
+}
+window.openNewLeadCRM = openNewLeadCRM;
+async function createLeadCRM() {
+  const projectId = $("new-lead-project")?.value; if (!projectId) return toast("Selecione um projeto.", "error");
+  const res = await API.post(`/api/data/leads/${encodeURIComponent(projectId)}`, { name: $("new-lead-name").value.trim(), email: $("new-lead-email").value.trim(), phone: $("new-lead-phone").value.trim(), message: $("new-lead-message").value.trim(), metadata: { status:"novo", value:Number($("new-lead-value").value || 0), source:"manual" } });
+  if (res?.error) return toast(res.error, "error");
+  closeModal(); await refreshData(); state.crmProjectId = projectId; renderLeads(); toast("Lead criado no CRM.");
+}
+window.createLeadCRM = createLeadCRM;
+
+function openLeadCRM(id, projectId) {
+  const lead = state.leads.find(l => String(l.id) === String(id) && String(l.projectId) === String(projectId));
+  if (!lead) return;
+  const stages = CRM_STAGES.map(([key,label]) => `<option value="${key}" ${(lead.status || "novo") === key ? "selected" : ""}>${label}</option>`).join("");
+  const activities = (lead.activities || []).map(a => `<div class="crm-activity"><strong>${escapeHtml(a.type || "nota")}</strong><span>${escapeHtml(formatLeadDate(a.at))}</span><p>${escapeHtml(a.text || "")}</p></div>`).join("") || `<div class="crm-empty">Nenhuma atividade registrada.</div>`;
+  showModal(`<div class="crm-detail"><div class="crm-detail-head"><div><p class="eyebrow">CRM · ${escapeHtml(lead.projectName || projectName(projectId))}</p><h2>${escapeHtml(lead.name || "Lead")}</h2><p>${escapeHtml(lead.email || "")} ${lead.phone ? "· " + escapeHtml(lead.phone) : ""}</p></div><span class="badge badge-success">${escapeHtml(lead.status || "novo")}</span></div>
+    <div class="crm-form-grid"><label>Status<select id="crm-status">${stages}</select></label><label>Valor potencial<input id="crm-value" type="number" min="0" step="0.01" value="${escapeHtml(lead.value || 0)}"></label><label>Origem<input id="crm-source" value="${escapeHtml(lead.source || "site")}"></label><label>Próximo contato<input id="crm-next" type="datetime-local" value="${escapeHtml(lead.nextContact || "")}"></label><label class="crm-full">Tags<input id="crm-tags" value="${escapeHtml((lead.tags || []).join(", "))}" placeholder="cliente, orçamento, urgente"></label><label class="crm-full">Observações<textarea id="crm-notes">${escapeHtml(lead.notes || "")}</textarea></label></div>
+    <div class="crm-activity-add"><textarea id="crm-activity-text" placeholder="Registrar uma nota, ligação, WhatsApp ou acompanhamento..."></textarea><button class="btn btn-ghost" onclick="addLeadActivity('${escapeHtml(id)}','${escapeHtml(projectId)}')">Adicionar atividade</button></div>
+    <div class="crm-history"><h3>Histórico</h3>${activities}</div>
+    <div class="modal-actions"><button class="btn btn-danger" onclick="deleteLeadCRM('${escapeHtml(id)}','${escapeHtml(projectId)}')">Excluir</button><button class="btn btn-primary" onclick="saveLeadCRM('${escapeHtml(id)}','${escapeHtml(projectId)}')">Salvar CRM</button></div></div>`, "760px");
+}
+window.openLeadCRM = openLeadCRM;
+
+async function saveLeadCRM(id, projectId) {
+  const body = { status: $("crm-status").value, value: $("crm-value").value, source: $("crm-source").value, nextContact: $("crm-next").value, notes: $("crm-notes").value, tags: $("crm-tags").value.split(",").map(v => v.trim()).filter(Boolean) };
+  const res = await API.put(`/api/data/leads/${encodeURIComponent(projectId)}/${encodeURIComponent(id)}`, body);
+  if (res?.error) return toast(res.error, "error");
+  const index = state.leads.findIndex(l => String(l.id) === String(id)); if (index >= 0) state.leads[index] = { ...state.leads[index], ...res.lead };
+  closeModal(); renderLeads(); toast("Lead atualizado.");
+}
+window.saveLeadCRM = saveLeadCRM;
+
+async function addLeadActivity(id, projectId) {
+  const text = $("crm-activity-text")?.value.trim(); if (!text) return toast("Escreva a atividade.", "error");
+  const res = await API.put(`/api/data/leads/${encodeURIComponent(projectId)}/${encodeURIComponent(id)}`, { activity: { type:"nota", text } });
+  if (res?.error) return toast(res.error, "error");
+  const index = state.leads.findIndex(l => String(l.id) === String(id)); if (index >= 0) state.leads[index] = { ...state.leads[index], ...res.lead };
+  openLeadCRM(id, projectId);
+}
+window.addLeadActivity = addLeadActivity;
+
+async function deleteLeadCRM(id, projectId) {
+  if (!confirm("Excluir este lead? Esta ação não pode ser desfeita.")) return;
+  const res = await API.del(`/api/data/leads/${encodeURIComponent(projectId)}/${encodeURIComponent(id)}`);
+  if (res?.error || !res?.success) return toast(res?.error || "Não foi possível excluir.", "error");
+  state.leads = state.leads.filter(l => String(l.id) !== String(id)); closeModal(); renderLeads(); toast("Lead excluído.");
+}
+window.deleteLeadCRM = deleteLeadCRM;
 
 function formatLeadDate(value) {
   const date = new Date(value);
@@ -318,61 +375,20 @@ function formatLeadDate(value) {
 
 async function renderDashboard() {
   const statsEl = $("dashboard-stats");
-  const recentEl = $("dashboard-recent-leads");
-
   if (!statsEl) return;
 
   let stats;
-
-  try {
-    stats = normalizeStats(await API.get("/api/dashboard/stats"));
-  } catch {
-    stats = {};
-  }
+  try { stats = normalizeStats(await API.get("/api/dashboard/stats")); } catch { stats = {}; }
 
   const clients = stats?.totalClients ?? state.clients.length;
   const projects = stats?.totalProjects ?? state.projects.length;
-  const leads = stats?.totalLeads ??
-    Object.values(state.leadsByProject).reduce(
-      (total, item) => total + Number(item?.count || 0),
-      0
-    );
+  const leads = stats?.totalLeads ?? Object.values(state.leadsByProject).reduce((total, item) => total + Number(item?.count || 0), 0);
 
   statsEl.innerHTML = `
-    <div class="stat-card">
-      <span>Clientes</span>
-      <strong>${clients}</strong>
-    </div>
-
-    <div class="stat-card">
-      <span>Projetos</span>
-      <strong>${projects}</strong>
-    </div>
-
-    <div class="stat-card">
-      <span>Leads</span>
-      <strong>${leads}</strong>
-    </div>
+    <div class="stat-card"><span>Clientes</span><strong>${clients}</strong></div>
+    <div class="stat-card"><span>Projetos</span><strong>${projects}</strong></div>
+    <div class="stat-card"><span>Leads</span><strong>${leads}</strong></div>
   `;
-
-  if (!recentEl) return;
-
-  const recent = Array.isArray(stats?.recentLeads)
-    ? stats.recentLeads
-    : [];
-
-  if (!recent.length) {
-    recentEl.innerHTML = `<div class="empty-state">Nenhum lead recente.</div>`;
-    return;
-  }
-
-  recentEl.innerHTML = recent.map(lead => `
-    <div class="lead-item">
-      <strong>${escapeHtml(lead.name || "Lead")}</strong>
-      <span>${escapeHtml(lead.email || "")}</span>
-      <small>${escapeHtml(projectName(lead.projectId))}</small>
-    </div>
-  `).join("");
 }
 
 /* =========================================================
@@ -666,11 +682,11 @@ function renderProjects() {
               </td>
 
               <td onclick="event.stopPropagation()">
-                <button
-                  class="btn btn-sm"
-                  onclick="openProjectActionsMenu(event,'${escapeHtml(project.id)}')">
-                  ⋮
-                </button>
+                <div class="row-actions project-row-actions">
+                  <button class="btn btn-primary btn-sm" title="Editar projeto" onclick="openProjectModal('${escapeHtml(project.id)}')">✎ <span>Editar</span></button>
+                  <button class="btn btn-ghost btn-sm" title="Abrir CRM do projeto" onclick="state.crmProjectId='${escapeHtml(project.id)}';switchSection('leads')">♙ <span>CRM</span></button>
+                  <button class="icon-btn" title="Mais opções" onclick="openProjectActionsMenu(event,'${escapeHtml(project.id)}')">⋯</button>
+                </div>
               </td>
             </tr>
           `;
@@ -1295,117 +1311,63 @@ function renderProjectScripts(el) {
    ABA — ACESSO
    ========================================================= */
 
-const CLIENT_PERMISSIONS = {
-  content: {
-    label: "Conteúdo (textos)",
-    fields: {
-      name: "Nome",
-      job: "Profissão / cargo",
-      headline: "Título principal",
-      description: "Descrição",
-      specialization: "Especialização",
-      experience: "Experiência",
-      address: "Endereço",
-      registration: "Registro profissional"
-    }
-  },
-  contact: {
-    label: "Contato",
-    fields: { whatsapp: "WhatsApp", email: "E-mail", phone: "Telefone" }
-  },
-  social: {
-    label: "Redes sociais",
-    fields: {
-      facebook: "Facebook",
-      instagram: "Instagram",
-      tiktok: "TikTok",
-      youtube: "YouTube",
-      linkedin: "LinkedIn"
-    }
-  },
-  location: {
-    label: "Localização",
-    fields: { enabled: "Exibir mapa", address: "Endereço", mapsUrl: "Link do Google Maps" }
-  },
-  seo: {
-    label: "SEO",
-    fields: {
-      title: "Título",
-      description: "Descrição",
-      ogImage: "Imagem de compartilhamento",
-      keywords: "Palavras-chave"
-    }
-  }
+const CLIENT_ACCESS_MODULES = {
+  configuracao: { label: "Configuração", description: "Informações básicas, tracking, contato e redes sociais.", icon: "⚙" },
+  content: { label: "Conteúdo", description: "Textos, apresentação, especialização e informações profissionais.", icon: "✦" },
+  media: { label: "Mídia", description: "Galeria, imagens e vídeos do projeto.", icon: "▧" },
+  location: { label: "Localização", description: "Endereço, mapa e informações de localização.", icon: "⌖" },
+  reviews: { label: "Reviews", description: "Avaliações e integração com Google Reviews.", icon: "★" },
+  seo: { label: "SEO", description: "Título, descrição, canonical, imagem e indexação.", icon: "◎" },
+  scripts: { label: "Scripts", description: "Códigos Head, Body e Footer.", icon: "</>" },
+  leads: { label: "Leads", description: "Visualização dos leads recebidos pelo projeto e CRM.", icon: "♙" }
 };
 
+function getAccessModules(p) {
+  const editable = Array.isArray(p?.access?.editable) ? p.access.editable : [];
+  if (!editable.length && p?.access?.configured !== true) {
+    return Object.fromEntries(Object.keys(CLIENT_ACCESS_MODULES).map(k => [k, true]));
+  }
+  if (editable.some(x => ["page", "site", "loja"].includes(x))) {
+    return {
+      configuracao: editable.some(x => ["page", "site", "loja"].includes(x)),
+      content: editable.some(x => ["page", "site", "loja"].includes(x)),
+      media: editable.some(x => ["site", "loja"].includes(x)),
+      location: editable.some(x => ["site", "loja"].includes(x)),
+      reviews: editable.some(x => ["site", "loja"].includes(x)),
+      seo: editable.some(x => ["site", "loja"].includes(x)),
+      scripts: editable.some(x => ["site", "loja"].includes(x)),
+      leads: editable.some(x => ["site", "loja"].includes(x))
+    };
+  }
+  return Object.fromEntries(Object.keys(CLIENT_ACCESS_MODULES).map(k => [k, editable.includes(k)]));
+}
+
 function renderClientPermissions(p) {
-  const editable = p.access?.editable || [];
-
+  const modules = getAccessModules(p);
   return `
-    <h3>O que o cliente pode editar</h3>
-
-    <p class="form-help">
-      Marque a seção inteira ou só os campos que deseja liberar.
-      Tudo o que ficar desmarcado só você edita.
-    </p>
-
-    ${Object.entries(CLIENT_PERMISSIONS).map(([section, info]) => {
-      const sectionOn = editable.includes(section);
-
-      return `
-        <div class="preview-box" style="margin-bottom:12px">
-          <label style="display:flex;gap:8px;align-items:center;margin:0">
-            <input
-              type="checkbox"
-              data-access-perm
-              data-access-section-toggle="${section}"
-              value="${section}"
-              ${sectionOn ? "checked" : ""}
-              onchange="toggleAccessSection('${section}', this.checked)">
-            <strong>${escapeHtml(info.label)} — liberar tudo</strong>
-          </label>
-
-          <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px">
-            ${Object.entries(info.fields).map(([field, label]) => `
-              <label style="display:flex;gap:6px;align-items:center;margin:0;font-weight:400">
-                <input
-                  type="checkbox"
-                  data-access-perm
-                  data-access-field="${section}"
-                  value="${section}.${field}"
-                  ${sectionOn || editable.includes(section + "." + field) ? "checked" : ""}
-                  ${sectionOn ? "disabled" : ""}>
-                ${escapeHtml(label)}
-              </label>
-            `).join("")}
-          </div>
-        </div>
-      `;
-    }).join("")}
-  `;
+    <div class="access-heading">
+      <div><h3>Acesso do cliente</h3><p class="form-help">Cada módulo é independente. O padrão é <strong>liberado</strong>; desmarque manualmente o que quiser bloquear.</p></div>
+      <span class="access-default-badge">ACESSO LIBERADO</span>
+    </div>
+    <div class="client-access-grid client-access-modules">
+      ${Object.entries(CLIENT_ACCESS_MODULES).map(([key, info]) => `
+        <label class="client-access-card ${modules[key] ? "is-on" : ""}">
+          <span class="client-access-check"><input type="checkbox" data-access-module="${key}" ${modules[key] ? "checked" : ""} onchange="toggleAccessModule('${key}', this.checked)"></span>
+          <span class="client-access-icon">${info.icon}</span>
+          <span class="client-access-copy"><strong>${escapeHtml(info.label)}</strong><small>${escapeHtml(info.description)}</small></span>
+          <span class="client-access-status">${modules[key] ? "Acesso liberado" : "Bloqueado"}</span>
+        </label>`).join("")}
+    </div>`;
 }
-
-function toggleAccessSection(section, on) {
-  document
-    .querySelectorAll(`[data-access-field="${section}"]`)
-    .forEach(input => {
-      input.checked = on;
-      input.disabled = on;
-    });
+function toggleAccessModule(module, on) {
+  const card = document.querySelector(`[data-access-module="${module}"]`)?.closest(".client-access-card");
+  card?.classList.toggle("is-on", on);
+  const status = card?.querySelector(".client-access-status");
+  if (status) status.textContent = on ? "Acesso liberado" : "Bloqueado";
 }
-
-window.toggleAccessSection = toggleAccessSection;
-
+window.toggleAccessModule = toggleAccessModule;
 function collectClientPermissions() {
-  const values = [...document.querySelectorAll("[data-access-perm]:checked")]
-    .filter(input => !input.disabled || input.dataset.accessSectionToggle)
-    .map(input => input.value);
-
-  const sections = new Set(values.filter(v => !v.includes(".")));
-
-  return {
-    editable: values.filter(v => !v.includes(".") || !sections.has(v.split(".")[0]))
-  };
+  return { editable: [...document.querySelectorAll("[data-access-module]:checked")].map(input => input.dataset.accessModule), configured: true };
 }
 
 function renderProjectAccess(el) {
