@@ -1412,7 +1412,9 @@ async function dashboardStats(
     const [
         clients,
         projects,
-        leads
+        leads,
+        byProject,
+        recent
     ] = await Promise.all([
         env.V8_D1
             .prepare(
@@ -1434,22 +1436,55 @@ async function dashboardStats(
                 `SELECT COUNT(*) AS total
                  FROM leads`
             )
-            .first()
+            .first(),
+
+        env.V8_D1
+            .prepare(
+                `SELECT project_id,
+                        COUNT(*) AS count,
+                        MAX(created_at) AS latest
+                 FROM leads
+                 GROUP BY project_id`
+            )
+            .all(),
+
+        env.V8_D1
+            .prepare(
+                `SELECT *
+                 FROM leads
+                 ORDER BY created_at DESC
+                 LIMIT 5`
+            )
+            .all()
     ]);
+
+    const leadsByProject = {};
+
+    for (const row of byProject.results || []) {
+        leadsByProject[row.project_id] = {
+            count: row.count,
+            latestCreatedAt: row.latest
+        };
+    }
+
+    const totals = {
+        clients: clients?.total || 0,
+        projects: projects?.total || 0,
+        leads: leads?.total || 0
+    };
 
     return json(
         {
             success: true,
-            stats: {
-                clients:
-                    clients?.total || 0,
-
-                projects:
-                    projects?.total || 0,
-
-                leads:
-                    leads?.total || 0
-            }
+            stats: totals,
+            totalClients: totals.clients,
+            totalProjects: totals.projects,
+            totalLeads: totals.leads,
+            leadsByProject,
+            recentLeads:
+                (recent.results || []).map(
+                    rowToLead
+                )
         },
         200,
         origin
