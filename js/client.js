@@ -71,7 +71,7 @@
     state.leads = [];
     const hasLeads = state.projects.some(p => hasModule(p, "leads"));
     if (!hasLeads) {
-      $("stat-leads").textContent = "0";
+      $("#stat-leads").textContent = "0";
       return;
     }
     for (const project of state.projects) {
@@ -81,23 +81,39 @@
       if (Array.isArray(list)) state.leads.push(...list.map(l => ({ ...l, projectId: l.projectId || project.id, projectName: project.name })));
     }
     state.leads.sort((a,b) => new Date(b.createdAt||0)-new Date(a.createdAt||0));
-    $("stat-leads").textContent = state.leads.length;
+    $("#stat-leads").textContent = state.leads.length;
+  }
+
+  const STAGE_LABELS = { novo: "Novo", contato: "Contato", qualificado: "Qualificado", proposta: "Proposta", ganho: "Ganho", perdido: "Perdido" };
+
+  function formatLeadDate(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("pt-BR");
   }
 
   function renderLeads() {
-    const list = $("leads-list");
-    const add = $("client-add-lead");
+    const list = $("#leads-list");
+    const add = $("#client-add-lead");
     if (!list) return;
     const allowed = state.projects.some(p => hasModule(p, "leads"));
     add?.classList.toggle("hidden", !allowed);
     if (!allowed) { list.innerHTML = `<div class="empty-state"><strong>CRM não liberado</strong><p>O gerenciamento de leads não está liberado para sua conta.</p></div>`; return; }
     if (!state.leads.length) { list.innerHTML = `<div class="empty-state"><strong>Nenhum lead</strong><p>Adicione manualmente um lead recebido pelo WhatsApp ou outro canal.</p></div>`; return; }
-    list.innerHTML = state.leads.map(lead => `
-      <div class="client-lead-row">
-        <strong>${esc(lead.name || "Lead sem nome")}</strong>
-        <button class="icon-btn" title="Editar lead" aria-label="Editar lead" data-edit-client-lead="${esc(lead.id)}" data-project-id="${esc(lead.projectId)}">✎</button>
+    list.innerHTML = `
+      <div class="client-lead-row client-lead-head">
+        <span>Data</span><span>Nome</span><span>Contato</span><span>Projeto</span><span>Status</span><span></span>
       </div>
-    `).join("");
+      ${state.leads.map(lead => `
+        <div class="client-lead-row">
+          <span>${esc(formatLeadDate(lead.createdAt))}</span>
+          <strong>${esc(lead.name || "Sem nome")}</strong>
+          <span>${esc(lead.email || lead.phone || "—")}</span>
+          <span>${esc(lead.projectName || "—")}</span>
+          <span class="badge badge-success">${esc(STAGE_LABELS[lead.status] || "Novo")}</span>
+          <button class="icon-btn" title="Editar lead" aria-label="Editar lead" data-edit-client-lead="${esc(lead.id)}" data-project-id="${esc(lead.projectId)}">✎</button>
+        </div>
+      `).join("")}
+    `;
     list.querySelectorAll("[data-edit-client-lead]").forEach(btn => btn.addEventListener("click", () => openClientLeadEditor(btn.dataset.editClientLead, btn.dataset.projectId)));
   }
 
@@ -118,12 +134,12 @@
     const overlay = document.createElement("div"); overlay.id = "client-lead-modal"; overlay.className = "modal-overlay"; overlay.innerHTML = `<div class="modal" style="max-width:680px"><button class="modal-close" id="client-lead-close" aria-label="Fechar">×</button>${content}</div>`;
     document.body.appendChild(overlay);
     overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
-    $("client-lead-close").onclick = () => overlay.remove();
-    $("client-lead-save").onclick = async () => {
-      const btn = $("client-lead-save"); btn.disabled = true; btn.textContent = "Salvando...";
+    $("#client-lead-close").onclick = () => overlay.remove();
+    $("#client-lead-save").onclick = async () => {
+      const btn = $("#client-lead-save"); btn.disabled = true; btn.textContent = "Salvando...";
       try {
-        const pid = $("client-lead-project").value;
-        const body = { name: $("client-lead-name").value.trim(), phone: $("client-lead-phone").value.trim(), email: $("client-lead-email").value.trim(), message: $("client-lead-notes").value.trim(), status: $("client-lead-status").value, value: Number($("client-lead-value").value || 0), notes: $("client-lead-notes").value.trim(), source: "manual" };
+        const pid = $("#client-lead-project").value;
+        const body = { name: $("#client-lead-name").value.trim(), phone: $("#client-lead-phone").value.trim(), email: $("#client-lead-email").value.trim(), message: $("#client-lead-notes").value.trim(), status: $("#client-lead-status").value, value: Number($("#client-lead-value").value || 0), notes: $("#client-lead-notes").value.trim(), source: "manual" };
         if (!body.name) { alert("Informe o nome do lead."); return; }
         const res = lead ? await API.put(`/api/data/leads/${encodeURIComponent(pid)}/${encodeURIComponent(lead.id)}`, body) : await API.post(`/api/data/leads/${encodeURIComponent(pid)}`, body);
         if (res?.error || res?.success === false) throw new Error(res?.error || res?.message || "Não foi possível salvar o lead.");
