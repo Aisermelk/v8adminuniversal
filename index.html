@@ -376,13 +376,27 @@
 </div>
 
 
-<div class="search-bar">
-    <input
-        type="text"
-        id="project-search"
-        placeholder="Buscar projeto por nome..."
-        oninput="handleProjectSearch(this.value)"
-    >
+<div class="project-filters">
+    <div class="search-bar">
+        <input
+            type="text"
+            id="project-search"
+            placeholder="Buscar projeto por nome..."
+            oninput="handleProjectSearch(this.value)"
+        >
+    </div>
+    <select id="project-sort" onchange="handleProjectSort(this.value)" aria-label="Ordenar projetos">
+        <option value="name-asc">Alfabético A–Z</option>
+        <option value="name-desc">Alfabético Z–A</option>
+        <option value="date-desc">Mais recentes</option>
+        <option value="date-asc">Mais antigos</option>
+    </select>
+    <select id="project-status-filter" onchange="handleProjectStatus(this.value)" aria-label="Filtrar por status">
+        <option value="">Todos os status</option>
+        <option value="Em produção">Em produção</option>
+        <option value="Em desenvolvimento">Em desenvolvimento</option>
+        <option value="Pausado">Pausado</option>
+    </select>
 </div>
 
 
