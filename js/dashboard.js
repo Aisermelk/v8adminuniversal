@@ -1225,119 +1225,6 @@ function renderProjectScripts(el) {
    ABA — ACESSO
    ========================================================= */
 
-const CLIENT_PERMISSIONS = {
-  content: {
-    label: "Conteúdo (textos)",
-    fields: {
-      name: "Nome",
-      job: "Profissão / cargo",
-      headline: "Título principal",
-      description: "Descrição",
-      specialization: "Especialização",
-      experience: "Experiência",
-      address: "Endereço",
-      registration: "Registro profissional"
-    }
-  },
-  contact: {
-    label: "Contato",
-    fields: { whatsapp: "WhatsApp", email: "E-mail", phone: "Telefone" }
-  },
-  social: {
-    label: "Redes sociais",
-    fields: {
-      facebook: "Facebook",
-      instagram: "Instagram",
-      tiktok: "TikTok",
-      youtube: "YouTube",
-      linkedin: "LinkedIn"
-    }
-  },
-  location: {
-    label: "Localização",
-    fields: { enabled: "Exibir mapa", address: "Endereço", mapsUrl: "Link do Google Maps" }
-  },
-  seo: {
-    label: "SEO",
-    fields: {
-      title: "Título",
-      description: "Descrição",
-      ogImage: "Imagem de compartilhamento",
-      keywords: "Palavras-chave"
-    }
-  }
-};
-
-function renderClientPermissions(p) {
-  const editable = p.access?.editable || [];
-
-  return `
-    <h3>O que o cliente pode editar</h3>
-
-    <p class="form-help">
-      Marque a seção inteira ou só os campos que deseja liberar.
-      Tudo o que ficar desmarcado só você edita.
-    </p>
-
-    ${Object.entries(CLIENT_PERMISSIONS).map(([section, info]) => {
-      const sectionOn = editable.includes(section);
-
-      return `
-        <div class="preview-box" style="margin-bottom:12px">
-          <label style="display:flex;gap:8px;align-items:center;margin:0">
-            <input
-              type="checkbox"
-              data-access-perm
-              data-access-section-toggle="${section}"
-              value="${section}"
-              ${sectionOn ? "checked" : ""}
-              onchange="toggleAccessSection('${section}', this.checked)">
-            <strong>${escapeHtml(info.label)} — liberar tudo</strong>
-          </label>
-
-          <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px">
-            ${Object.entries(info.fields).map(([field, label]) => `
-              <label style="display:flex;gap:6px;align-items:center;margin:0;font-weight:400">
-                <input
-                  type="checkbox"
-                  data-access-perm
-                  data-access-field="${section}"
-                  value="${section}.${field}"
-                  ${sectionOn || editable.includes(section + "." + field) ? "checked" : ""}
-                  ${sectionOn ? "disabled" : ""}>
-                ${escapeHtml(label)}
-              </label>
-            `).join("")}
-          </div>
-        </div>
-      `;
-    }).join("")}
-  `;
-}
-
-function toggleAccessSection(section, on) {
-  document
-    .querySelectorAll(`[data-access-field="${section}"]`)
-    .forEach(input => {
-      input.checked = on;
-      input.disabled = on;
-    });
-}
-
-window.toggleAccessSection = toggleAccessSection;
-
-function collectClientPermissions() {
-  const values = [...document.querySelectorAll("[data-access-perm]:checked")]
-    .filter(input => !input.disabled || input.dataset.accessSectionToggle)
-    .map(input => input.value);
-
-  const sections = new Set(values.filter(v => !v.includes(".")));
-
-  return {
-    editable: values.filter(v => !v.includes(".") || !sections.has(v.split(".")[0]))
-  };
-}
-
 function renderProjectAccess(el) {
   const p = state.projectDraft;
 
@@ -1391,8 +1278,6 @@ function renderProjectAccess(el) {
           </div>
         `
     }
-
-    ${renderClientPermissions(p)}
 
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="saveProject()">
@@ -1580,7 +1465,6 @@ async function saveProject() {
 
   if (state.projectTab === "acesso") {
     p.clientId = $("a-client")?.value || "";
-    p.access = collectClientPermissions();
   }
 
   if (!p.name) {
