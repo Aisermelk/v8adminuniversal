@@ -26,7 +26,7 @@
       <button class="client-nav-item" data-section="leads">CRM / Leads</button>
       <button class="client-nav-item" data-section="account">Minha conta</button>
     </nav>
-    <div class="client-sidebar-footer"><button class="client-logout" id="logout-btn">Sair</button></div>
+    <div class="client-sidebar-footer"><label class="client-theme-toggle"><input type="checkbox" id="client-theme-toggle"><span>Tema claro</span></label><button class="client-logout" id="logout-btn">Sair</button></div>
   </aside>
   <main class="client-main">
     <header class="client-header"><div><p class="eyebrow">V8 ADMIN UNIVERSAL</p><h1 id="page-title">Visão geral</h1><p id="page-subtitle">Acompanhe seus projetos e informações.</p></div><button class="btn btn-ghost" id="refresh-btn">Atualizar</button></header>
@@ -42,7 +42,7 @@
     </section>
 
     <section class="client-section" id="section-leads">
-      <div class="client-panel"><div class="panel-heading"><div><h2>Leads</h2><p>Gerencie os contatos dos seus projetos.</p></div><button class="btn btn-primary btn-sm hidden" id="client-add-lead">+ Adicionar lead</button></div><div id="leads-list" class="client-leads-list"><div class="muted-cell">Carregando...</div></div></div>
+      <div class="client-panel"><div class="panel-heading"><div><h2>Leads</h2><p>Contatos recebidos pelos seus projetos.</p></div></div><div class="table-wrap client-table-wrap"><table><thead><tr><th>Data</th><th>Nome</th><th>Contato</th><th>Projeto</th><th>Status</th></tr></thead><tbody id="leads-table"><tr><td colspan="5" class="muted-cell">Carregando...</td></tr></tbody></table></div></div>
     </section>
 
     <section class="client-section" id="section-account">
