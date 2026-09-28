@@ -136,9 +136,15 @@ async function renderDashboard() {
   const leads = stats?.totalLeads ?? Object.values(state.leadsByProject).reduce((total, item) => total + Number(item?.count || 0), 0);
 
   statsEl.innerHTML = `
-    <div class="stat-card"><span>Clientes</span><strong>${clients}</strong></div>
-    <div class="stat-card"><span>Projetos</span><strong>${projects}</strong></div>
-    <div class="stat-card"><span>Leads</span><strong>${leads}</strong></div>
+    <button type="button" class="stat-card stat-card-click" onclick="switchSection('clients')">
+      <span class="label">Clientes</span><strong class="value">${clients}</strong>
+    </button>
+    <button type="button" class="stat-card stat-card-click" onclick="switchSection('projects')">
+      <span class="label">Projetos</span><strong class="value">${projects}</strong>
+    </button>
+    <button type="button" class="stat-card stat-card-click" onclick="switchSection('leads')">
+      <span class="label">Leads</span><strong class="value">${leads}</strong>
+    </button>
   `;
 }
 
