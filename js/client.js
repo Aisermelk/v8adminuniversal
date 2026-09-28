@@ -6,8 +6,11 @@
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
   const can = (p) => state.permissions.includes("all") || state.permissions.includes(p);
   function hasModule(project, module) {
-    const list = Array.isArray(project?.access?.editable) ? project.access.editable : [];
-    if (!list.length && project?.access?.configured !== true) return true;
+    const access = project?.access || {};
+    const list = Array.isArray(access.editable) ? access.editable : [];
+    const modules = Array.isArray(access.modules) ? access.modules : [];
+    if (module === "leads" && (access.leads === true || modules.includes("leads"))) return true;
+    if (!list.length && access.configured !== true) return true;
     if (list.some(x => ["page", "site", "loja"].includes(x))) {
       if (module === "configuracao" || module === "content") return true;
       return ["media", "location", "reviews", "seo", "scripts", "leads"].includes(module) && list.some(x => ["site", "loja"].includes(x));
@@ -134,7 +137,10 @@
     const type = p.type || "SITE";
     const status = p.status || "—";
     const editable = allowedFields(p).length > 0;
-    return `<article class="project-card"><div class="project-card-top"><div><h3>${esc(p.name || "Projeto")}</h3><p>${esc(p.domain || p.siteUrl || "Projeto V8")}</p></div><span class="project-badge">${esc(type)}</span></div><div class="project-meta"><span class="project-badge">${esc(status)}</span></div><div class="project-actions">${editable ? `<button class="btn btn-primary btn-sm" data-edit-project="${esc(p.id)}">Editar</button>` : ""}${p.siteUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(p.siteUrl)}" target="_blank" rel="noopener">Abrir site</a>` : ""}</div></article>`;
+    const viewButton = p.siteUrl
+      ? `<a class="btn btn-ghost btn-sm" href="${esc(p.siteUrl)}" target="_blank" rel="noopener">◉ Visualizar</a>`
+      : `<button class="btn btn-ghost btn-sm" disabled title="Este projeto ainda não possui URL pública">◉ Visualizar</button>`;
+    return `<article class="project-card"><div class="project-card-top"><div><h3>${esc(p.name || "Projeto")}</h3><p>${esc(p.domain || p.siteUrl || "Projeto V8")}</p></div><span class="project-badge">${esc(type)}</span></div><div class="project-meta"><span class="project-badge">${esc(status)}</span></div><div class="project-actions">${viewButton}${editable ? `<button class="btn btn-primary btn-sm" data-edit-project="${esc(p.id)}">✎ Editar</button>` : ""}</div></article>`;
   }
 
   function renderProjects() {
