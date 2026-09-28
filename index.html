@@ -174,18 +174,10 @@
     </button>
 
 
-    <!-- LEADS -->
-
-    <button
-        type="button"
-        class="nav-item"
-        data-section="leads"
-    >
-
+    <!-- CRM -->
+    <button type="button" class="nav-item" data-section="leads">
         <span class="dot"></span>
-
-        Leads
-
+        CRM
     </button>
 
 
@@ -420,13 +412,15 @@
 
     <div>
 
-        <h1>Leads</h1>
+        <h1>CRM</h1>
 
         <p>
-            Contatos organizados por projeto
+            Pipeline, acompanhamento e leads organizados por projeto
         </p>
 
     </div>
+
+    <button type="button" class="btn btn-primary" id="new-lead-btn">+ Novo lead</button>
 
 </div>
 
@@ -435,7 +429,7 @@
     <input
         type="text"
         id="lead-search"
-        placeholder="Buscar lead por nome, contato ou projeto..."
+        placeholder="Buscar lead, contato, tag ou projeto..."
         oninput="handleLeadSearch(this.value)"
     >
 </div>
