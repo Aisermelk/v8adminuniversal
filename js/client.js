@@ -66,7 +66,8 @@
 
   async function loadLeads() {
     state.leads = [];
-    if (!can("leads")) {
+    const hasLeads = state.projects.some(p => hasModule(p, "leads"));
+    if (!hasLeads) {
       $("stat-leads").textContent = "0";
       return;
     }
@@ -84,7 +85,7 @@
     const list = $("leads-list");
     const add = $("client-add-lead");
     if (!list) return;
-    const allowed = can("leads") && state.projects.some(p => hasModule(p, "leads"));
+    const allowed = state.projects.some(p => hasModule(p, "leads"));
     add?.classList.toggle("hidden", !allowed);
     if (!allowed) { list.innerHTML = `<div class="empty-state"><strong>CRM não liberado</strong><p>O gerenciamento de leads não está liberado para sua conta.</p></div>`; return; }
     if (!state.leads.length) { list.innerHTML = `<div class="empty-state"><strong>Nenhum lead</strong><p>Adicione manualmente um lead recebido pelo WhatsApp ou outro canal.</p></div>`; return; }
