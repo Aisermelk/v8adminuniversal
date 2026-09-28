@@ -5,6 +5,15 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
   const can = (p) => state.permissions.includes("all") || state.permissions.includes(p);
+  function hasModule(project, module) {
+    const list = Array.isArray(project?.access?.editable) ? project.access.editable : [];
+    if (!list.length && project?.access?.configured !== true) return true;
+    if (list.some(x => ["page", "site", "loja"].includes(x))) {
+      if (module === "configuracao" || module === "content") return true;
+      return ["media", "location", "reviews", "seo", "scripts", "leads"].includes(module) && list.some(x => ["site", "loja"].includes(x));
+    }
+    return list.includes(module);
+  }
 
   function setMessage(text, error = false) {
     const el = $("#account-message");
@@ -35,9 +44,11 @@
       return showFatal(me?.error || me?.message || "Não foi possível carregar sua área.");
     }
     state.user = me.client || {};
-    // Neste Worker o cliente só consulta; edição de projeto é feita pelo administrador.
-    state.permissions = ["leads"];
     state.projects = Array.isArray(me.projects) ? me.projects : [];
+    state.permissions = [...new Set(state.projects.flatMap(p => Array.isArray(p?.access?.editable) ? p.access.editable : []))];
+    const leadsButton = document.querySelector('[data-section="leads"]');
+    const hasLeads = state.projects.some(p => hasModule(p, "leads"));
+    if (leadsButton) leadsButton.classList.toggle("hidden", !hasLeads);
     state.client = me.client || {};
     $("#user-name").textContent = state.client.name || state.user?.name || "Cliente";
     $("#user-email").textContent = state.client.email || state.user?.email || "—";
@@ -57,6 +68,7 @@
     state.leads = [];
     if (!can("leads")) return;
     for (const project of state.projects) {
+      if (!hasModule(project, "leads")) continue;
       const res = await API.get(`/api/data/leads/${encodeURIComponent(project.id)}`);
       const list = Array.isArray(res) ? res : res?.leads;
       if (Array.isArray(list)) state.leads.push(...list.map(l => ({ ...l, projectName: project.name })));
@@ -85,7 +97,7 @@
 
   function renderLeads() {
     const tbody = $("leads-table");
-    if (!can("leads")) { tbody.innerHTML = `<tr><td colspan="5" class="muted-cell">A visualização de leads não está liberada para sua conta.</td></tr>`; return; }
+    if (!state.projects.some(p => hasModule(p, "leads"))) { tbody.innerHTML = `<tr><td colspan="5" class="muted-cell">A visualização de leads não está liberada para nenhum projeto.</td></tr>`; return; }
     if (!state.leads.length) { tbody.innerHTML = `<tr><td colspan="5" class="muted-cell">Nenhum lead recebido ainda.</td></tr>`; return; }
 
     const grouped = new Map();
@@ -137,24 +149,29 @@
   const LONG_FIELDS = new Set(["content.description", "content.experience", "seo.description", "seo.keywords", "media.galleryImages", "location.embed", "scripts.head", "scripts.body", "scripts.footer"]);
 
   function projectScopes(project) {
-    const editable = project?.access?.editable || [];
-    return { page: editable.includes("page") || editable.includes("site") || editable.includes("loja"), site: editable.includes("site") || editable.includes("loja"), loja: editable.includes("loja") };
+    return {
+      configuracao: hasModule(project, "configuracao"),
+      content: hasModule(project, "content"),
+      media: hasModule(project, "media"),
+      location: hasModule(project, "location"),
+      reviews: hasModule(project, "reviews"),
+      seo: hasModule(project, "seo"),
+      scripts: hasModule(project, "scripts"),
+      leads: hasModule(project, "leads")
+    };
   }
 
   function allowedFields(project) {
-    const editable = project?.access?.editable || [];
     const scopes = projectScopes(project);
     const list = [];
+    if (scopes.configuracao) {
+      ["general", "tracking", "contact", "social"].forEach(section => Object.keys(FIELD_CATALOG[section]?.fields || {}).forEach(field => list.push([section, field])));
+    }
     Object.entries(FIELD_CATALOG).forEach(([section, info]) => {
-      const sectionAllowed = (scopes.page && PAGE_SECTIONS.has(section)) || (scopes.site && SITE_SECTIONS.has(section));
-      if (!sectionAllowed) return;
+      if (section === "general" || section === "tracking" || section === "contact" || section === "social") return;
+      if (!scopes[section]) return;
       Object.keys(info.fields).forEach(field => list.push([section, field]));
     });
-    if (!list.length) {
-      Object.entries(FIELD_CATALOG).forEach(([section, info]) => Object.keys(info.fields).forEach(field => {
-        if (editable.includes(section) || editable.includes(`${section}.${field}`)) list.push([section, field]);
-      }));
-    }
     return list;
   }
 
@@ -239,8 +256,28 @@
 
   function showFatal(msg) { document.querySelector(".client-main").innerHTML = `<div class="client-panel"><h2>Não foi possível carregar</h2><p>${esc(msg)}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></div>`; }
 
+  function applyClientTheme() {
+    const theme = localStorage.getItem("v8_client_theme") || localStorage.getItem("v8_theme") || "dark";
+    document.documentElement.setAttribute("data-theme", theme);
+    const toggle = $("client-theme-toggle");
+    if (toggle) toggle.checked = theme === "light";
+  }
+
+  function setupClientTheme() {
+    const toggle = $("client-theme-toggle");
+    if (!toggle) return;
+    toggle.addEventListener("change", () => {
+      const theme = toggle.checked ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", theme);
+      localStorage.setItem("v8_client_theme", theme);
+      localStorage.setItem("v8_theme", theme);
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", async () => {
     if (!Auth.requireClient()) return;
+    applyClientTheme();
+    setupClientTheme();
     $$(".client-nav-item").forEach(b => b.addEventListener("click", () => switchSection(b.dataset.section)));
     $$('[data-go="projects"]').forEach(b => b.addEventListener("click", () => switchSection("projects")));
     $("#refresh-btn").addEventListener("click", load);
