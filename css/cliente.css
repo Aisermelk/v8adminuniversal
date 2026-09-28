@@ -14,3 +14,8 @@
 .ecommerce-access-note{display:flex;gap:10px;align-items:flex-start;margin-top:16px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--accent-soft);font-size:11px;color:var(--text-muted)}.ecommerce-access-note strong{color:var(--accent);white-space:nowrap}
 
 .client-lead-project td{background:var(--bg-elevated);border-top:1px solid var(--border);padding:11px 10px}.client-lead-project strong{font-size:12px}.client-lead-project span{float:right;font-size:10px;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:3px 7px}
+
+/* Tema e acabamento compartilhados com o Admin */
+.client-sidebar-footer{margin-top:auto;display:grid;gap:8px}.client-theme-toggle{display:flex;align-items:center;gap:8px;padding:9px 10px;color:var(--text-muted);font-size:11px;border:1px solid var(--border);border-radius:9px;background:var(--bg-elevated);cursor:pointer}.client-theme-toggle input{accent-color:var(--accent)}
+.client-logout{border-radius:9px!important;transition:transform .15s,background .15s!important}.client-logout:hover{transform:translateY(-1px)}
+.client-page .btn{border-radius:9px}.client-page .client-panel,.client-page .client-stat,.client-page .project-card{box-shadow:0 6px 22px rgba(0,0,0,.08)}
