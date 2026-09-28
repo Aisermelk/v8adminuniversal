@@ -896,3 +896,112 @@ input:focus, select:focus, textarea:focus {
   font-size: 11.5px;
   color: var(--text-faint);
 }
+
+
+/* ---------------------------------------------------------------- */
+/* Painel: modais, abas de projeto, menus e detalhes                 */
+/* ---------------------------------------------------------------- */
+
+.modal { position: relative; }
+
+.modal h2 { font-size: 17px; margin-bottom: 16px; padding-right: 32px; }
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.modal-close:hover { background: var(--bg-elevated); color: var(--text-main); }
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.modal label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+
+.form-help {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.detail-list { display: flex; flex-direction: column; gap: 10px; }
+.detail-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13.5px;
+}
+.detail-list strong { color: var(--text-muted); font-weight: 600; }
+.detail-list span { text-align: right; word-break: break-word; }
+
+.project-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin: 0 0 18px;
+  padding-right: 36px;
+}
+
+.project-tab {
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.project-tab:hover { color: var(--text-main); }
+.project-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.project-actions-menu {
+  z-index: 60;
+  min-width: 150px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+.project-actions-menu button {
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 13px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-main);
+  cursor: pointer;
+}
+.project-actions-menu button:hover { background: var(--bg-elevated); }
+.project-actions-menu button.danger { color: var(--danger); }
+
+.badge-danger { background: var(--danger-soft); color: var(--danger); }
