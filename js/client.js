@@ -68,7 +68,7 @@
   function projectCard(p) {
     const type = p.type || "SITE";
     const status = p.status || "—";
-    const editable = can("content") || can("settings");
+    const editable = allowedFields(p).length > 0;
     return `<article class="project-card"><div class="project-card-top"><div><h3>${esc(p.name || "Projeto")}</h3><p>${esc(p.domain || p.siteUrl || "Projeto V8")}</p></div><span class="project-badge">${esc(type)}</span></div><div class="project-meta"><span class="project-badge">${esc(status)}</span></div><div class="project-actions">${editable ? `<button class="btn btn-primary btn-sm" data-edit-project="${esc(p.id)}">Editar</button>` : ""}${p.siteUrl ? `<a class="btn btn-ghost btn-sm" href="${esc(p.siteUrl)}" target="_blank" rel="noopener">Abrir site</a>` : ""}</div></article>`;
   }
 
@@ -107,39 +107,88 @@
     keys.forEach((key, i) => { if (i === keys.length - 1) cur[key] = value; else { if (!cur[key] || typeof cur[key] !== "object" || Array.isArray(cur[key])) cur[key] = {}; cur = cur[key]; } });
   }
 
+  // Campos que o administrador pode liberar (mesmo catálogo do painel)
+  const FIELD_CATALOG = {
+    content: {
+      label: "Conteúdo",
+      fields: {
+        name: "Nome", job: "Profissão / cargo", headline: "Título principal",
+        description: "Descrição", specialization: "Especialização",
+        experience: "Experiência", address: "Endereço", registration: "Registro profissional"
+      }
+    },
+    contact: { label: "Contato", fields: { whatsapp: "WhatsApp", email: "E-mail", phone: "Telefone" } },
+    social: {
+      label: "Redes sociais",
+      fields: { facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", linkedin: "LinkedIn" }
+    },
+    location: { label: "Localização", fields: { enabled: "Exibir mapa", address: "Endereço", mapsUrl: "Link do Google Maps" } },
+    seo: {
+      label: "SEO",
+      fields: { title: "Título", description: "Descrição", ogImage: "Imagem de compartilhamento", keywords: "Palavras-chave" }
+    }
+  };
+
+  const LONG_FIELDS = new Set(["content.description", "content.experience", "seo.description", "seo.keywords"]);
+
+  function allowedFields(project) {
+    const editable = project?.access?.editable || [];
+    const list = [];
+    Object.entries(FIELD_CATALOG).forEach(([section, info]) => {
+      Object.keys(info.fields).forEach(field => {
+        if (editable.includes(section) || editable.includes(`${section}.${field}`)) list.push([section, field]);
+      });
+    });
+    return list;
+  }
+
   function openEditor(id) {
     const p = state.projects.find(x => x.id === id); if (!p) return;
+    const allowed = allowedFields(p);
     $("#project-editor-panel").classList.remove("hidden");
     $("#editor-title").textContent = `Editar — ${p.name || "Projeto"}`;
-    const contentFields = can("content") ? flattenObject(p.content || {}).filter(x => x.path.length < 100).slice(0,80) : [];
-    const contact = p.contact || {};
-    const settings = p.settings || {};
-    let html = `<div class="editor-grid">`;
-    if (can("content")) {
-      html += `<div class="editor-group"><h3>Conteúdo</h3><div class="editor-fields">${contentFields.length ? contentFields.map((f,i) => `<label>${esc(f.path)}<textarea data-content-path="${esc(f.path)}">${esc(f.value)}</textarea></label>`).join("") : `<p class="muted-cell">Este projeto ainda não possui campos de conteúdo editáveis.</p>`}</div></div>`;
+
+    if (!allowed.length) {
+      $("#project-editor").innerHTML = `<p class="muted-cell">Nenhum campo deste projeto foi liberado para edição.</p>`;
+      return;
     }
-    if (can("settings") || can("content")) {
-      html += `<div class="editor-group"><h3>Contato e configurações</h3><div class="editor-fields">${can("settings") ? `<label>WhatsApp<input data-contact="whatsapp" value="${esc(contact.whatsapp || "")}"></label><label>E-mail<input data-contact="email" value="${esc(contact.email || "")}"></label><label>Telefone<input data-contact="phone" value="${esc(contact.phone || "")}"></label>` : ""}${can("settings") && Object.keys(settings).length ? `<p class="muted-cell">Outras configurações são gerenciadas pelo administrador.</p>` : ""}</div></div>`;
-    }
-    html += `</div><div class="editor-footer"><button class="btn btn-primary" id="save-project">Salvar alterações</button></div>`;
-    $("#project-editor").innerHTML = html;
+
+    const groups = Object.entries(FIELD_CATALOG).map(([section, info]) => {
+      const fields = allowed.filter(([sec]) => sec === section);
+      if (!fields.length) return "";
+      const inputs = fields.map(([sec, field]) => {
+        const label = info.fields[field];
+        const value = p[sec]?.[field];
+        const path = `${sec}.${field}`;
+        if (sec === "location" && field === "enabled") {
+          return `<label><span><input type="checkbox" data-section="${sec}" data-field="${field}" ${value ? "checked" : ""}> ${esc(label)}</span></label>`;
+        }
+        if (LONG_FIELDS.has(path)) {
+          return `<label>${esc(label)}<textarea data-section="${sec}" data-field="${field}">${esc(value || "")}</textarea></label>`;
+        }
+        return `<label>${esc(label)}<input data-section="${sec}" data-field="${field}" value="${esc(value || "")}"></label>`;
+      }).join("");
+      return `<div class="editor-group"><h3>${esc(info.label)}</h3><div class="editor-fields">${inputs}</div></div>`;
+    }).join("");
+
+    $("#project-editor").innerHTML = `<div class="editor-grid">${groups}</div><p class="muted-cell">Os demais campos são gerenciados pelo administrador.</p><div class="editor-footer"><button class="btn btn-primary" id="save-project">Salvar alterações</button></div>`;
     $("#save-project").onclick = () => saveProject(p.id);
-    $("#project-editor-panel").scrollIntoView({ behavior:"smooth", block:"start" });
+    $("#project-editor-panel").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function saveProject(id) {
-    const content = {};
-    $$("[data-content-path]").forEach(el => setPath(content, el.dataset.contentPath, el.value));
-    const contact = {};
-    $$("[data-contact]").forEach(el => contact[el.dataset.contact] = el.value.trim());
     const body = {};
-    if (can("content")) body.content = content;
-    if (can("settings")) body.contact = contact;
+    $$("#project-editor [data-section]").forEach(el => {
+      const section = el.dataset.section;
+      body[section] = body[section] || {};
+      body[section][el.dataset.field] = el.type === "checkbox" ? el.checked : el.value.trim();
+    });
     const btn = $("#save-project"); btn.disabled = true; btn.textContent = "Salvando...";
     const res = await API.put(`/api/client/projects/${encodeURIComponent(id)}`, body);
     btn.disabled = false; btn.textContent = "Salvar alterações";
-    if (res.error) return alert(res.message || "Não foi possível salvar.");
-    const index = state.projects.findIndex(p => p.id === id); if (index >= 0) state.projects[index] = res.project;
+    if (!res || res.success === false || res.error) return alert(res?.error || res?.message || "Não foi possível salvar.");
+    const index = state.projects.findIndex(p => p.id === id);
+    if (index >= 0 && res.project) state.projects[index] = res.project;
     renderProjects(); renderOverview(); openEditor(id); alert("Alterações salvas com sucesso.");
   }
 
