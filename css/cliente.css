@@ -1,3 +1,33 @@
+/* V8 Área do Cliente — tema escuro alinhado ao Admin */
+.client-page,
+.client-page .client-main {
+  background: #090d18;
+  color: #eef2ff;
+}
+.client-page {
+  min-height: 100vh;
+  color-scheme: dark;
+}
+.client-page .client-panel,
+.client-page .client-stat,
+.client-page .project-card {
+  background: #121827;
+  border-color: #263047;
+}
+.client-page .project-card {
+  background: #0f1625;
+}
+.client-page input,
+.client-page select,
+.client-page textarea {
+  background: #0b1120;
+  color: #eef2ff;
+  border-color: #2a3650;
+}
+.client-page .client-main {
+  min-height: 100vh;
+}
+
 .client-page{background:var(--bg-main);color:var(--text-main)}
 .client-shell{min-height:100vh;display:grid;grid-template-columns:250px 1fr}
 .client-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;min-height:100vh;position:sticky;top:0;height:100vh}
