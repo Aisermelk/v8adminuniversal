@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="robots"
+        content="noindex, nofollow"
+    >
+
+    <title>V8 Admin — Login</title>
+
+    <link
+        rel="stylesheet"
+        href="css/variables.css"
+    >
+
+    <link
+        rel="stylesheet"
+        href="css/style.css"
+    >
+
+    <style>
+        /* =====================================================
+           V8 ADMIN — PRIMEIRO ACESSO
+        ====================================================== */
+
+        .login-view.hidden {
+            display: none !important;
+        }
+
+        .first-access-link {
+            display: block;
+            margin-top: 18px;
+            text-align: center;
+            color: #8fa7ff;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: underline;
+            background: none;
+            border: 0;
+            width: 100%;
+        }
+
+        .first-access-link:hover {
+            opacity: 0.85;
+        }
+
+        .first-access-description {
+            margin-bottom: 24px;
+        }
+
+        .first-access-description p {
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        .auth-message {
+            margin-top: 16px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+            display: none;
+        }
+
+        .auth-message.show {
+            display: block;
+        }
+
+        .auth-message.error {
+            background: rgba(220, 53, 69, 0.14);
+            color: #ff8f9b;
+        }
+
+        .auth-message.success {
+            background: rgba(25, 135, 84, 0.14);
+            color: #75d7a5;
+        }
+
+        .back-login {
+            display: block;
+            margin-top: 18px;
+            text-align: center;
+            color: #8fa7ff;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: underline;
+            background: none;
+            border: 0;
+            width: 100%;
+        }
+
+        .back-login:hover {
+            opacity: 0.85;
+        }
+
+        .password-help {
+            margin-top: 7px;
+            font-size: 12px;
+            opacity: 0.65;
+        }
+    </style>
+</head>
+
+
+<body class="login-page">
+
+    <main class="login-container">
+
+        <section class="login-card">
+
+
+            <!-- =================================================
+                 MARCA
+            ================================================== -->
+
+            <div class="login-brand">
+
+                <div class="login-logo">
+
+                    <img
+                        src="assets/v8p.png"
+                        alt="V8 Admin"
+                    >
+
+                </div>
+
+                <div>
+
+                    <h1>
+                        V8 Admin
+                    </h1>
+
+                    <p>
+                        Painel administrativo
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <!-- =================================================
+                 LOGIN NORMAL
+            ================================================== -->
+
+            <div
+                id="login-view"
+                class="login-view"
+            >
+
+                <div class="login-header">
+
+                    <h2>
+                        Entrar
+                    </h2>
+
+                    <p>
+                        Acesse o painel para gerenciar
+                        seus projetos e clientes.
+                    </p>
+
+                </div>
+
+
+                <form
+                    id="login-form"
+                    autocomplete="on"
+                    novalidate
+                >
+
+                    <!-- E-MAIL -->
+
+                    <div class="field">
+
+                        <label for="email">
+                            E-mail
+                        </label>
+
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            placeholder="seu@email.com"
+                            autocomplete="username"
+                            required
+                        >
+
+                    </div>
+
+
+                    <!-- SENHA -->
+
+                    <div class="field">
+
+                        <label for="password">
+                            Senha
+                        </label>
+
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            placeholder="Digite sua senha"
+                            autocomplete="current-password"
+                            required
+                        >
+
+                    </div>
+
+
+                    <!-- ERRO LOGIN -->
+
+                    <div
+                        id="auth-error"
+                        class="auth-error hidden"
+                        role="alert"
+                        aria-live="polite"
+                    ></div>
+
+
+                    <!-- BOTÃO LOGIN -->
+
+                    <button
+                        type="submit"
+                        id="login-submit"
+                        class="btn btn-primary login-submit"
+                    >
+                        Entrar
+                    </button>
+
+                </form>
+
+
+                <!-- PRIMEIRO ACESSO -->
+
+                <button
+                    type="button"
+                    id="show-first-access"
+                    class="first-access-link"
+                >
+                    Primeiro acesso? Criar senha
+                </button>
+
+            </div>
+
+
+            <!-- =================================================
+                 PRIMEIRO ACESSO
+            ================================================== -->
+
+            <div
+                id="first-access-view"
+                class="login-view hidden"
+            >
+
+                <div class="login-header">
+
+                    <h2>
+                        Primeiro acesso
+                    </h2>
+
+                </div>
+
+
+                <div class="first-access-description">
+
+                    <p>
+                        Informe o e-mail cadastrado pelo administrador
+                        e crie sua senha de acesso.
+                    </p>
+
+                </div>
+
+
+                <form
+                    id="first-access-form"
+                    autocomplete="off"
+                    novalidate
+                >
+
+                    <!-- E-MAIL -->
+
+                    <div class="field">
+
+                        <label for="first-access-email">
+                            E-mail
+                        </label>
+
+                        <input
+                            type="email"
+                            id="first-access-email"
+                            name="first-access-email"
+                            placeholder="seu@email.com"
+                            autocomplete="email"
+                            required
+                        >
+
+                    </div>
+
+
+                    <!-- NOVA SENHA -->
+
+                    <div class="field">
+
+                        <label for="first-access-password">
+                            Nova senha
+                        </label>
+
+                        <input
+                            type="password"
+                            id="first-access-password"
+                            name="first-access-password"
+                            placeholder="Crie uma senha"
+                            autocomplete="new-password"
+                            minlength="8"
+                            required
+                        >
+
+                        <div class="password-help">
+                            A senha deve ter pelo menos 8 caracteres.
+                        </div>
+
+                    </div>
+
+
+                    <!-- CONFIRMAÇÃO -->
+
+                    <div class="field">
+
+                        <label for="first-access-confirm">
+                            Confirmar senha
+                        </label>
+
+                        <input
+                            type="password"
+                            id="first-access-confirm"
+                            name="first-access-confirm"
+                            placeholder="Digite a senha novamente"
+                            autocomplete="new-password"
+                            minlength="8"
+                            required
+                        >
+
+                    </div>
+
+
+                    <!-- MENSAGEM -->
+
+                    <div
+                        id="first-access-message"
+                        class="auth-message"
+                        role="alert"
+                        aria-live="polite"
+                    ></div>
+
+
+                    <!-- BOTÃO -->
+
+                    <button
+                        type="submit"
+                        id="first-access-submit"
+                        class="btn btn-primary login-submit"
+                    >
+                        Criar senha
+                    </button>
+
+                </form>
+
+
+                <!-- VOLTAR -->
+
+                <button
+                    type="button"
+                    id="back-to-login"
+                    class="back-login"
+                >
+                    Voltar para o login
+                </button>
+
+            </div>
+
+
+            <!-- =================================================
+                 RODAPÉ
+            ================================================== -->
+
+            <div class="login-footer">
+
+                <span>
+                    V8 Admin Universal
+                </span>
+
+            </div>
+
+
+        </section>
+
+    </main>
+
+
+    <!-- =====================================================
+         API
+    ====================================================== -->
+
+    <script src="./js/api.js"></script>
+
+
+    <!-- =====================================================
+         AUTENTICAÇÃO
+    ====================================================== -->
+
+    <script src="./js/auth.js"></script>
+
+
+    <!-- =====================================================
+         PRIMEIRO ACESSO
+    ====================================================== -->
+
+    <script>
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            () => {
+
+                const loginView =
+                    document.getElementById(
+                        "login-view"
+                    );
+
+                const firstAccessView =
+                    document.getElementById(
+                        "first-access-view"
+                    );
+
+                const showFirstAccess =
+                    document.getElementById(
+                        "show-first-access"
+                    );
+
+                const backToLogin =
+                    document.getElementById(
+                        "back-to-login"
+                    );
+
+                const firstAccessForm =
+                    document.getElementById(
+                        "first-access-form"
+                    );
+
+                const firstAccessEmail =
+                    document.getElementById(
+                        "first-access-email"
+                    );
+
+                const firstAccessPassword =
+                    document.getElementById(
+                        "first-access-password"
+                    );
+
+                const firstAccessConfirm =
+                    document.getElementById(
+                        "first-access-confirm"
+                    );
+
+                const firstAccessSubmit =
+                    document.getElementById(
+                        "first-access-submit"
+                    );
+
+                const firstAccessMessage =
+                    document.getElementById(
+                        "first-access-message"
+                    );
+
+                const loginEmail =
+                    document.getElementById(
+                        "email"
+                    );
+
+
+                /* =================================================
+                   MOSTRAR PRIMEIRO ACESSO
+                ================================================== */
+
+                showFirstAccess.addEventListener(
+                    "click",
+                    () => {
+
+                        firstAccessMessage.textContent = "";
+
+                        firstAccessMessage.className =
+                            "auth-message";
+
+                        firstAccessView.classList.remove(
+                            "hidden"
+                        );
+
+                        loginView.classList.add(
+                            "hidden"
+                        );
+
+                        firstAccessEmail.value =
+                            loginEmail.value.trim();
+
+                        firstAccessPassword.value = "";
+
+                        firstAccessConfirm.value = "";
+
+                        firstAccessEmail.focus();
+
+                    }
+                );
+
+
+                /* =================================================
+                   VOLTAR PARA LOGIN
+                ================================================== */
+
+                backToLogin.addEventListener(
+                    "click",
+                    () => {
+
+                        firstAccessMessage.textContent = "";
+
+                        firstAccessMessage.className =
+                            "auth-message";
+
+                        firstAccessView.classList.add(
+                            "hidden"
+                        );
+
+                        loginView.classList.remove(
+                            "hidden"
+                        );
+
+                        loginEmail.value =
+                            firstAccessEmail.value.trim();
+
+                        document
+                            .getElementById("password")
+                            .focus();
+
+                    }
+                );
+
+
+                /* =================================================
+                   PRIMEIRO ACESSO — CRIAR SENHA
+                ================================================== */
+
+                firstAccessForm.addEventListener(
+                    "submit",
+                    async (event) => {
+
+                        event.preventDefault();
+
+
+                        const email =
+                            firstAccessEmail.value
+                                .trim()
+                                .toLowerCase();
+
+                        const password =
+                            firstAccessPassword.value;
+
+                        const confirm =
+                            firstAccessConfirm.value;
+
+
+                        /* -----------------------------------------
+                           LIMPAR MENSAGEM
+                        ------------------------------------------ */
+
+                        firstAccessMessage.textContent = "";
+
+                        firstAccessMessage.className =
+                            "auth-message";
+
+
+                        /* -----------------------------------------
+                           VALIDAR E-MAIL
+                        ------------------------------------------ */
+
+                        if (!email) {
+
+                            firstAccessMessage.textContent =
+                                "Informe seu e-mail.";
+
+                            firstAccessMessage.className =
+                                "auth-message error show";
+
+                            firstAccessEmail.focus();
+
+                            return;
+                        }
+
+
+                        /* -----------------------------------------
+                           VALIDAR SENHA
+                        ------------------------------------------ */
+
+                        if (!password) {
+
+                            firstAccessMessage.textContent =
+                                "Informe uma senha.";
+
+                            firstAccessMessage.className =
+                                "auth-message error show";
+
+                            firstAccessPassword.focus();
+
+                            return;
+                        }
+
+
+                        /* -----------------------------------------
+                           TAMANHO DA SENHA
+                        ------------------------------------------ */
+
+                        if (password.length < 8) {
+
+                            firstAccessMessage.textContent =
+                                "A senha deve ter pelo menos 8 caracteres.";
+
+                            firstAccessMessage.className =
+                                "auth-message error show";
+
+                            firstAccessPassword.focus();
+
+                            return;
+                        }
+
+
+                        /* -----------------------------------------
+                           CONFIRMAR SENHA
+                        ------------------------------------------ */
+
+                        if (password !== confirm) {
+
+                            firstAccessMessage.textContent =
+                                "As senhas não são iguais.";
+
+                            firstAccessMessage.className =
+                                "auth-message error show";
+
+                            firstAccessConfirm.focus();
+
+                            return;
+                        }
+
+
+                        /* -----------------------------------------
+                           BLOQUEAR BOTÃO
+                        ------------------------------------------ */
+
+                        firstAccessSubmit.disabled = true;
+
+                        firstAccessSubmit.textContent =
+                            "Criando senha...";
+
+
+                        try {
+
+                            /* -------------------------------------
+                               API CORRETA
+
+                               IMPORTANTE:
+                               NÃO usar /set-password
+
+                               A rota correta é:
+                               /api/client/set-password
+                            -------------------------------------- */
+
+                            const response =
+                                await API.post(
+                                    "/api/client/set-password",
+                                    {
+                                        email,
+                                        password
+                                    }
+                                );
+
+
+                            console.log(
+                                "Resposta primeiro acesso:",
+                                response
+                            );
+
+
+                            /* -------------------------------------
+                               ERRO DA API
+                            -------------------------------------- */
+
+                            if (
+                                !response ||
+                                response.success !== true
+                            ) {
+
+                                const errorMessage =
+                                    (typeof response?.error === "string" && response.error) ||
+                                    (typeof response?.message === "string" && response.message) ||
+                                    "Não foi possível criar a senha.";
+
+                                throw new Error(
+                                    errorMessage
+                                );
+                            }
+
+
+                            /* -------------------------------------
+                               SUCESSO
+                            -------------------------------------- */
+
+                            firstAccessMessage.textContent =
+                                response.message ||
+                                "Senha criada com sucesso. Agora você já pode entrar.";
+
+                            firstAccessMessage.className =
+                                "auth-message success show";
+
+
+                            /* -------------------------------------
+                               LIMPAR SENHA
+                            -------------------------------------- */
+
+                            firstAccessPassword.value = "";
+
+                            firstAccessConfirm.value = "";
+
+
+                            /* -------------------------------------
+                               AGUARDAR E VOLTAR AO LOGIN
+                            -------------------------------------- */
+
+                            setTimeout(
+                                () => {
+
+                                    loginView.classList.remove(
+                                        "hidden"
+                                    );
+
+                                    firstAccessView.classList.add(
+                                        "hidden"
+                                    );
+
+                                    loginEmail.value =
+                                        email;
+
+                                    document
+                                        .getElementById(
+                                            "password"
+                                        )
+                                        .value = "";
+
+                                    firstAccessMessage.textContent = "";
+
+                                    firstAccessMessage.className =
+                                        "auth-message";
+
+                                    document
+                                        .getElementById(
+                                            "password"
+                                        )
+                                        .focus();
+
+                                },
+                                1800
+                            );
+
+
+                        } catch (error) {
+
+                            console.error(
+                                "Erro no primeiro acesso:",
+                                error
+                            );
+
+
+                            /* -------------------------------------
+                               MOSTRAR ERRO REAL
+                            -------------------------------------- */
+
+                            firstAccessMessage.textContent =
+                                error?.message ||
+                                "Não foi possível criar a senha.";
+
+                            firstAccessMessage.className =
+                                "auth-message error show";
+
+
+                            firstAccessSubmit.disabled =
+                                false;
+
+                            firstAccessSubmit.textContent =
+                                "Criar senha";
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
