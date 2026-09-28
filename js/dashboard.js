@@ -7,9 +7,11 @@ const state = {
   section: "dashboard",
   clients: [],
   projects: [],
+  leads: [],
   leadsByProject: {},
   clientSearch: "",
   projectSearch: "",
+  leadSearch: "",
   editingClientId: null,
   editingProjectId: null,
   projectTab: "geral",
@@ -141,6 +143,7 @@ function switchSection(section) {
   if (section === "dashboard") renderDashboard();
   if (section === "clients") renderClients();
   if (section === "projects") renderProjects();
+  if (section === "leads") renderLeads();
 }
 
 /* =========================================================
@@ -217,13 +220,15 @@ function normalizeStats(raw) {
 
 async function refreshData() {
   try {
-    const [clients, projects, stats] = await Promise.all([
+    const [clients, projects, stats, leads] = await Promise.all([
       API.get("/api/data/clients"),
       API.get("/api/data/projects"),
-      API.get("/api/dashboard/stats")
+      API.get("/api/dashboard/stats"),
+      API.get("/api/data/leads")
     ]);
 
     state.projects = unwrapList(projects, "projects");
+    state.leads = unwrapList(leads, "leads");
 
     state.clients = unwrapList(clients, "clients").map(client => ({
       ...client,
@@ -240,10 +245,71 @@ async function refreshData() {
     if (state.section === "dashboard") renderDashboard();
     if (state.section === "clients") renderClients();
     if (state.section === "projects") renderProjects();
+    if (state.section === "leads") renderLeads();
   } catch (error) {
     console.error(error);
     toast("Não foi possível carregar os dados.", "error");
   }
+}
+
+/* =========================================================
+   LEADS (todos os projetos)
+   ========================================================= */
+
+function handleLeadSearch(value) {
+  state.leadSearch = value;
+  renderLeads();
+}
+
+function renderLeads() {
+  const wrap = $("leads-table-wrap");
+  if (!wrap) return;
+
+  const search = (state.leadSearch || "").toLowerCase().trim();
+
+  const leads = [...state.leads]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .filter(lead =>
+      !search ||
+      String(lead.name || "").toLowerCase().includes(search) ||
+      String(lead.email || "").toLowerCase().includes(search) ||
+      String(lead.projectName || projectName(lead.projectId) || "").toLowerCase().includes(search)
+    );
+
+  if (!leads.length) {
+    wrap.innerHTML = `<div class="empty-state">Nenhum lead encontrado.</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Nome</th>
+          <th>Contato</th>
+          <th>Projeto</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${leads.map(lead => `
+          <tr>
+            <td>${escapeHtml(formatLeadDate(lead.createdAt))}</td>
+            <td>${escapeHtml(lead.name || "—")}</td>
+            <td>${escapeHtml(lead.email || lead.phone || "—")}</td>
+            <td>${escapeHtml(lead.projectName || projectName(lead.projectId))}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function formatLeadDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
 /* =========================================================
@@ -342,14 +408,16 @@ function renderClients() {
       </thead>
       <tbody>
         ${clients.map(client => `
-          <tr>
+          <tr
+            class="row-clickable"
+            onclick="openClientViewPopup('${escapeHtml(client.id)}')">
             <td>${escapeHtml(client.name)}</td>
             <td>${escapeHtml(client.email)}</td>
             <td>${escapeHtml(projectName(client.projectId))}</td>
             <td>
               <button
                 class="btn btn-sm"
-                onclick="openClientViewPopup('${escapeHtml(client.id)}')">
+                onclick="event.stopPropagation();openClientViewPopup('${escapeHtml(client.id)}')">
                 Visualizar
               </button>
             </td>
@@ -568,8 +636,10 @@ function renderProjects() {
             STATUS_BADGE[project.status] || "badge-muted";
 
           return `
-            <tr>
-              <td>
+            <tr
+              class="row-clickable"
+              onclick="openProjectModal('${escapeHtml(project.id)}')">
+              <td onclick="event.stopPropagation()">
                 <button
                   class="btn btn-sm"
                   onclick="reorderProject('${escapeHtml(project.id)}','up')"
@@ -595,7 +665,7 @@ function renderProjects() {
                 ${leads ? `<span class="badge badge-danger">${leads}</span>` : "—"}
               </td>
 
-              <td>
+              <td onclick="event.stopPropagation()">
                 <button
                   class="btn btn-sm"
                   onclick="openProjectActionsMenu(event,'${escapeHtml(project.id)}')">
@@ -1225,6 +1295,119 @@ function renderProjectScripts(el) {
    ABA — ACESSO
    ========================================================= */
 
+const CLIENT_PERMISSIONS = {
+  content: {
+    label: "Conteúdo (textos)",
+    fields: {
+      name: "Nome",
+      job: "Profissão / cargo",
+      headline: "Título principal",
+      description: "Descrição",
+      specialization: "Especialização",
+      experience: "Experiência",
+      address: "Endereço",
+      registration: "Registro profissional"
+    }
+  },
+  contact: {
+    label: "Contato",
+    fields: { whatsapp: "WhatsApp", email: "E-mail", phone: "Telefone" }
+  },
+  social: {
+    label: "Redes sociais",
+    fields: {
+      facebook: "Facebook",
+      instagram: "Instagram",
+      tiktok: "TikTok",
+      youtube: "YouTube",
+      linkedin: "LinkedIn"
+    }
+  },
+  location: {
+    label: "Localização",
+    fields: { enabled: "Exibir mapa", address: "Endereço", mapsUrl: "Link do Google Maps" }
+  },
+  seo: {
+    label: "SEO",
+    fields: {
+      title: "Título",
+      description: "Descrição",
+      ogImage: "Imagem de compartilhamento",
+      keywords: "Palavras-chave"
+    }
+  }
+};
+
+function renderClientPermissions(p) {
+  const editable = p.access?.editable || [];
+
+  return `
+    <h3>O que o cliente pode editar</h3>
+
+    <p class="form-help">
+      Marque a seção inteira ou só os campos que deseja liberar.
+      Tudo o que ficar desmarcado só você edita.
+    </p>
+
+    ${Object.entries(CLIENT_PERMISSIONS).map(([section, info]) => {
+      const sectionOn = editable.includes(section);
+
+      return `
+        <div class="preview-box" style="margin-bottom:12px">
+          <label style="display:flex;gap:8px;align-items:center;margin:0">
+            <input
+              type="checkbox"
+              data-access-perm
+              data-access-section-toggle="${section}"
+              value="${section}"
+              ${sectionOn ? "checked" : ""}
+              onchange="toggleAccessSection('${section}', this.checked)">
+            <strong>${escapeHtml(info.label)} — liberar tudo</strong>
+          </label>
+
+          <div style="display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px">
+            ${Object.entries(info.fields).map(([field, label]) => `
+              <label style="display:flex;gap:6px;align-items:center;margin:0;font-weight:400">
+                <input
+                  type="checkbox"
+                  data-access-perm
+                  data-access-field="${section}"
+                  value="${section}.${field}"
+                  ${sectionOn || editable.includes(section + "." + field) ? "checked" : ""}
+                  ${sectionOn ? "disabled" : ""}>
+                ${escapeHtml(label)}
+              </label>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }).join("")}
+  `;
+}
+
+function toggleAccessSection(section, on) {
+  document
+    .querySelectorAll(`[data-access-field="${section}"]`)
+    .forEach(input => {
+      input.checked = on;
+      input.disabled = on;
+    });
+}
+
+window.toggleAccessSection = toggleAccessSection;
+
+function collectClientPermissions() {
+  const values = [...document.querySelectorAll("[data-access-perm]:checked")]
+    .filter(input => !input.disabled || input.dataset.accessSectionToggle)
+    .map(input => input.value);
+
+  const sections = new Set(values.filter(v => !v.includes(".")));
+
+  return {
+    editable: values.filter(v => !v.includes(".") || !sections.has(v.split(".")[0]))
+  };
+}
+
 function renderProjectAccess(el) {
   const p = state.projectDraft;
 
@@ -1278,6 +1461,8 @@ function renderProjectAccess(el) {
           </div>
         `
     }
+
+    ${renderClientPermissions(p)}
 
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="saveProject()">
@@ -1465,6 +1650,7 @@ async function saveProject() {
 
   if (state.projectTab === "acesso") {
     p.clientId = $("a-client")?.value || "";
+    p.access = collectClientPermissions();
   }
 
   if (!p.name) {
@@ -1603,6 +1789,7 @@ function confirmModal(message, onConfirm, label = "Confirmar") {
 window.switchSection = switchSection;
 window.handleClientSearch = handleClientSearch;
 window.handleProjectSearch = handleProjectSearch;
+window.handleLeadSearch = handleLeadSearch;
 
 window.openClientModal = openClientModal;
 window.openClientViewPopup = openClientViewPopup;
