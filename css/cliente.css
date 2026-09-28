@@ -51,3 +51,9 @@
 .client-page .btn{border-radius:9px}.client-page .client-panel,.client-page .client-stat,.client-page .project-card{box-shadow:0 6px 22px rgba(0,0,0,.08)}
 
 .client-leads-list{display:grid;gap:6px}.client-lead-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:7px 10px 7px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-elevated)}.client-lead-row:hover{border-color:var(--accent)}.client-lead-row strong{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.client-lead-row .icon-btn{width:30px;height:30px;flex:0 0 30px}.client-crm-detail{padding-bottom:2px}.client-page .modal-save-bar{position:sticky;bottom:-1px;z-index:4;justify-content:flex-end;margin:18px -2px -2px;padding:12px 2px 2px;background:linear-gradient(to bottom,transparent,var(--bg-card) 25%)}
+.client-leads-list{display:flex;flex-direction:column;gap:6px}
+.client-lead-row{display:grid;grid-template-columns:100px 1.3fr 1.3fr 1fr 110px 40px;gap:10px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-elevated);font-size:13px}
+.client-lead-row.client-lead-head{background:none;border:none;padding:0 14px;color:var(--text-faint);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+.client-lead-row strong{font-weight:600}
+.client-lead-row .icon-btn{justify-self:end}
+@media(max-width:800px){.client-lead-row{grid-template-columns:1fr 1fr;grid-auto-rows:auto}.client-lead-row.client-lead-head{display:none}}
