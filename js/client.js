@@ -29,14 +29,16 @@
   }
 
   async function load() {
-    const me = await API.get("/api/auth/me");
-    if (me.error) return;
-    state.user = me.user;
-    state.permissions = me.permissions || [];
-    const [projects, account] = await Promise.all([API.get("/api/client/projects"), API.get("/api/client/account")]);
-    if (projects.error || account.error) return showFatal(projects.message || account.message || "Não foi possível carregar sua área.");
-    state.projects = Array.isArray(projects) ? projects : [];
-    state.client = account.client || {};
+    // O Worker (D1) expõe tudo em /api/client/me: {client, projects}
+    const me = await API.get("/api/client/me");
+    if (!me || me.success === false || me.error) {
+      return showFatal(me?.error || me?.message || "Não foi possível carregar sua área.");
+    }
+    state.user = me.client || {};
+    // Neste Worker o cliente só consulta; edição de projeto é feita pelo administrador.
+    state.permissions = ["leads"];
+    state.projects = Array.isArray(me.projects) ? me.projects : [];
+    state.client = me.client || {};
     $("#user-name").textContent = state.client.name || state.user?.name || "Cliente";
     $("#user-email").textContent = state.client.email || state.user?.email || "—";
     $("#user-avatar").textContent = (state.client.name || "C").trim().charAt(0).toUpperCase();
@@ -55,8 +57,9 @@
     state.leads = [];
     if (!can("leads")) return;
     for (const project of state.projects) {
-      const res = await API.get(`/api/client/leads/${encodeURIComponent(project.id)}`);
-      if (!res.error && Array.isArray(res)) state.leads.push(...res.map(l => ({ ...l, projectName: project.name })));
+      const res = await API.get(`/api/data/leads/${encodeURIComponent(project.id)}`);
+      const list = Array.isArray(res) ? res : res?.leads;
+      if (Array.isArray(list)) state.leads.push(...list.map(l => ({ ...l, projectName: project.name })));
     }
     state.leads.sort((a,b) => new Date(b.createdAt||0)-new Date(a.createdAt||0));
     $("#stat-leads").textContent = state.leads.length;
@@ -148,8 +151,8 @@
     if (password && password.length < 8) return setMessage("A nova senha deve ter pelo menos 8 caracteres.", true);
     const body = { name: $("#account-name").value.trim(), phone: $("#account-phone").value.trim() };
     if (password) body.password = password;
-    const res = await API.put("/api/client/account", body);
-    if (res.error) return setMessage(res.message || "Não foi possível salvar.", true);
+    const res = await API.put("/api/client/profile", body);
+    if (res.success === false || res.error) return setMessage(res.error || res.message || "Não foi possível salvar.", true);
     $("#account-password").value = ""; state.client = res.client; $("#user-name").textContent = res.client.name; $("#user-avatar").textContent = res.client.name.charAt(0).toUpperCase(); setMessage("Dados atualizados com sucesso.");
   }
 
