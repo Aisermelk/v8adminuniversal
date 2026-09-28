@@ -11,6 +11,8 @@ const state = {
   leadsByProject: {},
   clientSearch: "",
   projectSearch: "",
+  projectSort: "name-asc",
+  projectStatus: "",
   leadSearch: "",
   crmProjectId: "",
   editingClientId: null,
@@ -468,14 +470,27 @@ function renderProjects() {
   if (!wrap) return;
 
   const search = state.projectSearch.toLowerCase().trim();
+  const status = state.projectStatus || "";
+  const sort = state.projectSort || "name-asc";
+
+  const dateValue = project => {
+    const value = project.createdAt || project.created_at || project.updatedAt || project.updated_at || project.date || 0;
+    const time = new Date(value).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  };
 
   const projects = [...state.projects]
-    .sort((a, b) => Number(a.order ?? a.projectOrder ?? 0) -
-                    Number(b.order ?? b.projectOrder ?? 0))
-    .filter(project =>
-      !search ||
-      String(project.name || "").toLowerCase().includes(search)
-    );
+    .filter(project => {
+      const matchesSearch = !search || String(project.name || "").toLowerCase().includes(search);
+      const matchesStatus = !status || String(project.status || "") === status;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      if (sort === "name-desc") return String(b.name || "").localeCompare(String(a.name || ""), "pt-BR");
+      if (sort === "date-desc") return dateValue(b) - dateValue(a);
+      if (sort === "date-asc") return dateValue(a) - dateValue(b);
+      return String(a.name || "").localeCompare(String(b.name || ""), "pt-BR");
+    });
 
   if (!projects.length) {
     wrap.innerHTML = `<div class="empty-state">Nenhum projeto encontrado.</div>`;
@@ -486,50 +501,21 @@ function renderProjects() {
     <table>
       <thead>
         <tr>
-          <th></th>
           <th>Projeto</th>
           <th>Status</th>
           <th>Leads</th>
           <th></th>
         </tr>
       </thead>
-
       <tbody>
-        ${projects.map((project, index) => {
+        ${projects.map(project => {
           const leads = getUnseenLeadsCount(project.id);
-          const statusClass =
-            STATUS_BADGE[project.status] || "badge-muted";
-
+          const statusClass = STATUS_BADGE[project.status] || "badge-muted";
           return `
-            <tr
-              class="row-clickable"
-              onclick="openProjectModal('${escapeHtml(project.id)}')">
-              <td onclick="event.stopPropagation()">
-                <button
-                  class="btn btn-sm"
-                  onclick="reorderProject('${escapeHtml(project.id)}','up')"
-                  ${index === 0 ? "disabled" : ""}>↑</button>
-
-                <button
-                  class="btn btn-sm"
-                  onclick="reorderProject('${escapeHtml(project.id)}','down')"
-                  ${index === projects.length - 1 ? "disabled" : ""}>↓</button>
-              </td>
-
-              <td>
-                <strong>${escapeHtml(project.name)}</strong>
-              </td>
-
-              <td>
-                <span class="badge ${statusClass}">
-                  ${escapeHtml(project.status)}
-                </span>
-              </td>
-
-              <td>
-                ${leads ? `<span class="badge badge-danger">${leads}</span>` : "—"}
-              </td>
-
+            <tr class="row-clickable" onclick="openProjectModal('${escapeHtml(project.id)}')">
+              <td><strong>${escapeHtml(project.name)}</strong></td>
+              <td><span class="badge ${statusClass}">${escapeHtml(project.status)}</span></td>
+              <td>${leads ? `<span class="badge badge-danger">${leads}</span>` : "—"}</td>
               <td onclick="event.stopPropagation()">
                 <div class="row-actions project-row-actions">
                   <button class="btn btn-primary btn-sm" title="Editar projeto" onclick="openProjectModal('${escapeHtml(project.id)}')">✎ <span>Editar</span></button>
@@ -537,12 +523,10 @@ function renderProjects() {
                   <button class="icon-btn" title="Mais opções" onclick="openProjectActionsMenu(event,'${escapeHtml(project.id)}')">⋯</button>
                 </div>
               </td>
-            </tr>
-          `;
+            </tr>`;
         }).join("")}
       </tbody>
-    </table>
-  `;
+    </table>`;
 }
 
 function handleProjectSearch(value) {
@@ -550,45 +534,16 @@ function handleProjectSearch(value) {
   renderProjects();
 }
 
-async function reorderProject(id, direction) {
-  const projects = [...state.projects].sort(
-    (a, b) =>
-      Number(a.order ?? a.projectOrder ?? 0) -
-      Number(b.order ?? b.projectOrder ?? 0)
-  );
-
-  const index = projects.findIndex(p => String(p.id) === String(id));
-  if (index < 0) return;
-
-  const target = direction === "up" ? index - 1 : index + 1;
-  if (target < 0 || target >= projects.length) return;
-
-  const a = projects[index];
-  const b = projects[target];
-
-  const aOrder = Number(a.order ?? a.projectOrder ?? index);
-  const bOrder = Number(b.order ?? b.projectOrder ?? target);
-
-  try {
-    await Promise.all([
-      API.put("/api/data/projects", {
-        id: a.id,
-        order: bOrder,
-        projectOrder: bOrder
-      }),
-      API.put("/api/data/projects", {
-        id: b.id,
-        order: aOrder,
-        projectOrder: aOrder
-      })
-    ]);
-
-    await refreshData();
-  } catch (error) {
-    console.error(error);
-    toast("Erro ao reorganizar projetos.", "error");
-  }
+function handleProjectSort(value) {
+  state.projectSort = value || "name-asc";
+  renderProjects();
 }
+
+function handleProjectStatus(value) {
+  state.projectStatus = value || "";
+  renderProjects();
+}
+
 
 function openProjectActionsMenu(event, id) {
   event.stopPropagation();
@@ -1605,7 +1560,6 @@ window.confirmDeleteClient = confirmDeleteClient;
 window.openProjectModal = openProjectModal;
 window.openProjectViewPopup = openProjectViewPopup;
 window.openProjectActionsMenu = openProjectActionsMenu;
-window.reorderProject = reorderProject;
 window.saveProject = saveProject;
 window.confirmDeleteProject = confirmDeleteProject;
 
