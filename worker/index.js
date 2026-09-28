@@ -13,7 +13,8 @@ const ROUTES = {
     publicLeads: /^\/api\/public\/leads\/([^/]+)$/,
     publicReviews: /^\/api\/public\/reviews\/([^/]+)$/,
     project: /^\/api\/data\/projects\/([^/]+)$/,
-    leads: /^\/api\/data\/leads\/([^/]+)$/
+    leads: /^\/api\/data\/leads\/([^/]+)$/ ,
+    leadItem: /^\/api\/data\/leads\/([^/]+)\/([^/]+)$/
 };
 
 /* =========================================================
@@ -331,95 +332,50 @@ const CLIENT_URL_FIELDS = new Set([
     "seo.ogImage"
 ]);
 
-/*
- * Acesso por produto.
- *
- * Página = informações básicas + configurações + conteúdo.
- * Site   = todas as opções atuais do projeto, exceto a própria concessão de acesso.
- * Loja   = tudo do Site + o espaço reservado para recursos futuros de e-commerce.
- *
- * Os nomes dos escopos são estáveis de propósito: novos campos de e-commerce
- * poderão ser adicionados depois sem precisar recriar a permissão da Loja.
- */
-const CLIENT_ACCESS_SCOPES = {
-    page: [
-        "name", "status", "siteUrl",
-        "tracking", "contact", "social", "formspree", "content"
-    ],
-    site: [
-        "name", "status", "siteUrl",
-        "tracking", "contact", "social", "formspree", "content",
-        "media", "location", "reviews", "seo", "scripts"
-    ],
-    loja: [
-        "name", "status", "siteUrl",
-        "tracking", "contact", "social", "formspree", "content",
-        "media", "location", "reviews", "seo", "scripts",
-        "ecommerce"
-    ]
-};
-
-const CLIENT_ROOT_FIELDS = new Set([
-    "name",
-    "status",
-    "siteUrl",
-    "formspree"
+const CLIENT_ACCESS_MODULES = new Set([
+    "configuracao",
+    "content",
+    "media",
+    "location",
+    "reviews",
+    "seo",
+    "scripts",
+    "leads"
 ]);
 
 function sanitizeAccess(access) {
-    const list =
-        Array.isArray(access?.editable)
-            ? access.editable
-            : [];
-
-    const valid = list.filter(item => {
-        if (typeof item !== "string") {
-            return false;
-        }
-
-        if (Object.prototype.hasOwnProperty.call(CLIENT_ACCESS_SCOPES, item)) {
-            return true;
-        }
-
-        const [section, field] =
-            item.split(".");
-
-        if (CLIENT_ROOT_FIELDS.has(section)) {
-            return field === undefined;
-        }
-
-        const fields =
-            CLIENT_EDITABLE_FIELDS[section];
-
-        if (!fields) {
-            return false;
-        }
-
-        return (
-            field === undefined ||
-            fields.includes(field)
-        );
-    });
-
-    return {
-        editable: [...new Set(valid)],
-        configured: access?.configured === true
-    };
+    const list = Array.isArray(access?.editable) ? access.editable : [];
+    const legacy = list.some(item => ["page", "site", "loja"].includes(item));
+    const normalized = legacy
+        ? [
+            ...(list.some(item => ["page", "site", "loja"].includes(item)) ? ["configuracao", "content"] : []),
+            ...(list.some(item => ["site", "loja"].includes(item)) ? ["media", "location", "reviews", "seo", "scripts", "leads"] : [])
+          ]
+        : list.filter(item => CLIENT_ACCESS_MODULES.has(item));
+    return { editable: [...new Set(normalized)], configured: access?.configured === true };
 }
 
 function expandClientAccess(access) {
     const sanitized = sanitizeAccess(access);
     const expanded = new Set();
-
-    for (const item of sanitized.editable) {
-        if (CLIENT_ACCESS_SCOPES[item]) {
-            CLIENT_ACCESS_SCOPES[item].forEach(value => expanded.add(value));
-        } else {
-            expanded.add(item);
-        }
-    }
-
+    const modules = (!sanitized.configured && !sanitized.editable.length)
+        ? new Set(CLIENT_ACCESS_MODULES)
+        : new Set(sanitized.editable);
+    if (modules.has("configuracao")) ["name", "status", "siteUrl", "tracking", "contact", "social", "formspree"].forEach(v => expanded.add(v));
+    if (modules.has("content")) expanded.add("content");
+    if (modules.has("media")) expanded.add("media");
+    if (modules.has("location")) expanded.add("location");
+    if (modules.has("reviews")) expanded.add("reviews");
+    if (modules.has("seo")) expanded.add("seo");
+    if (modules.has("scripts")) expanded.add("scripts");
+    if (modules.has("leads")) expanded.add("leads");
     return expanded;
+}
+
+function hasClientModuleAccess(project, module) {
+    const access = sanitizeAccess(project?.access);
+    if (!access.configured && !access.editable.length) return true;
+    return access.editable.includes(module);
 }
 
 async function clientUpdateProject(
@@ -509,9 +465,8 @@ async function clientUpdateProject(
             const path =
                 `${section}.${field}`;
 
-            const allowed =
-                editable.has(section) ||
-                editable.has(path);
+            const module = section === "tracking" || section === "contact" || section === "social" ? "configuracao" : section;
+            const allowed = editable.has(module) || editable.has(path);
 
             if (!allowed) {
                 blocked++;
@@ -969,6 +924,7 @@ function rowToLead(row) {
         return null;
     }
 
+    const metadata = parseJson(row.metadata_json, {});
     return {
         id: row.id,
         projectId: row.project_id,
@@ -976,11 +932,15 @@ function rowToLead(row) {
         email: row.email,
         phone: row.phone,
         message: row.message,
-        metadata:
-            parseJson(
-                row.metadata_json,
-                {}
-            ),
+        metadata,
+        status: metadata.status || "novo",
+        source: metadata.source || "site",
+        value: Number(metadata.value || 0),
+        tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+        notes: metadata.notes || "",
+        nextContact: metadata.nextContact || "",
+        assignedTo: metadata.assignedTo || "",
+        activities: Array.isArray(metadata.activities) ? metadata.activities : [],
         createdAt: row.created_at
     };
 }
@@ -1528,6 +1488,32 @@ async function d1CreateLead(
     return lead;
 }
 
+async function d1UpdateLead(env, projectId, leadId, changes) {
+    const row = await env.V8_D1.prepare(`SELECT * FROM leads WHERE id=? AND project_id=? LIMIT 1`).bind(leadId, projectId).first();
+    if (!row) return null;
+    const current = rowToLead(row);
+    const metadata = { ...(current.metadata || {}) };
+    for (const key of ["status", "source", "notes", "nextContact", "assignedTo"]) {
+        if (key in changes) metadata[key] = String(changes[key] ?? "").trim().slice(0, 5000);
+    }
+    if ("value" in changes) metadata.value = Math.max(0, Number(changes.value || 0));
+    if ("tags" in changes) metadata.tags = Array.isArray(changes.tags) ? changes.tags.map(v => String(v).trim()).filter(Boolean).slice(0, 30) : [];
+    if (changes.activity) {
+        metadata.activities = Array.isArray(metadata.activities) ? metadata.activities : [];
+        const text = String(changes.activity.text || "").trim().slice(0, 2000);
+        if (text) metadata.activities.unshift({ id: uuid(), type: String(changes.activity.type || "nota"), text, at: now() });
+        metadata.activities = metadata.activities.slice(0, 100);
+    }
+    await env.V8_D1.prepare(`UPDATE leads SET metadata_json=? WHERE id=? AND project_id=?`).bind(JSON.stringify(metadata), leadId, projectId).run();
+    const updated = await env.V8_D1.prepare(`SELECT * FROM leads WHERE id=? AND project_id=? LIMIT 1`).bind(leadId, projectId).first();
+    return rowToLead(updated);
+}
+
+async function d1DeleteLead(env, projectId, leadId) {
+    const result = await env.V8_D1.prepare(`DELETE FROM leads WHERE id=? AND project_id=?`).bind(leadId, projectId).run();
+    return !!result.success && Number(result.meta?.changes || 0) > 0;
+}
+
 /* =========================================================
    ACCESS CONTROL
    ========================================================= */
@@ -1791,8 +1777,7 @@ async function dashboardStats(
         clients,
         projects,
         leads,
-        byProject,
-        recent
+        byProject
     ] = await Promise.all([
         env.V8_D1
             .prepare(
@@ -1826,14 +1811,6 @@ async function dashboardStats(
             )
             .all(),
 
-        env.V8_D1
-            .prepare(
-                `SELECT *
-                 FROM leads
-                 ORDER BY created_at DESC
-                 LIMIT 5`
-            )
-            .all()
     ]);
 
     const leadsByProject = {};
@@ -1858,11 +1835,7 @@ async function dashboardStats(
             totalClients: totals.clients,
             totalProjects: totals.projects,
             totalLeads: totals.leads,
-            leadsByProject,
-            recentLeads:
-                (recent.results || []).map(
-                    rowToLead
-                )
+            leadsByProject
         },
         200,
         origin
@@ -3210,10 +3183,7 @@ async function router(
             ROUTES.publicConfig
         );
 
-    if (
-        match &&
-        method === "GET"
-    ) {
+    if (match && (method === "GET" || method === "POST")) {
         return publicConfig(
             env,
             match[1],
@@ -3524,18 +3494,43 @@ async function router(
             );
         }
 
+        if (user.type === "client" && !hasClientModuleAccess(project, "leads")) {
+            return json({ success: false, error: "Acesso a Leads não liberado para este projeto." }, 403, origin);
+        }
+
+        if (method === "POST") {
+            if (user.type !== "admin") return json({ success: false, error: "Acesso restrito ao administrador." }, 403, origin);
+            const created = await d1CreateLead(env, projectId, await readJson(request));
+            return json({ success: true, lead: rowToLead({ ...created, project_id: created.projectId, metadata_json: JSON.stringify(created.metadata), created_at: created.createdAt }) }, 201, origin);
+        }
+
         return json(
             {
                 success: true,
-                leads:
-                    await d1ListLeads(
-                        env,
-                        projectId
-                    )
+                leads: await d1ListLeads(env, projectId)
             },
             200,
             origin
         );
+    }
+
+    const leadItemMatch = path.match(ROUTES.leadItem);
+    if (leadItemMatch) {
+        if (user.type !== "admin") return json({ success: false, error: "Acesso restrito ao administrador." }, 403, origin);
+        const [, projectId, leadId] = leadItemMatch;
+        const project = await d1GetProject(env, projectId);
+        if (!project) return json({ success: false, error: "Projeto não encontrado." }, 404, origin);
+        if (method === "GET") {
+            const result = await env.V8_D1.prepare(`SELECT * FROM leads WHERE id=? AND project_id=? LIMIT 1`).bind(leadId, projectId).first();
+            return result ? json({ success: true, lead: rowToLead(result) }, 200, origin) : json({ success: false, error: "Lead não encontrado." }, 404, origin);
+        }
+        if (method === "PUT" || method === "POST") {
+            const updated = await d1UpdateLead(env, projectId, leadId, await readJson(request));
+            return updated ? json({ success: true, lead: updated }, 200, origin) : json({ success: false, error: "Lead não encontrado." }, 404, origin);
+        }
+        if (method === "DELETE") {
+            return json({ success: await d1DeleteLead(env, projectId, leadId) }, 200, origin);
+        }
     }
 
     /* =====================================================
