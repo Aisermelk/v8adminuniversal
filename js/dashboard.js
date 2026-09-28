@@ -193,6 +193,28 @@ function setupTheme() {
    DADOS
    ========================================================= */
 
+// A API (D1) devolve listas embrulhadas: {success, clients:[...]}.
+// Aceita tanto o formato novo quanto array puro (formato antigo).
+function unwrapList(res, key) {
+  if (Array.isArray(res)) return res;
+  if (res && Array.isArray(res[key])) return res[key];
+  return [];
+}
+
+function normalizeStats(raw) {
+  if (!raw || raw.success === false) return {};
+
+  const s = raw.stats || raw;
+
+  return {
+    totalClients: s.totalClients ?? s.clients,
+    totalProjects: s.totalProjects ?? s.projects,
+    totalLeads: s.totalLeads ?? s.leads,
+    leadsByProject: s.leadsByProject || raw.leadsByProject || {},
+    recentLeads: s.recentLeads || raw.recentLeads || []
+  };
+}
+
 async function refreshData() {
   try {
     const [clients, projects, stats] = await Promise.all([
@@ -201,11 +223,19 @@ async function refreshData() {
       API.get("/api/dashboard/stats")
     ]);
 
-    state.clients = Array.isArray(clients) ? clients : [];
-    state.projects = Array.isArray(projects) ? projects : [];
+    state.projects = unwrapList(projects, "projects");
 
-    state.leadsByProject =
-      stats && !stats.error ? stats.leadsByProject || {} : {};
+    state.clients = unwrapList(clients, "clients").map(client => ({
+      ...client,
+      projectId:
+        client.projectId ||
+        state.projects.find(p => p.clientId === client.id)?.id ||
+        client.legacyProjectId ||
+        ""
+    }));
+
+    state.stats = normalizeStats(stats);
+    state.leadsByProject = state.stats.leadsByProject || {};
 
     if (state.section === "dashboard") renderDashboard();
     if (state.section === "clients") renderClients();
@@ -229,7 +259,7 @@ async function renderDashboard() {
   let stats;
 
   try {
-    stats = await API.get("/api/dashboard/stats");
+    stats = normalizeStats(await API.get("/api/dashboard/stats"));
   } catch {
     stats = {};
   }
@@ -399,11 +429,18 @@ function openClientModal(id = null) {
       `).join("")}
     </select>
 
-    ${id ? `
-      <small class="form-help">
-        O cliente utiliza o login/e-mail cadastrado no sistema.
-      </small>
-    ` : ""}
+    <label>${id ? "Nova senha (opcional)" : "Senha (opcional)"}</label>
+    <input
+      id="client-password"
+      type="password"
+      autocomplete="new-password"
+      minlength="8"
+      placeholder="${id ? "Deixe em branco para manter a atual" : "Mínimo 8 caracteres"}">
+    <small class="form-help">
+      ${id
+        ? "Preencha só se quiser redefinir a senha deste cliente."
+        : "Se deixar em branco, o cliente cria a própria senha em \"Primeiro acesso\" na tela de login, usando este mesmo e-mail."}
+    </small>
 
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="saveClient()">
@@ -418,13 +455,26 @@ async function saveClient() {
   const email = $("client-email")?.value.trim();
   const phone = $("client-phone")?.value.trim();
   const projectId = $("client-project")?.value || "";
+  const password = $("client-password")?.value || "";
 
   if (!name) {
     toast("Informe o nome do cliente.", "error");
     return;
   }
 
+  if (!email) {
+    toast("Informe o e-mail do cliente.", "error");
+    return;
+  }
+
+  if (password && password.length < 8) {
+    toast("A senha deve ter pelo menos 8 caracteres.", "error");
+    return;
+  }
+
   const body = { name, email, phone, projectId };
+
+  if (password) body.password = password;
 
   try {
     const result = state.editingClientId
@@ -1254,9 +1304,12 @@ async function renderProjectLeads(el) {
   el.innerHTML = `<div class="loading">Carregando leads...</div>`;
 
   try {
-    const leads = await API.get(`/api/data/leads/${encodeURIComponent(projectId)}`);
+    const leads = unwrapList(
+      await API.get(`/api/data/leads/${encodeURIComponent(projectId)}`),
+      "leads"
+    );
 
-    if (!Array.isArray(leads) || !leads.length) {
+    if (!leads.length) {
       el.innerHTML = `<div class="empty-state">Nenhum lead encontrado.</div>`;
       return;
     }
