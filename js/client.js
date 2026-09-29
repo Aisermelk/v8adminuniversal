@@ -10,6 +10,7 @@
     const list = Array.isArray(access.editable) ? access.editable : [];
     const modules = Array.isArray(access.modules) ? access.modules : [];
     if (module === "leads" && (access.leads === true || modules.includes("leads"))) return true;
+    if (module === "loja" && modules.includes("loja")) return true;
     if (!list.length && access.configured !== true) return true;
     if (list.some(x => ["page", "site", "loja"].includes(x))) {
       if (module === "configuracao" || module === "content") return true;
@@ -33,7 +34,8 @@
       overview: ["Visão geral", "Acompanhe seus projetos e informações."],
       projects: ["Meus projetos", "Visualize e edite somente o que foi liberado para sua conta."],
       leads: ["Leads", "Contatos recebidos pelos seus projetos."],
-      account: ["Minha conta", "Atualize seus dados pessoais e sua senha."]
+      account: ["Minha conta", "Atualize seus dados pessoais e sua senha."],
+      loja: ["Loja", "Gerencie produtos, categorias, frete e pedidos."]
     };
     $("#page-title").textContent = titles[name][0];
     $("#page-subtitle").textContent = titles[name][1];
@@ -49,6 +51,9 @@
     state.user = me.client || {};
     state.projects = Array.isArray(me.projects) ? me.projects : [];
     state.permissions = [...new Set(state.projects.flatMap(p => Array.isArray(p?.access?.editable) ? p.access.editable : []))];
+    const storeButton = document.querySelector('[data-section="loja"]');
+    const hasStore = state.projects.some(p => hasModule(p, "loja") || String(p?.projectType || p?.type || "").toLowerCase() === "loja");
+    if (storeButton) storeButton.classList.toggle("hidden", !hasStore);
     const leadsButton = document.querySelector('[data-section="leads"]');
     const hasLeads = state.projects.some(p => hasModule(p, "leads"));
     if (leadsButton) leadsButton.classList.toggle("hidden", !hasLeads);
@@ -65,6 +70,7 @@
     renderProjects();
     renderOverview();
     renderLeads();
+    document.dispatchEvent(new CustomEvent("v8:client-loaded"));
   }
 
   async function loadLeads() {
