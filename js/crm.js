@@ -42,12 +42,8 @@ function renderLeads() {
 }
 
 function crmLeadCard(lead) {
-  return `<article class="crm-lead-card" onclick="openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')">
+  return `<article class="crm-lead-card crm-lead-card-compact" onclick="openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')">
     <div class="crm-lead-top"><strong>${escapeHtml(lead.name || "Sem nome")}</strong><button class="icon-btn crm-card-action" onclick="event.stopPropagation();openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')" aria-label="Editar lead">✎</button></div>
-    <p>${escapeHtml(lead.email || lead.phone || "Sem contato")}</p>
-    <div class="crm-lead-meta">${lead.projectName ? `<span>${escapeHtml(lead.projectName)}</span>` : ""}${Number(lead.value || 0) ? `<span>${formatMoney(lead.value)}</span>` : ""}</div>
-    ${(lead.tags || []).slice(0,3).map(tag => `<span class="crm-tag">${escapeHtml(tag)}</span>`).join("")}
-    ${lead.nextContact ? `<small class="crm-next">Próximo contato: ${escapeHtml(lead.nextContact)}</small>` : ""}
   </article>`;
 }
 
@@ -127,24 +123,17 @@ document.addEventListener("DOMContentLoaded", () => {
 async function renderDashboard() {
   const statsEl = $("dashboard-stats");
   if (!statsEl) return;
-
   let stats;
   try { stats = normalizeStats(await API.get("/api/dashboard/stats")); } catch { stats = {}; }
-
   const clients = stats?.totalClients ?? state.clients.length;
   const projects = stats?.totalProjects ?? state.projects.length;
   const leads = stats?.totalLeads ?? Object.values(state.leadsByProject).reduce((total, item) => total + Number(item?.count || 0), 0);
-
+  const recent = Array.isArray(stats?.recentLeads) ? stats.recentLeads.slice(0, 6) : [];
   statsEl.innerHTML = `
-    <button type="button" class="stat-card stat-card-click" onclick="switchSection('clients')">
-      <span class="label">Clientes</span><strong class="value">${clients}</strong>
-    </button>
-    <button type="button" class="stat-card stat-card-click" onclick="switchSection('projects')">
-      <span class="label">Projetos</span><strong class="value">${projects}</strong>
-    </button>
-    <button type="button" class="stat-card stat-card-click" onclick="switchSection('leads')">
-      <span class="label">Leads</span><strong class="value">${leads}</strong>
-    </button>
-  `;
+    <button type="button" class="stat-card stat-card-click" onclick="switchSection('clients')"><span class="label">Clientes</span><strong class="value">${clients}</strong></button>
+    <button type="button" class="stat-card stat-card-click" onclick="switchSection('projects')"><span class="label">Projetos</span><strong class="value">${projects}</strong></button>
+    <button type="button" class="stat-card stat-card-click" onclick="switchSection('leads')"><span class="label">Leads</span><strong class="value">${leads}</strong></button>`;
+  const existing = $("dashboard-new-leads");
+  if (existing) existing.innerHTML = `<div class="dashboard-leads-heading"><div><h2>Novos leads</h2><p>Leads recebidos recentemente.</p></div><button class="btn btn-ghost btn-sm" type="button" onclick="switchSection('leads')">Ver CRM</button></div><div class="dashboard-leads-list">${recent.length ? recent.map(lead => `<button type="button" class="dashboard-lead-row" onclick="openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')"><strong>${escapeHtml(lead.name || "Sem nome")}</strong><span class="icon-btn" aria-hidden="true">✎</span></button>`).join("") : `<div class="crm-empty">Nenhum lead recente.</div>`}</div>`;
 }
 
