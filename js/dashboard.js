@@ -58,6 +58,16 @@ function projectName(id) {
   return getProject(id)?.name || "Sem projeto";
 }
 
+// Um cliente pode ter vários projetos vinculados (pela aba Acesso de cada projeto).
+function clientProjectNames(clientId) {
+  const names = state.projects
+    .filter(p => String(p.clientId) === String(clientId))
+    .map(p => p.name);
+  if (!names.length) return "Sem projeto";
+  if (names.length === 1) return names[0];
+  return `${names[0]} +${names.length - 1}`;
+}
+
 function defaultProject() {
   return {
     name: "",
@@ -273,7 +283,7 @@ function renderClients() {
     <tr class="row-clickable" onclick="openClientViewPopup('${escapeHtml(client.id)}')">
       <td><strong>${escapeHtml(client.name || "—")}</strong></td>
       <td>${escapeHtml(client.email || "—")}</td>
-      <td>${escapeHtml(projectName(client.projectId))}</td>
+      <td>${escapeHtml(clientProjectNames(client.id))}</td>
       <td onclick="event.stopPropagation()"><div class="row-actions client-row-actions">
         <button class="btn btn-primary btn-sm" title="Visualizar cliente" onclick="openClientViewPopup('${escapeHtml(client.id)}')">◉ <span>Visualizar</span></button>
         <button class="btn btn-ghost btn-sm" title="Editar cliente" onclick="openClientModal('${escapeHtml(client.id)}')">✎ <span>Editar</span></button>
@@ -310,7 +320,7 @@ function openClientViewPopup(id) {
     <div class="detail-list">
       <div><strong>E-mail</strong><span>${escapeHtml(client.email)}</span></div>
       <div><strong>Telefone</strong><span>${escapeHtml(client.phone)}</span></div>
-      <div><strong>Projeto</strong><span>${escapeHtml(projectName(client.projectId))}</span></div>
+      <div><strong>Projetos</strong><span>${escapeHtml(clientProjectNames(client.id))}</span></div>
       <div><strong>Status</strong><span>${escapeHtml(client.status || "active")}</span></div>
     </div>
 
@@ -660,7 +670,8 @@ function openProjectModal(id = null) {
       ["seo", "SEO"],
       ["scripts", "Scripts"],
       ["acesso", "Acesso"],
-      ["leads", "Leads"]
+      ["leads", "Leads"],
+      ["loja", "Loja"]
     );
   }
 
@@ -708,7 +719,10 @@ const PROJECT_TABS = {
   seo: renderProjectSeo,
   scripts: renderProjectScripts,
   acesso: renderProjectAccess,
-  leads: renderProjectLeads
+  leads: renderProjectLeads,
+  // renderProjectShop mora em js/shop.js, carregado depois deste arquivo;
+  // a função-seta só resolve o nome na hora do clique, não na hora da leitura deste objeto.
+  loja: (el) => renderProjectShop(el)
 };
 
 function renderProjectTab() {
@@ -1117,14 +1131,14 @@ function renderProjectScripts(el) {
 
 const CLIENT_ACCESS_MODULES = {
   configuracao: { label: "Configuração", description: "Informações básicas, tracking, contato e redes sociais.", icon: "⚙" },
-  loja: { label: "Loja", description: "Produtos, categorias, pedidos e configurações do e-commerce.", icon: "🛒" },
   content: { label: "Conteúdo", description: "Textos, apresentação, especialização e informações profissionais.", icon: "✦" },
   media: { label: "Mídia", description: "Galeria, imagens e vídeos do projeto.", icon: "▧" },
   location: { label: "Localização", description: "Endereço, mapa e informações de localização.", icon: "⌖" },
   reviews: { label: "Reviews", description: "Avaliações e integração com Google Reviews.", icon: "★" },
   seo: { label: "SEO", description: "Título, descrição, canonical, imagem e indexação.", icon: "◎" },
   scripts: { label: "Scripts", description: "Códigos Head, Body e Footer.", icon: "</>" },
-  leads: { label: "Leads", description: "Visualização dos leads recebidos pelo projeto e CRM.", icon: "♙" }
+  leads: { label: "Leads", description: "Visualização dos leads recebidos pelo projeto e CRM.", icon: "♙" },
+  ecommerce: { label: "Loja", description: "Cadastro de produtos da loja virtual do projeto.", icon: "🛒" }
 };
 
 function getAccessModules(p) {
