@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/cliente.css">
+  <link rel="stylesheet" href="css/loja.css">
 </head>
 <body class="client-page">
 <div class="client-shell">
@@ -24,6 +25,7 @@
       <button class="client-nav-item active" data-section="overview">Visão geral</button>
       <button class="client-nav-item" data-section="projects">Meus projetos</button>
       <button class="client-nav-item" data-section="leads">CRM / Leads</button>
+      <button class="client-nav-item hidden" data-section="loja" id="client-store-nav">Loja</button>
       <button class="client-nav-item" data-section="account">Minha conta</button>
     </nav>
     <div class="client-sidebar-footer"><label class="client-theme-toggle"><input type="checkbox" id="client-theme-toggle"><span>Tema claro</span></label><button class="client-logout" id="logout-btn">Sair</button></div>
@@ -45,6 +47,10 @@
       <div class="client-panel"><div class="panel-heading"><div><h2>Leads</h2><p>Contatos recebidos pelos seus projetos. Você pode adicionar e editar, sem excluir.</p></div><button class="btn btn-primary btn-sm hidden" id="client-add-lead">+ Novo lead</button></div><div id="leads-list" class="client-leads-list"><div class="muted-cell">Carregando...</div></div></div>
     </section>
 
+    <section class="client-section" id="section-loja">
+      <div id="store-app"></div>
+    </section>
+
     <section class="client-section" id="section-account">
       <div class="client-panel account-panel"><div class="panel-heading"><div><h2>Minha conta</h2><p>Atualize seus dados pessoais e sua senha.</p></div></div><form id="account-form"><div class="field"><label>Nome</label><input id="account-name" autocomplete="name"></div><div class="field"><label>E-mail de acesso</label><input id="account-email" type="email" readonly></div><div class="field"><label>Telefone</label><input id="account-phone" autocomplete="tel"></div><div class="field"><label>Nova senha</label><input id="account-password" type="password" minlength="8" placeholder="Deixe em branco para manter a atual" autocomplete="new-password"></div><div id="account-message" class="form-message hidden"></div><button class="btn btn-primary" type="submit">Salvar alterações</button></form></div>
     </section>
@@ -53,5 +59,6 @@
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/client.js"></script>
+<script src="js/loja.js"></script>
 </body>
 </html>
