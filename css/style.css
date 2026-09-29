@@ -1152,3 +1152,9 @@ input:focus, select:focus, textarea:focus {
   border-top: 1px solid var(--border-soft);
 }
 .shop-card-actions .btn { flex: 1; }
+
+/* V8 AJUSTES — tipos de projeto + dashboard/CRM */
+.project-type-tag{display:inline-flex;margin-top:5px;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:800;letter-spacing:.04em;border:1px solid var(--border);color:var(--text-muted);background:var(--bg-elevated)}
+.project-type-page{color:#a78bfa}.project-type-site{color:var(--accent)}.project-type-loja{color:#f59e0b}
+.dashboard-leads-panel{margin-top:18px}.dashboard-leads-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.dashboard-leads-heading h2{margin:0 0 3px;font-size:16px}.dashboard-leads-heading p{margin:0;color:var(--text-muted);font-size:12px}.dashboard-leads-list{display:grid;gap:7px}.dashboard-lead-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-elevated);color:var(--text-main);text-align:left;cursor:pointer}.dashboard-lead-row:hover{border-color:var(--accent)}.dashboard-lead-row strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dashboard-lead-row .icon-btn{width:28px;height:28px;flex:0 0 28px}.crm-lead-card-compact{padding:10px 11px}.crm-lead-card-compact .crm-lead-top{align-items:center}.crm-lead-card-compact .crm-card-action{flex:0 0 28px}
+@media(max-width:720px){.dashboard-leads-heading{align-items:flex-start;flex-direction:column}.dashboard-leads-heading .btn{width:100%}.crm-board{grid-template-columns:repeat(6,minmax(170px,1fr));overflow-x:auto}.crm-column{min-height:300px}.crm-lead-card-compact{min-height:42px}}
