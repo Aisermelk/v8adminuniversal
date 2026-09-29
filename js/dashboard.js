@@ -1117,6 +1117,7 @@ function renderProjectScripts(el) {
 
 const CLIENT_ACCESS_MODULES = {
   configuracao: { label: "Configuração", description: "Informações básicas, tracking, contato e redes sociais.", icon: "⚙" },
+  loja: { label: "Loja", description: "Produtos, categorias, pedidos e configurações do e-commerce.", icon: "🛒" },
   content: { label: "Conteúdo", description: "Textos, apresentação, especialização e informações profissionais.", icon: "✦" },
   media: { label: "Mídia", description: "Galeria, imagens e vídeos do projeto.", icon: "▧" },
   location: { label: "Localização", description: "Endereço, mapa e informações de localização.", icon: "⌖" },
