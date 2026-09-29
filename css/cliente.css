@@ -1,327 +1,59 @@
-/* V8 ADMIN UNIVERSAL — Área do Cliente */
-(() => {
-  const state = { projects: [], leads: [], client: null, user: null, permissions: [] };
-  const $ = (s) => document.querySelector(s);
-  const $$ = (s) => [...document.querySelectorAll(s)];
-  const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
-  const can = (p) => state.permissions.includes("all") || state.permissions.includes(p);
-  function hasModule(project, module) {
-    const access = project?.access || {};
-    const list = Array.isArray(access.editable) ? access.editable : [];
-    const modules = Array.isArray(access.modules) ? access.modules : [];
-    if (module === "leads" && (access.leads === true || modules.includes("leads"))) return true;
-    if (module === "loja" && modules.includes("loja")) return true;
-    if (!list.length && access.configured !== true) return true;
-    if (list.some(x => ["page", "site", "loja"].includes(x))) {
-      if (module === "configuracao" || module === "content") return true;
-      return ["media", "location", "reviews", "seo", "scripts", "leads"].includes(module) && list.some(x => ["site", "loja"].includes(x));
-    }
-    return list.includes(module);
-  }
+/* V8 Área do Cliente — tema escuro alinhado ao Admin */
+.client-page,
+.client-page .client-main {
+  background: #090d18;
+  color: #eef2ff;
+}
+.client-page {
+  min-height: 100vh;
+  color-scheme: dark;
+}
+.client-page .client-panel,
+.client-page .client-stat,
+.client-page .project-card {
+  background: #121827;
+  border-color: #263047;
+}
+.client-page .project-card {
+  background: #0f1625;
+}
+.client-page input,
+.client-page select,
+.client-page textarea {
+  background: #0b1120;
+  color: #eef2ff;
+  border-color: #2a3650;
+}
+.client-page .client-main {
+  min-height: 100vh;
+}
 
-  function setMessage(text, error = false) {
-    const el = $("#account-message");
-    if (!el) return;
-    el.textContent = text || "";
-    el.classList.toggle("hidden", !text);
-    el.classList.toggle("error", error);
-  }
+.client-page{background:var(--bg-main);color:var(--text-main)}
+.client-shell{min-height:100vh;display:grid;grid-template-columns:250px 1fr}
+.client-sidebar{background:var(--bg-sidebar);border-right:1px solid var(--border);padding:22px 14px;display:flex;flex-direction:column;min-height:100vh;position:sticky;top:0;height:100vh}
+.client-brand{display:flex;align-items:center;gap:10px}.client-brand img{width:34px;height:34px;object-fit:contain}.client-brand strong{font-family:var(--font-display);font-size:17px}.client-brand span{display:block;color:var(--text-muted);font-size:11px}.client-brand-desktop{padding:4px 8px 22px;border-bottom:1px solid var(--border-soft)}
+.client-userbox{display:flex;align-items:center;gap:10px;padding:18px 8px}.client-userbox strong{display:block;font-size:13px}.client-userbox small{display:block;color:var(--text-muted);font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis}.client-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700}
+.client-nav{display:flex;flex-direction:column;gap:4px}.client-nav-item{border:0;background:transparent;color:var(--text-muted);padding:11px 12px;text-align:left;border-radius:8px;font-size:13px}.client-nav-item:hover,.client-nav-item.active{background:var(--accent-soft);color:var(--text-main)}.client-nav-item.active{color:var(--accent)}.client-logout{margin-top:auto;border:1px solid var(--border);background:transparent;color:var(--text-muted);padding:10px;border-radius:8px}.client-logout:hover{color:var(--danger);border-color:var(--danger)}
+.client-main{padding:32px 38px 70px;max-width:1250px;width:100%}.client-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:25px}.client-header h1{font-size:26px;margin:2px 0 5px}.client-header p:not(.eyebrow){color:var(--text-muted);margin:0}.eyebrow{font-size:10px;letter-spacing:.12em;color:var(--accent);font-weight:700;margin:0 0 5px}.client-section{display:none}.client-section.active{display:block}.client-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}.client-stat{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:20px}.client-stat span{display:block;color:var(--text-muted);font-size:12px;margin-bottom:8px}.client-stat strong{font-family:var(--font-display);font-size:28px}
+.client-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:22px;margin-bottom:18px}.panel-heading{display:flex;justify-content:space-between;gap:15px;align-items:center;margin-bottom:18px}.panel-heading h2{font-size:16px;margin:0 0 4px}.panel-heading p{margin:0;color:var(--text-muted);font-size:12.5px}.project-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.project-card{border:1px solid var(--border);background:var(--bg-elevated);border-radius:12px;padding:17px}.project-card-top{display:flex;justify-content:space-between;gap:12px}.project-card h3{font-size:15px;margin:0 0 4px}.project-card p{font-size:12px;color:var(--text-muted);margin:0}.project-meta{display:flex;flex-wrap:wrap;gap:6px;margin:15px 0}.project-badge{font-size:10px;border:1px solid var(--border);border-radius:99px;padding:4px 8px;color:var(--text-muted)}.project-actions{display:flex;gap:8px;margin-top:14px}.project-actions .btn{flex:1;justify-content:center}
+.client-table-wrap{overflow:auto}.client-table-wrap table{min-width:700px}.muted-cell{color:var(--text-muted);text-align:center;padding:30px}.form-message{padding:10px 12px;border-radius:8px;background:var(--accent-soft);margin-bottom:12px;font-size:12px}.form-message.error{background:var(--danger-soft);color:var(--danger)}
+.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.editor-group{border-top:1px solid var(--border-soft);padding-top:15px}.editor-group:first-child{border-top:0;padding-top:0}.editor-group h3{font-size:13px;margin:0 0 12px}.editor-fields{display:grid;gap:11px}.editor-fields label{font-size:11px;color:var(--text-muted)}.editor-fields input,.editor-fields textarea{width:100%;box-sizing:border-box;margin-top:5px;background:var(--bg-main);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px;font:inherit}.editor-fields textarea{min-height:85px;resize:vertical}.editor-footer{margin-top:18px;display:flex;justify-content:flex-end;gap:8px}
+.client-mobilebar{display:none}
+@media(max-width:800px){.client-shell{display:block}.client-sidebar{position:fixed;z-index:30;left:-270px;width:250px;transition:left .2s ease}.client-sidebar.open{left:0}.client-mobilebar{display:flex;position:sticky;top:0;z-index:20;background:var(--bg-sidebar);border-bottom:1px solid var(--border);padding:12px 16px;justify-content:space-between;align-items:center}.client-brand-desktop{display:none}.client-main{padding:24px 16px 50px}.client-header{align-items:center}.client-header h1{font-size:22px}.client-stats{grid-template-columns:1fr}.editor-grid{grid-template-columns:1fr}}
+.permission-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px}.permission-grid label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-muted)}.permission-grid input{accent-color:var(--accent)}.field-help{display:block;color:var(--text-faint);font-size:11px;margin-top:5px}
+.ecommerce-access-note{display:flex;gap:10px;align-items:flex-start;margin-top:16px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--accent-soft);font-size:11px;color:var(--text-muted)}.ecommerce-access-note strong{color:var(--accent);white-space:nowrap}
 
-  function switchSection(name) {
-    $$(".client-nav-item").forEach(b => b.classList.toggle("active", b.dataset.section === name));
-    $$(".client-section").forEach(s => s.classList.toggle("active", s.id === `section-${name}`));
-    const titles = {
-      overview: ["Visão geral", "Acompanhe seus projetos e informações."],
-      projects: ["Meus projetos", "Visualize e edite somente o que foi liberado para sua conta."],
-      leads: ["Leads", "Contatos recebidos pelos seus projetos."],
-      account: ["Minha conta", "Atualize seus dados pessoais e sua senha."],
-      loja: ["Loja", "Gerencie produtos, categorias, frete e pedidos."]
-    };
-    $("#page-title").textContent = titles[name][0];
-    $("#page-subtitle").textContent = titles[name][1];
-    $("#client-sidebar")?.classList.remove("open");
-  }
+.client-lead-project td{background:var(--bg-elevated);border-top:1px solid var(--border);padding:11px 10px}.client-lead-project strong{font-size:12px}.client-lead-project span{float:right;font-size:10px;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:3px 7px}
 
-  async function load() {
-    // O Worker (D1) expõe tudo em /api/client/me: {client, projects}
-    const me = await API.get("/api/client/me");
-    if (!me || me.success === false || me.error) {
-      return showFatal(me?.error || me?.message || "Não foi possível carregar sua área.");
-    }
-    state.user = me.client || {};
-    state.projects = Array.isArray(me.projects) ? me.projects : [];
-    state.permissions = [...new Set(state.projects.flatMap(p => Array.isArray(p?.access?.editable) ? p.access.editable : []))];
-    const storeButton = document.querySelector('[data-section="loja"]');
-    const hasStore = state.projects.some(p => hasModule(p, "loja") || String(p?.projectType || p?.type || "").toLowerCase() === "loja");
-    if (storeButton) storeButton.classList.toggle("hidden", !hasStore);
-    const leadsButton = document.querySelector('[data-section="leads"]');
-    const hasLeads = state.projects.some(p => hasModule(p, "leads"));
-    if (leadsButton) leadsButton.classList.toggle("hidden", !hasLeads);
-    state.client = me.client || {};
-    $("#user-name").textContent = state.client.name || state.user?.name || "Cliente";
-    $("#user-email").textContent = state.client.email || state.user?.email || "—";
-    $("#user-avatar").textContent = (state.client.name || "C").trim().charAt(0).toUpperCase();
-    $("#account-name").value = state.client.name || "";
-    $("#account-email").value = state.client.email || "";
-    $("#account-phone").value = state.client.phone || "";
-    $("#stat-projects").textContent = state.projects.length;
-    $("#stat-status").textContent = state.client.status === "inactive" ? "Bloqueado" : "Ativo";
-    await loadLeads();
-    renderProjects();
-    renderOverview();
-    renderLeads();
-    document.dispatchEvent(new CustomEvent("v8:client-loaded"));
-  }
+/* Tema e acabamento compartilhados com o Admin */
+.client-sidebar-footer{margin-top:auto;display:grid;gap:8px}
+.client-logout{border-radius:9px!important;transition:transform .15s,background .15s!important}.client-logout:hover{transform:translateY(-1px)}
+.client-page .btn{border-radius:9px}.client-page .client-panel,.client-page .client-stat,.client-page .project-card{box-shadow:0 6px 22px rgba(0,0,0,.08)}
 
-  async function loadLeads() {
-    state.leads = [];
-    const hasLeads = state.projects.some(p => hasModule(p, "leads"));
-    if (!hasLeads) {
-      $("#stat-leads").textContent = "0";
-      return;
-    }
-    for (const project of state.projects) {
-      if (!hasModule(project, "leads")) continue;
-      const res = await API.get(`/api/data/leads/${encodeURIComponent(project.id)}`);
-      const list = Array.isArray(res) ? res : res?.leads;
-      if (Array.isArray(list)) state.leads.push(...list.map(l => ({ ...l, projectId: l.projectId || project.id, projectName: project.name })));
-    }
-    state.leads.sort((a,b) => new Date(b.createdAt||0)-new Date(a.createdAt||0));
-    $("#stat-leads").textContent = state.leads.length;
-  }
-
-  const STAGE_LABELS = { novo: "Novo", contato: "Contato", qualificado: "Qualificado", proposta: "Proposta", ganho: "Ganho", perdido: "Perdido" };
-
-  function formatLeadDate(value) {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("pt-BR");
-  }
-
-  function renderLeads() {
-    const list = $("#leads-list");
-    const add = $("#client-add-lead");
-    if (!list) return;
-    const allowed = state.projects.some(p => hasModule(p, "leads"));
-    add?.classList.toggle("hidden", !allowed);
-    if (!allowed) { list.innerHTML = `<div class="empty-state"><strong>CRM não liberado</strong><p>O gerenciamento de leads não está liberado para sua conta.</p></div>`; return; }
-    if (!state.leads.length) { list.innerHTML = `<div class="empty-state"><strong>Nenhum lead</strong><p>Adicione manualmente um lead recebido pelo WhatsApp ou outro canal.</p></div>`; return; }
-    list.innerHTML = `
-      <div class="client-lead-row client-lead-head">
-        <span>Data</span><span>Nome</span><span>Contato</span><span>Projeto</span><span>Status</span><span></span>
-      </div>
-      ${state.leads.map(lead => `
-        <div class="client-lead-row">
-          <span>${esc(formatLeadDate(lead.createdAt))}</span>
-          <strong>${esc(lead.name || "Sem nome")}</strong>
-          <span>${esc(lead.email || lead.phone || "—")}</span>
-          <span>${esc(lead.projectName || "—")}</span>
-          <span class="badge badge-success">${esc(STAGE_LABELS[lead.status] || "Novo")}</span>
-          <button class="icon-btn" title="Editar lead" aria-label="Editar lead" data-edit-client-lead="${esc(lead.id)}" data-project-id="${esc(lead.projectId)}">✎</button>
-        </div>
-      `).join("")}
-    `;
-    list.querySelectorAll("[data-edit-client-lead]").forEach(btn => btn.addEventListener("click", () => openClientLeadEditor(btn.dataset.editClientLead, btn.dataset.projectId)));
-  }
-
-  function openClientLeadEditor(id = null, projectId = "") {
-    const lead = id ? state.leads.find(l => String(l.id) === String(id) && String(l.projectId) === String(projectId)) : null;
-    const projects = state.projects.filter(p => hasModule(p, "leads"));
-    if (!projects.length) return;
-    const selectedProject = projectId || projects[0].id;
-    showClientLeadModal(lead, selectedProject);
-  }
-
-  function showClientLeadModal(lead, projectId) {
-    const projects = state.projects.filter(p => hasModule(p, "leads"));
-    const options = projects.map(p => `<option value="${esc(p.id)}" ${String(p.id) === String(projectId) ? "selected" : ""}>${esc(p.name || "Projeto")}</option>`).join("");
-    const stages = [["novo","Novo"],["contato","Contato"],["qualificado","Qualificado"],["proposta","Proposta"],["ganho","Ganho"],["perdido","Perdido"]];
-    const stageOptions = stages.map(([v,l]) => `<option value="${v}" ${(lead?.status || "novo") === v ? "selected" : ""}>${l}</option>`).join("");
-    const content = `<div class="crm-detail client-crm-detail"><div class="crm-detail-head"><div><p class="eyebrow">CRM</p><h2>${lead ? "Editar lead" : "Adicionar lead"}</h2><p>Cadastre contatos recebidos manualmente.</p></div></div><div class="crm-form-grid"><label>Projeto<select id="client-lead-project" ${lead ? "disabled" : ""}>${options}</select></label><label>Nome<input id="client-lead-name" value="${esc(lead?.name || "")}" required></label><label>Telefone<input id="client-lead-phone" value="${esc(lead?.phone || "")}"></label><label>E-mail<input id="client-lead-email" type="email" value="${esc(lead?.email || "")}"></label><label>Status<select id="client-lead-status">${stageOptions}</select></label><label>Valor potencial<input id="client-lead-value" type="number" min="0" step="0.01" value="${esc(lead?.value || 0)}"></label><label class="crm-full">Observações<textarea id="client-lead-notes">${esc(lead?.notes || lead?.message || "")}</textarea></label></div><div class="modal-actions modal-save-bar"><button class="btn btn-primary modal-save-floating" id="client-lead-save">${lead ? "Salvar alterações" : "Adicionar lead"}</button></div></div>`;
-    const overlay = document.createElement("div"); overlay.id = "client-lead-modal"; overlay.className = "modal-overlay"; overlay.innerHTML = `<div class="modal" style="max-width:680px"><button class="modal-close" id="client-lead-close" aria-label="Fechar">×</button>${content}</div>`;
-    document.body.appendChild(overlay);
-    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
-    $("#client-lead-close").onclick = () => overlay.remove();
-    $("#client-lead-save").onclick = async () => {
-      const btn = $("#client-lead-save"); btn.disabled = true; btn.textContent = "Salvando...";
-      try {
-        const pid = $("#client-lead-project").value;
-        const body = { name: $("#client-lead-name").value.trim(), phone: $("#client-lead-phone").value.trim(), email: $("#client-lead-email").value.trim(), message: $("#client-lead-notes").value.trim(), status: $("#client-lead-status").value, value: Number($("#client-lead-value").value || 0), notes: $("#client-lead-notes").value.trim(), source: "manual" };
-        if (!body.name) { alert("Informe o nome do lead."); return; }
-        const res = lead ? await API.put(`/api/data/leads/${encodeURIComponent(pid)}/${encodeURIComponent(lead.id)}`, body) : await API.post(`/api/data/leads/${encodeURIComponent(pid)}`, body);
-        if (res?.error || res?.success === false) throw new Error(res?.error || res?.message || "Não foi possível salvar o lead.");
-        overlay.remove(); await loadLeads(); renderLeads(); renderOverview();
-      } catch (e) { alert(e.message || "Não foi possível salvar o lead."); }
-      finally { btn.disabled = false; btn.textContent = lead ? "Salvar alterações" : "Adicionar lead"; }
-    };
-  }
-
-  function projectCard(p) {
-    const type = p.type || "SITE";
-    const status = p.status || "—";
-    const editable = allowedFields(p).length > 0;
-    const viewButton = p.siteUrl
-      ? `<a class="btn btn-ghost btn-sm" href="${esc(p.siteUrl)}" target="_blank" rel="noopener">◉ Visualizar</a>`
-      : `<button class="btn btn-ghost btn-sm" disabled title="Este projeto ainda não possui URL pública">◉ Visualizar</button>`;
-    return `<article class="project-card"><div class="project-card-top"><div><h3>${esc(p.name || "Projeto")}</h3><p>${esc(p.domain || p.siteUrl || "Projeto V8")}</p></div><span class="project-badge">${esc(type)}</span></div><div class="project-meta"><span class="project-badge">${esc(status)}</span></div><div class="project-actions">${viewButton}${editable ? `<button class="btn btn-primary btn-sm" data-edit-project="${esc(p.id)}">✎ Editar</button>` : ""}</div></article>`;
-  }
-
-  function renderProjects() {
-    const html = state.projects.length ? state.projects.map(projectCard).join("") : `<div class="empty-state"><strong>Nenhum projeto disponível</strong><p>Quando um projeto for vinculado à sua conta, ele aparecerá aqui.</p></div>`;
-    $("#projects-list").innerHTML = html;
-    bindProjectButtons();
-  }
-
-  function renderOverview() {
-    $("#overview-projects").innerHTML = state.projects.slice(0,4).map(projectCard).join("") || `<div class="empty-state"><strong>Sem projetos</strong><p>Não há projetos vinculados à sua conta.</p></div>`;
-    bindProjectButtons();
-  }
-
-
-  function setPath(obj, path, value) {
-    const keys = path.split("."); let cur = obj;
-    keys.forEach((key, i) => { if (i === keys.length - 1) cur[key] = value; else { if (!cur[key] || typeof cur[key] !== "object" || Array.isArray(cur[key])) cur[key] = {}; cur = cur[key]; } });
-  }
-
-  // Catálogo completo do editor. Os escopos Página/Site/Loja determinam o que aparece.
-  const FIELD_CATALOG = {
-    general: { label: "Informações básicas", fields: { name: "Nome", status: "Status", siteUrl: "URL do site" } },
-    tracking: { label: "Configurações / Tracking", fields: { pixel: "Meta Pixel", tag: "Google Tag / GTM", analytics: "Google Analytics" } },
-    contact: { label: "Contato", fields: { whatsapp: "WhatsApp", email: "E-mail", phone: "Telefone" } },
-    social: { label: "Redes sociais", fields: { facebook: "Facebook", instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", linkedin: "LinkedIn" } },
-    content: { label: "Conteúdo", fields: { name: "Nome", job: "Profissão / cargo", headline: "Título principal", description: "Descrição", specialization: "Especialização", experience: "Experiência", address: "Endereço", registration: "Registro profissional" } },
-    media: { label: "Mídia", fields: { galleryEnabled: "Ativar galeria", galleryImages: "Imagens da galeria", videoEnabled: "Ativar vídeo", video: "Vídeo" } },
-    location: { label: "Localização", fields: { enabled: "Exibir mapa", address: "Endereço", mapsUrl: "Link do Google Maps", embed: "Código do mapa" } },
-    reviews: { label: "Avaliações", fields: { enabled: "Ativar avaliações", placeId: "Google Place ID" } },
-    seo: { label: "SEO", fields: { title: "Título", description: "Descrição", ogImage: "Imagem de compartilhamento", canonical: "Canonical", keywords: "Palavras-chave", robots: "Robots" } },
-    scripts: { label: "Scripts", fields: { head: "Head", body: "Body", footer: "Footer" } }
-  };
-
-  const PAGE_SECTIONS = new Set(["general", "tracking", "contact", "social", "content"]);
-  const SITE_SECTIONS = new Set(Object.keys(FIELD_CATALOG));
-  const LONG_FIELDS = new Set(["content.description", "content.experience", "seo.description", "seo.keywords", "media.galleryImages", "location.embed", "scripts.head", "scripts.body", "scripts.footer"]);
-
-  function projectScopes(project) {
-    return {
-      configuracao: hasModule(project, "configuracao"),
-      content: hasModule(project, "content"),
-      media: hasModule(project, "media"),
-      location: hasModule(project, "location"),
-      reviews: hasModule(project, "reviews"),
-      seo: hasModule(project, "seo"),
-      scripts: hasModule(project, "scripts"),
-      leads: hasModule(project, "leads")
-    };
-  }
-
-  function allowedFields(project) {
-    const scopes = projectScopes(project);
-    const list = [];
-    // "Informações básicas" (nome, status, URL do site) nunca é editável pelo
-    // cliente, mesmo com o módulo Configuração liberado — só o administrador edita.
-    if (scopes.configuracao) {
-      ["tracking", "contact", "social"].forEach(section => Object.keys(FIELD_CATALOG[section]?.fields || {}).forEach(field => list.push([section, field])));
-    }
-    Object.entries(FIELD_CATALOG).forEach(([section, info]) => {
-      if (section === "general" || section === "tracking" || section === "contact" || section === "social") return;
-      if (!scopes[section]) return;
-      Object.keys(info.fields).forEach(field => list.push([section, field]));
-    });
-    return list;
-  }
-
-  function openEditor(id) {
-    const p = state.projects.find(x => x.id === id); if (!p) return;
-    const allowed = allowedFields(p);
-    const scopes = projectScopes(p);
-    $("#project-editor-panel").classList.remove("hidden");
-    $("#editor-title").textContent = `Editar — ${p.name || "Projeto"}`;
-
-    if (!allowed.length) {
-      $("#project-editor").innerHTML = `<p class="muted-cell">Nenhum recurso foi liberado para este projeto.</p>`;
-      return;
-    }
-
-    const groups = Object.entries(FIELD_CATALOG).map(([section, info]) => {
-      const fields = allowed.filter(([sec]) => sec === section);
-      if (!fields.length) return "";
-      const inputs = fields.map(([sec, field]) => {
-        const label = info.fields[field];
-        const value = sec === "general" ? p[field] : p[sec]?.[field];
-        const path = `${sec}.${field}`;
-        if (sec === "general" && field === "status") {
-          const options = ["Em produção", "Em desenvolvimento", "Pausado"];
-          return `<label>${esc(label)}<select data-section="${sec}" data-field="${field}">${options.map(v => `<option ${String(value || "") === v ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>`;
-        }
-        if ((sec === "location" && field === "enabled") || (sec === "reviews" && field === "enabled") || (sec === "media" && (field === "galleryEnabled" || field === "videoEnabled"))) {
-          return `<label><span><input type="checkbox" data-section="${sec}" data-field="${field}" ${value ? "checked" : ""}> ${esc(label)}</span></label>`;
-        }
-        if (field === "galleryImages") {
-          return `<label>${esc(label)}<textarea data-section="${sec}" data-field="${field}" placeholder="Uma URL por linha">${esc(Array.isArray(value) ? value.join("\n") : "")}</textarea></label>`;
-        }
-        if (LONG_FIELDS.has(path)) {
-          return `<label>${esc(label)}<textarea data-section="${sec}" data-field="${field}">${esc(value || "")}</textarea></label>`;
-        }
-        return `<label>${esc(label)}<input data-section="${sec}" data-field="${field}" value="${esc(value || "")}"></label>`;
-      }).join("");
-      return `<div class="editor-group"><h3>${esc(info.label)}</h3><div class="editor-fields">${inputs}</div></div>`;
-    }).join("");
-
-    const lojaNote = scopes.loja ? `<div class="ecommerce-access-note"><strong>Loja</strong><span>Permissão preparada para os futuros módulos de e-commerce. Novos recursos poderão usar este mesmo acesso.</span></div>` : "";
-    $("#project-editor").innerHTML = `<div class="editor-grid">${groups}</div>${lojaNote}<p class="muted-cell">As opções não liberadas continuam ocultas para o cliente.</p><div class="editor-footer"><button class="btn btn-primary" id="save-project">Salvar alterações</button></div>`;
-    $("#save-project").onclick = () => saveProject(p.id);
-    $("#project-editor-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  async function saveProject(id) {
-    const body = {};
-    $$("#project-editor [data-section][data-field]").forEach(input => {
-      const section = input.dataset.section;
-      const field = input.dataset.field;
-      let value;
-      if (input.type === "checkbox") value = input.checked;
-      else if (section === "media" && field === "galleryImages") value = input.value.split("\n").map(v => v.trim()).filter(Boolean);
-      else value = input.value;
-      if (section === "general") body[field] = value;
-      else { body[section] ||= {}; body[section][field] = value; }
-    });
-    const btn = $("#save-project"); btn.disabled = true; btn.textContent = "Salvando...";
-    try {
-      const res = await API.put(`/api/client/projects/${encodeURIComponent(id)}`, body);
-      if (!res || res.success === false || res.error) return alert(res?.error || res?.message || "Não foi possível salvar.");
-      const index = state.projects.findIndex(p => p.id === id);
-      if (index >= 0 && res.project) state.projects[index] = res.project;
-      renderProjects(); renderOverview(); openEditor(id); alert("Alterações salvas com sucesso.");
-    } catch (error) { console.error(error); alert("Erro ao salvar o projeto."); }
-    finally { btn.disabled = false; btn.textContent = "Salvar alterações"; }
-  }
-
-  function bindProjectButtons() { $$('[data-edit-project]').forEach(b => b.addEventListener("click", () => openEditor(b.dataset.editProject))); }
-
-  async function saveAccount(e) {
-    e.preventDefault(); setMessage("");
-    const password = $("#account-password").value;
-    if (password && password.length < 8) return setMessage("A nova senha deve ter pelo menos 8 caracteres.", true);
-    const body = { name: $("#account-name").value.trim(), phone: $("#account-phone").value.trim() };
-    if (password) body.password = password;
-    const res = await API.put("/api/client/profile", body);
-    if (res.success === false || res.error) return setMessage(res.error || res.message || "Não foi possível salvar.", true);
-    $("#account-password").value = ""; state.client = res.client; $("#user-name").textContent = res.client.name; $("#user-avatar").textContent = res.client.name.charAt(0).toUpperCase(); setMessage("Dados atualizados com sucesso.");
-  }
-
-  function showFatal(msg) { document.querySelector(".client-main").innerHTML = `<div class="client-panel"><h2>Não foi possível carregar</h2><p>${esc(msg)}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></div>`; }
-
-
-  document.addEventListener("DOMContentLoaded", async () => {
-    if (!Auth.requireClient()) return;
-    document.documentElement.setAttribute("data-theme", "dark");
-    $$(".client-nav-item").forEach(b => b.addEventListener("click", () => switchSection(b.dataset.section)));
-    $$('[data-go="projects"]').forEach(b => b.addEventListener("click", () => switchSection("projects")));
-    $("#refresh-btn").addEventListener("click", load);
-    $("#close-editor").addEventListener("click", () => $("#project-editor-panel").classList.add("hidden"));
-    $("#client-add-lead")?.addEventListener("click", () => openClientLeadEditor());
-    $("#logout-btn").addEventListener("click", () => Auth.logout());
-    $("#account-form").addEventListener("submit", saveAccount);
-    $("#client-menu").addEventListener("click", () => $("#client-sidebar").classList.toggle("open"));
-    await load();
-  });
-})();
+.client-leads-list{display:grid;gap:6px}.client-lead-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:7px 10px 7px 12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-elevated)}.client-lead-row:hover{border-color:var(--accent)}.client-lead-row strong{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.client-lead-row .icon-btn{width:30px;height:30px;flex:0 0 30px}.client-crm-detail{padding-bottom:2px}.client-page .modal-save-bar{position:sticky;bottom:-1px;z-index:4;justify-content:flex-end;margin:18px -2px -2px;padding:12px 2px 2px;background:linear-gradient(to bottom,transparent,var(--bg-card) 25%)}
+.client-leads-list{display:flex;flex-direction:column;gap:6px}
+.client-lead-row{display:grid;grid-template-columns:100px 1.3fr 1.3fr 1fr 110px 40px;gap:10px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-elevated);font-size:13px}
+.client-lead-row.client-lead-head{background:none;border:none;padding:0 14px;color:var(--text-faint);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+.client-lead-row strong{font-weight:600}
+.client-lead-row .icon-btn{justify-self:end}
+@media(max-width:800px){.client-lead-row{grid-template-columns:1fr 1fr;grid-auto-rows:auto}.client-lead-row.client-lead-head{display:none}}
