@@ -161,6 +161,7 @@ function switchSection(section) {
   if (section === "clients") renderClients();
   if (section === "projects") renderProjects();
   if (section === "leads") renderLeads();
+  if (section === "store") renderStoreSection();
 }
 
 /* =========================================================
@@ -263,6 +264,7 @@ async function refreshData() {
     if (state.section === "clients") renderClients();
     if (state.section === "projects") renderProjects();
     if (state.section === "leads") renderLeads();
+    if (state.section === "store") renderStoreSection();
   } catch (error) {
     console.error(error);
     toast("Não foi possível carregar os dados.", "error");
