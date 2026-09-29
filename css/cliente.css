@@ -57,3 +57,7 @@
 .client-lead-row strong{font-weight:600}
 .client-lead-row .icon-btn{justify-self:end}
 @media(max-width:800px){.client-lead-row{grid-template-columns:1fr 1fr;grid-auto-rows:auto}.client-lead-row.client-lead-head{display:none}}
+
+/* V8 AJUSTES — responsividade mobile */
+@media(max-width:800px){.client-main{padding:18px 12px 40px;overflow-x:hidden}.client-header{gap:10px;margin-bottom:18px}.client-header .btn{flex:0 0 auto;padding:8px 10px}.client-header h1{font-size:20px}.client-panel{padding:15px;margin-bottom:14px}.panel-heading{align-items:flex-start;flex-direction:column;gap:10px}.panel-heading>.btn{width:100%}.project-grid{grid-template-columns:1fr}.project-card{padding:14px}.project-actions{flex-direction:column}.project-actions .btn{width:100%}.editor-grid{grid-template-columns:1fr}.editor-footer{flex-direction:column}.editor-footer .btn{width:100%}.permission-grid{grid-template-columns:1fr}.client-lead-row{grid-template-columns:1fr;gap:7px;padding:11px 12px}.client-lead-row.client-lead-head{display:none}.client-lead-row .icon-btn{justify-self:end}.client-mobilebar{padding:10px 12px}}
+@media(max-width:420px){.client-main{padding-left:10px;padding-right:10px}.client-stats{gap:9px}.client-stat{padding:14px}.client-stat strong{font-size:24px}.client-brand strong{font-size:15px}}
