@@ -571,6 +571,42 @@ async function clientUpdateProject(
     );
 }
 
+function sanitizeEcommerce(input) {
+    const ec = input && typeof input === "object" ? input : {};
+    const mp = ec.mercadoPago && typeof ec.mercadoPago === "object" ? ec.mercadoPago : {};
+    const ip = ec.infinitePay && typeof ec.infinitePay === "object" ? ec.infinitePay : {};
+    const pickup = ec.pickup && typeof ec.pickup === "object" ? ec.pickup : {};
+    const shipping = Array.isArray(ec.shipping) ? ec.shipping : [];
+
+    const validStates = new Set([
+        "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+        "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+        "RS", "RO", "RR", "SC", "SP", "SE", "TO"
+    ]);
+
+    return {
+        enabled: !!ec.enabled,
+        originState: validStates.has(ec.originState) ? ec.originState : "",
+        pickup: { enabled: !!pickup.enabled },
+        mercadoPago: {
+            enabled: !!mp.enabled,
+            accessToken: String(mp.accessToken || "").trim().slice(0, 500),
+            publicKey: String(mp.publicKey || "").trim().slice(0, 500)
+        },
+        infinitePay: {
+            enabled: !!ip.enabled,
+            handle: String(ip.handle || "").trim().slice(0, 200)
+        },
+        shipping: shipping.slice(0, 30).map(r => ({
+            id: String(r?.id || uuid()).slice(0, 60),
+            carrier: r?.carrier === "transportadora" ? "transportadora" : "correios",
+            maxWeight: Math.max(0, Number(r?.maxWeight) || 0),
+            sameState: Math.max(0, Number(r?.sameState) || 0),
+            otherState: Math.max(0, Number(r?.otherState) || 0)
+        }))
+    };
+}
+
 function normalizeProject(
     data = {},
     existing = {}
@@ -621,9 +657,11 @@ function normalizeProject(
         {};
 
     const ecommerce =
-        data.ecommerce ??
-        existing.ecommerce ??
-        {};
+        sanitizeEcommerce(
+            data.ecommerce ??
+            existing.ecommerce ??
+            {}
+        );
 
     const access =
         data.access ??
@@ -782,10 +820,7 @@ function normalizeProject(
                 scripts.footer || ""
         },
 
-        /* Espaço reservado para os módulos futuros de e-commerce. */
-        ecommerce: ecommerce && typeof ecommerce === "object"
-            ? ecommerce
-            : {},
+        ecommerce,
 
         createdAt:
             data.createdAt ||
