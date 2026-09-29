@@ -1,6 +1,6 @@
 /* V8 ADMIN UNIVERSAL — Área do Cliente */
 (() => {
-  const state = { projects: [], leads: [], client: null, user: null, permissions: [] };
+  const state = { projects: [], leads: [], products: [], shopProjectId: "", client: null, user: null, permissions: [] };
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
@@ -10,7 +10,6 @@
     const list = Array.isArray(access.editable) ? access.editable : [];
     const modules = Array.isArray(access.modules) ? access.modules : [];
     if (module === "leads" && (access.leads === true || modules.includes("leads"))) return true;
-    if (module === "loja" && modules.includes("loja")) return true;
     if (!list.length && access.configured !== true) return true;
     if (list.some(x => ["page", "site", "loja"].includes(x))) {
       if (module === "configuracao" || module === "content") return true;
@@ -34,8 +33,8 @@
       overview: ["Visão geral", "Acompanhe seus projetos e informações."],
       projects: ["Meus projetos", "Visualize e edite somente o que foi liberado para sua conta."],
       leads: ["Leads", "Contatos recebidos pelos seus projetos."],
-      account: ["Minha conta", "Atualize seus dados pessoais e sua senha."],
-      loja: ["Loja", "Gerencie produtos, categorias, frete e pedidos."]
+      shop: ["Loja", "Produtos à venda nos seus sites."],
+      account: ["Minha conta", "Atualize seus dados pessoais e sua senha."]
     };
     $("#page-title").textContent = titles[name][0];
     $("#page-subtitle").textContent = titles[name][1];
@@ -51,12 +50,12 @@
     state.user = me.client || {};
     state.projects = Array.isArray(me.projects) ? me.projects : [];
     state.permissions = [...new Set(state.projects.flatMap(p => Array.isArray(p?.access?.editable) ? p.access.editable : []))];
-    const storeButton = document.querySelector('[data-section="loja"]');
-    const hasStore = state.projects.some(p => hasModule(p, "loja") || String(p?.projectType || p?.type || "").toLowerCase() === "loja");
-    if (storeButton) storeButton.classList.toggle("hidden", !hasStore);
     const leadsButton = document.querySelector('[data-section="leads"]');
     const hasLeads = state.projects.some(p => hasModule(p, "leads"));
     if (leadsButton) leadsButton.classList.toggle("hidden", !hasLeads);
+    const shopButton = document.querySelector('[data-section="shop"]');
+    const hasShop = state.projects.some(p => hasModule(p, "ecommerce"));
+    if (shopButton) shopButton.classList.toggle("hidden", !hasShop);
     state.client = me.client || {};
     $("#user-name").textContent = state.client.name || state.user?.name || "Cliente";
     $("#user-email").textContent = state.client.email || state.user?.email || "—";
@@ -70,7 +69,8 @@
     renderProjects();
     renderOverview();
     renderLeads();
-    document.dispatchEvent(new CustomEvent("v8:client-loaded"));
+    await loadProducts();
+    renderShop();
   }
 
   async function loadLeads() {
@@ -153,6 +153,120 @@
       } catch (e) { alert(e.message || "Não foi possível salvar o lead."); }
       finally { btn.disabled = false; btn.textContent = lead ? "Salvar alterações" : "Adicionar lead"; }
     };
+  }
+
+  /* =========================================================
+     LOJA — PRODUTOS (área do cliente)
+     ========================================================= */
+
+  async function loadProducts() {
+    state.products = [];
+    const projects = state.projects.filter(p => hasModule(p, "ecommerce"));
+    if (!projects.length) return;
+    if (!state.shopProjectId || !projects.some(p => p.id === state.shopProjectId)) {
+      state.shopProjectId = projects[0].id;
+    }
+    for (const project of projects) {
+      const res = await API.get(`/api/data/products/${encodeURIComponent(project.id)}`);
+      const list = Array.isArray(res) ? res : res?.products;
+      if (Array.isArray(list)) state.products.push(...list.map(pr => ({ ...pr, projectId: pr.projectId || project.id })));
+    }
+  }
+
+  function formatMoney(value) {
+    return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function renderShop() {
+    const grid = $("#shop-grid");
+    const select = $("#shop-project-select");
+    const addBtn = $("#client-add-product");
+    if (!grid) return;
+
+    const projects = state.projects.filter(p => hasModule(p, "ecommerce"));
+    addBtn?.classList.toggle("hidden", !projects.length);
+
+    if (!projects.length) {
+      select?.classList.add("hidden");
+      grid.innerHTML = `<div class="empty-state"><strong>Loja não liberada</strong><p>O gerenciamento de produtos não está liberado para sua conta.</p></div>`;
+      return;
+    }
+
+    if (projects.length > 1) {
+      select.classList.remove("hidden");
+      select.innerHTML = `<label style="max-width:280px;display:block">Projeto<select id="shop-project">${projects.map(p => `<option value="${esc(p.id)}" ${p.id === state.shopProjectId ? "selected" : ""}>${esc(p.name || "Projeto")}</option>`).join("")}</select></label>`;
+      $("#shop-project").onchange = (e) => { state.shopProjectId = e.target.value; renderShop(); };
+    } else {
+      select?.classList.add("hidden");
+    }
+
+    const products = state.products.filter(p => p.projectId === state.shopProjectId);
+
+    if (!products.length) {
+      grid.innerHTML = `<div class="empty-state"><strong>Nenhum produto</strong><p>Clique em "Novo produto" para cadastrar o primeiro item da loja.</p></div>`;
+      return;
+    }
+
+    grid.innerHTML = products.map(p => `
+      <div class="shop-card">
+        <div class="shop-card-image" style="${p.image ? `background-image:url('${esc(p.image)}')` : ""}">${!p.image ? "🛒" : ""}</div>
+        <div class="shop-card-body">
+          <strong>${esc(p.name)}</strong>
+          <span class="shop-card-price">${formatMoney(p.price)}</span>
+          <span class="badge ${p.status === "active" ? "badge-success" : "badge-muted"}">${p.status === "active" ? "Ativo" : "Inativo"}</span>
+        </div>
+        <div class="shop-card-actions">
+          <button class="btn btn-sm" data-edit-product="${esc(p.id)}">Editar</button>
+          <button class="btn btn-sm btn-danger" data-delete-product="${esc(p.id)}">Excluir</button>
+        </div>
+      </div>
+    `).join("");
+
+    grid.querySelectorAll("[data-edit-product]").forEach(btn => btn.addEventListener("click", () => openProductModal(btn.dataset.editProduct)));
+    grid.querySelectorAll("[data-delete-product]").forEach(btn => btn.addEventListener("click", () => deleteProduct(btn.dataset.deleteProduct)));
+  }
+
+  function openProductModal(id = null) {
+    const p = id ? state.products.find(x => x.id === id) : null;
+    const projectId = p?.projectId || state.shopProjectId;
+
+    const content = `<div class="crm-detail client-crm-detail"><div class="crm-detail-head"><div><p class="eyebrow">LOJA</p><h2>${p ? "Editar produto" : "Novo produto"}</h2></div></div><div class="crm-form-grid"><label class="crm-full">Nome<input id="prod-name" value="${esc(p?.name || "")}" required></label><label class="crm-full">Descrição<textarea id="prod-description">${esc(p?.description || "")}</textarea></label><label>Preço (R$)<input id="prod-price" type="number" min="0" step="0.01" value="${p?.price ?? 0}"></label><label>Peso (kg)<input id="prod-weight" type="number" min="0" step="0.01" value="${p?.weight ?? 0}"></label><label>Estoque<input id="prod-stock" type="number" min="0" step="1" value="${p?.stock ?? 0}"></label><label>Status<select id="prod-status"><option value="active" ${p?.status !== "inactive" ? "selected" : ""}>Ativo</option><option value="inactive" ${p?.status === "inactive" ? "selected" : ""}>Inativo</option></select></label><label class="crm-full">Imagem (link)<input id="prod-image" value="${esc(p?.image || "")}" placeholder="https://..."></label></div><div class="modal-actions modal-save-bar"><button class="btn btn-primary modal-save-floating" id="prod-save">${p ? "Salvar alterações" : "Adicionar produto"}</button></div></div>`;
+    const overlay = document.createElement("div"); overlay.id = "prod-modal"; overlay.className = "modal-overlay"; overlay.innerHTML = `<div class="modal" style="max-width:680px"><button class="modal-close" id="prod-close" aria-label="Fechar">×</button>${content}</div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+    $("#prod-close").onclick = () => overlay.remove();
+    $("#prod-save").onclick = async () => {
+      const btn = $("#prod-save"); btn.disabled = true; btn.textContent = "Salvando...";
+      try {
+        const name = $("#prod-name").value.trim();
+        if (!name) { alert("Informe o nome do produto."); return; }
+        const body = {
+          name,
+          description: $("#prod-description").value.trim(),
+          price: Number($("#prod-price").value || 0),
+          weight: Number($("#prod-weight").value || 0),
+          stock: Number($("#prod-stock").value || 0),
+          trackStock: Number($("#prod-stock").value || 0) > 0,
+          image: $("#prod-image").value.trim(),
+          status: $("#prod-status").value
+        };
+        const res = p
+          ? await API.put(`/api/data/products/${encodeURIComponent(projectId)}/${encodeURIComponent(p.id)}`, body)
+          : await API.post(`/api/data/products/${encodeURIComponent(projectId)}`, body);
+        if (res?.error || res?.success === false) throw new Error(res?.error || "Não foi possível salvar o produto.");
+        overlay.remove(); await loadProducts(); renderShop();
+      } catch (e) { alert(e.message || "Não foi possível salvar o produto."); }
+      finally { btn.disabled = false; btn.textContent = p ? "Salvar alterações" : "Adicionar produto"; }
+    };
+  }
+
+  async function deleteProduct(id) {
+    const p = state.products.find(x => x.id === id);
+    if (!p) return;
+    if (!confirm(`Excluir "${p.name}"? Essa ação não pode ser desfeita.`)) return;
+    const res = await API.del(`/api/data/products/${encodeURIComponent(p.projectId)}/${encodeURIComponent(p.id)}`);
+    if (res?.error || res?.success === false) { alert(res?.error || "Não foi possível excluir o produto."); return; }
+    await loadProducts(); renderShop();
   }
 
   function projectCard(p) {
@@ -319,6 +433,7 @@
     $("#refresh-btn").addEventListener("click", load);
     $("#close-editor").addEventListener("click", () => $("#project-editor-panel").classList.add("hidden"));
     $("#client-add-lead")?.addEventListener("click", () => openClientLeadEditor());
+    $("#client-add-product")?.addEventListener("click", () => openProductModal());
     $("#logout-btn").addEventListener("click", () => Auth.logout());
     $("#account-form").addEventListener("submit", saveAccount);
     $("#client-menu").addEventListener("click", () => $("#client-sidebar").classList.toggle("open"));
