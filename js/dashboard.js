@@ -71,6 +71,7 @@ function clientProjectNames(clientId) {
 function defaultProject() {
   return {
     name: "",
+    projectType: "site",
     status: "Em desenvolvimento",
     siteUrl: "",
     clientId: "",
@@ -94,6 +95,7 @@ function normalizeProject(project = {}) {
   return {
     ...base,
     ...project,
+    projectType: (() => { const v = String(project.projectType || project.type || "site").toLowerCase(); return v === "page" ? "page" : (v === "loja" || v === "store" ? "loja" : "site"); })(),
     tracking: { ...base.tracking, ...(project.tracking || {}) },
     contact: { ...base.contact, ...(project.contact || {}) },
     social: { ...base.social, ...(project.social || {}) },
@@ -521,9 +523,12 @@ function renderProjects() {
         ${projects.map(project => {
           const leads = getUnseenLeadsCount(project.id);
           const statusClass = STATUS_BADGE[project.status] || "badge-muted";
+          const typeKey = String(project.projectType || project.type || "site").toLowerCase();
+          const typeClass = typeKey === "page" ? "page" : (typeKey === "loja" || typeKey === "store" ? "loja" : "site");
+          const typeLabel = typeClass === "page" ? "Page" : (typeClass === "loja" ? "Loja" : "Site");
           return `
             <tr class="row-clickable" onclick="openProjectModal('${escapeHtml(project.id)}')">
-              <td><strong>${escapeHtml(project.name)}</strong></td>
+              <td><strong>${escapeHtml(project.name)}</strong><div class="project-type-tag project-type-${typeClass}">${typeLabel}</div></td>
               <td><span class="badge ${statusClass}">${escapeHtml(project.status)}</span></td>
               <td>${leads ? `<span class="badge badge-danger">${leads}</span>` : "—"}</td>
               <td onclick="event.stopPropagation()">
@@ -740,6 +745,13 @@ function renderProjectGeneral(el) {
   el.innerHTML = `
     <label>Nome do projeto</label>
     <input id="p-name" value="${escapeHtml(p.name)}">
+
+    <label>Tipo de projeto</label>
+    <select id="p-project-type">
+      <option value="page" ${p.projectType === "page" ? "selected" : ""}>Page</option>
+      <option value="site" ${p.projectType === "site" ? "selected" : ""}>Site</option>
+      <option value="loja" ${p.projectType === "loja" ? "selected" : ""}>Loja</option>
+    </select>
 
     <label>Status</label>
     <select id="p-status">
@@ -1341,6 +1353,7 @@ async function saveProject() {
 
   if (state.projectTab === "geral") {
     p.name = $("p-name")?.value.trim();
+    p.projectType = $("p-project-type")?.value || "site";
     p.status = $("p-status")?.value;
     p.siteUrl = $("p-site-url")?.value.trim();
   }
