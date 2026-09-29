@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/cliente.css">
-  <link rel="stylesheet" href="css/loja.css">
 </head>
 <body class="client-page">
 <div class="client-shell">
@@ -25,7 +24,7 @@
       <button class="client-nav-item active" data-section="overview">Visão geral</button>
       <button class="client-nav-item" data-section="projects">Meus projetos</button>
       <button class="client-nav-item" data-section="leads">CRM / Leads</button>
-      <button class="client-nav-item hidden" data-section="loja" id="client-store-nav">Loja</button>
+      <button class="client-nav-item" data-section="shop">Loja</button>
       <button class="client-nav-item" data-section="account">Minha conta</button>
     </nav>
     <div class="client-sidebar-footer"><label class="client-theme-toggle"><input type="checkbox" id="client-theme-toggle"><span>Tema claro</span></label><button class="client-logout" id="logout-btn">Sair</button></div>
@@ -47,8 +46,8 @@
       <div class="client-panel"><div class="panel-heading"><div><h2>Leads</h2><p>Contatos recebidos pelos seus projetos. Você pode adicionar e editar, sem excluir.</p></div><button class="btn btn-primary btn-sm hidden" id="client-add-lead">+ Novo lead</button></div><div id="leads-list" class="client-leads-list"><div class="muted-cell">Carregando...</div></div></div>
     </section>
 
-    <section class="client-section" id="section-loja">
-      <div id="store-app"></div>
+    <section class="client-section" id="section-shop">
+      <div class="client-panel"><div class="panel-heading"><div><h2>Loja</h2><p>Produtos à venda nos seus sites.</p></div><button class="btn btn-primary btn-sm" id="client-add-product">+ Novo produto</button></div><div id="shop-project-select" class="hidden" style="margin-bottom:14px"></div><div id="shop-grid" class="shop-grid"><div class="muted-cell">Carregando...</div></div></div>
     </section>
 
     <section class="client-section" id="section-account">
@@ -59,6 +58,5 @@
 <script src="js/api.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/client.js"></script>
-<script src="js/loja.js"></script>
 </body>
 </html>
