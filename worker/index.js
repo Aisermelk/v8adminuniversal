@@ -641,6 +641,13 @@ function normalizeProject(
             existing.name ??
             "",
 
+        projectType: (() => {
+            const value = String(data.projectType ?? existing.projectType ?? data.type ?? existing.type ?? "site").toLowerCase();
+            if (value === "page") return "page";
+            if (value === "loja" || value === "store") return "loja";
+            return "site";
+        })(),
+
         status:
             data.status ??
             existing.status ??
