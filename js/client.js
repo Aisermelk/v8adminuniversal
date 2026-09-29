@@ -270,7 +270,8 @@
   }
 
   function projectCard(p) {
-    const type = p.type || "SITE";
+    const rawType = String(p.projectType || p.type || "site").toLowerCase();
+    const type = rawType === "page" ? "Page" : rawType === "loja" || rawType === "store" ? "Loja" : "Site";
     const status = p.status || "—";
     const editable = allowedFields(p).length > 0;
     const viewButton = p.siteUrl
@@ -409,7 +410,12 @@
     finally { btn.disabled = false; btn.textContent = "Salvar alterações"; }
   }
 
-  function bindProjectButtons() { $$('[data-edit-project]').forEach(b => b.addEventListener("click", () => openEditor(b.dataset.editProject))); }
+  function bindProjectButtons() {
+    $$('[data-edit-project]').forEach(b => b.addEventListener("click", () => {
+      switchSection("projects");
+      openEditor(b.dataset.editProject);
+    }));
+  }
 
   async function saveAccount(e) {
     e.preventDefault(); setMessage("");
