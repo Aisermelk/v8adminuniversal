@@ -334,6 +334,7 @@ const CLIENT_URL_FIELDS = new Set([
 
 const CLIENT_ACCESS_MODULES = new Set([
     "configuracao",
+    "loja",
     "content",
     "media",
     "location",
@@ -345,11 +346,12 @@ const CLIENT_ACCESS_MODULES = new Set([
 
 function sanitizeAccess(access) {
     const list = Array.isArray(access?.editable) ? access.editable : [];
-    const legacy = list.some(item => ["page", "site", "loja"].includes(item));
+    const legacy = list.some(item => ["page", "site"].includes(item));
     const normalized = legacy
         ? [
-            ...(list.some(item => ["page", "site", "loja"].includes(item)) ? ["configuracao", "content"] : []),
-            ...(list.some(item => ["site", "loja"].includes(item)) ? ["media", "location", "reviews", "seo", "scripts", "leads"] : [])
+            ...(list.some(item => ["page", "site"].includes(item)) ? ["configuracao", "content"] : []),
+            ...(list.some(item => ["site"].includes(item)) ? ["media", "location", "reviews", "seo", "scripts", "leads"] : []),
+            ...(list.includes("loja") ? ["loja"] : [])
           ]
         : list.filter(item => CLIENT_ACCESS_MODULES.has(item));
     return { editable: [...new Set(normalized)], configured: access?.configured === true };
@@ -362,6 +364,7 @@ function expandClientAccess(access) {
         ? new Set(CLIENT_ACCESS_MODULES)
         : new Set(sanitized.editable);
     if (modules.has("configuracao")) ["name", "status", "siteUrl", "tracking", "contact", "social", "formspree"].forEach(v => expanded.add(v));
+    if (modules.has("loja")) expanded.add("loja");
     if (modules.has("content")) expanded.add("content");
     if (modules.has("media")) expanded.add("media");
     if (modules.has("location")) expanded.add("location");
@@ -3095,6 +3098,277 @@ function apiInfo(origin) {
     );
 }
 
+
+/* =========================================================
+   E-COMMERCE V1 — D1 SCHEMA + HELPERS
+   ========================================================= */
+
+async function ensureEcommerceSchema(env) {
+    const statements = [
+        `CREATE TABLE IF NOT EXISTS store_settings (
+            project_id TEXT PRIMARY KEY,
+            origin_cep TEXT DEFAULT '',
+            origin_state TEXT DEFAULT '',
+            pickup_enabled INTEGER NOT NULL DEFAULT 1,
+            correios_enabled INTEGER NOT NULL DEFAULT 1,
+            carrier_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS categories (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            image TEXT DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS products (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            category_id TEXT DEFAULT '',
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            price REAL NOT NULL DEFAULT 0,
+            promotional_price REAL DEFAULT NULL,
+            weight_kg REAL NOT NULL DEFAULT 0,
+            stock INTEGER NOT NULL DEFAULT 0,
+            sku TEXT DEFAULT '',
+            image TEXT DEFAULT '',
+            active INTEGER NOT NULL DEFAULT 1,
+            featured INTEGER NOT NULL DEFAULT 0,
+            on_sale INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS shipping_rules (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            method TEXT NOT NULL,
+            max_weight_kg REAL NOT NULL,
+            same_state_price REAL NOT NULL DEFAULT 0,
+            other_state_price REAL NOT NULL DEFAULT 0,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            customer_name TEXT DEFAULT '',
+            customer_email TEXT DEFAULT '',
+            customer_phone TEXT DEFAULT '',
+            subtotal REAL NOT NULL DEFAULT 0,
+            shipping_cost REAL NOT NULL DEFAULT 0,
+            total REAL NOT NULL DEFAULT 0,
+            shipping_method TEXT DEFAULT '',
+            payment_method TEXT DEFAULT '',
+            payment_status TEXT NOT NULL DEFAULT 'pending',
+            order_status TEXT NOT NULL DEFAULT 'new',
+            shipping_data_json TEXT DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )`,
+        `CREATE TABLE IF NOT EXISTS order_items (
+            id TEXT PRIMARY KEY,
+            order_id TEXT NOT NULL,
+            product_id TEXT DEFAULT '',
+            product_name TEXT NOT NULL,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            unit_price REAL NOT NULL DEFAULT 0,
+            total REAL NOT NULL DEFAULT 0,
+            weight_kg REAL NOT NULL DEFAULT 0
+        )`,
+        `CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_products_project ON products(project_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_products_category ON products(project_id, category_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_shipping_project ON shipping_rules(project_id)`,
+        `CREATE INDEX IF NOT EXISTS idx_orders_project ON orders(project_id, created_at)`,
+        `CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id)`
+    ];
+    await env.V8_D1.batch(statements.map(sql => env.V8_D1.prepare(sql)));
+}
+
+function ecommerceProjectAllowed(project, user) {
+    if (!project) return false;
+    if (user?.type === "admin") return true;
+    const type = String(project.projectType || project.type || "").toLowerCase();
+    return type === "loja" && hasClientModuleAccess(project, "loja");
+}
+
+async function getEcommerceProject(env, projectId, user) {
+    const project = await getProjectForUser(env, projectId, user);
+    if (!ecommerceProjectAllowed(project, user)) return null;
+    return project;
+}
+
+function boolInt(value, fallback = 0) {
+    if (value === undefined || value === null) return fallback;
+    return value ? 1 : 0;
+}
+
+function numberValue(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function rowToCategory(row) {
+    return row ? {
+        id: row.id, projectId: row.project_id, name: row.name,
+        description: row.description || "", image: row.image || "",
+        active: Boolean(row.active), sortOrder: Number(row.sort_order || 0),
+        createdAt: row.created_at, updatedAt: row.updated_at
+    } : null;
+}
+
+function rowToProduct(row) {
+    return row ? {
+        id: row.id, projectId: row.project_id, categoryId: row.category_id || "",
+        name: row.name, description: row.description || "",
+        price: Number(row.price || 0), promotionalPrice: row.promotional_price == null ? null : Number(row.promotional_price),
+        weightKg: Number(row.weight_kg || 0), stock: Number(row.stock || 0), sku: row.sku || "",
+        image: row.image || "", active: Boolean(row.active), featured: Boolean(row.featured),
+        onSale: Boolean(row.on_sale), createdAt: row.created_at, updatedAt: row.updated_at
+    } : null;
+}
+
+function rowToShippingRule(row) {
+    return row ? {
+        id: row.id, projectId: row.project_id, method: row.method,
+        maxWeightKg: Number(row.max_weight_kg || 0),
+        sameStatePrice: Number(row.same_state_price || 0),
+        otherStatePrice: Number(row.other_state_price || 0),
+        active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at
+    } : null;
+}
+
+function rowToOrder(row, items = []) {
+    return row ? {
+        id: row.id, projectId: row.project_id, customerName: row.customer_name || "",
+        customerEmail: row.customer_email || "", customerPhone: row.customer_phone || "",
+        subtotal: Number(row.subtotal || 0), shippingCost: Number(row.shipping_cost || 0),
+        total: Number(row.total || 0), shippingMethod: row.shipping_method || "",
+        paymentMethod: row.payment_method || "", paymentStatus: row.payment_status,
+        orderStatus: row.order_status, shippingData: parseJson(row.shipping_data_json, {}),
+        items, createdAt: row.created_at, updatedAt: row.updated_at
+    } : null;
+}
+
+async function ecommerceAuthProject(request, env, user, projectId, origin) {
+    await ensureEcommerceSchema(env);
+    const project = await getEcommerceProject(env, projectId, user);
+    if (!project) return { error: json({ success: false, error: "Loja não encontrada ou acesso não liberado." }, 404, origin) };
+    return { project };
+}
+
+async function ecommerceCategories(request, env, user, projectId, origin) {
+    const access = await ecommerceAuthProject(request, env, user, projectId, origin);
+    if (access.error) return access.error;
+    const method = request.method;
+    if (method === "GET") {
+        const result = await env.V8_D1.prepare(`SELECT * FROM categories WHERE project_id=? ORDER BY sort_order ASC, name ASC`).bind(projectId).all();
+        return json({ success: true, categories: result.results.map(rowToCategory) }, 200, origin);
+    }
+    const body = await readJson(request);
+    if (method === "POST") {
+        const name = String(body.name || "").trim();
+        if (!name) return json({ success: false, error: "Nome da categoria é obrigatório." }, 400, origin);
+        const id = uuid(), timestamp = now();
+        await env.V8_D1.prepare(`INSERT INTO categories (id,project_id,name,description,image,active,sort_order,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(id,projectId,name,String(body.description||""),String(body.image||""),boolInt(body.active,true),numberValue(body.sortOrder,0),timestamp,timestamp).run();
+        return json({ success: true, category: rowToCategory(await env.V8_D1.prepare(`SELECT * FROM categories WHERE id=?`).bind(id).first()) }, 201, origin);
+    }
+    return json({ success:false, error:"Método não permitido." },405,origin);
+}
+
+async function ecommerceCategoryItem(request, env, user, projectId, categoryId, origin) {
+    const access = await ecommerceAuthProject(request, env, user, projectId, origin);
+    if (access.error) return access.error;
+    const current = await env.V8_D1.prepare(`SELECT * FROM categories WHERE id=? AND project_id=?`).bind(categoryId,projectId).first();
+    if (!current) return json({success:false,error:"Categoria não encontrada."},404,origin);
+    if (request.method === "DELETE") {
+        await env.V8_D1.prepare(`UPDATE products SET category_id='' WHERE project_id=? AND category_id=?`).bind(projectId,categoryId).run();
+        await env.V8_D1.prepare(`DELETE FROM categories WHERE id=? AND project_id=?`).bind(categoryId,projectId).run();
+        return json({success:true},200,origin);
+    }
+    if (request.method !== "PUT" && request.method !== "POST") return json({success:false,error:"Método não permitido."},405,origin);
+    const body=await readJson(request), timestamp=now();
+    const name=String(body.name ?? current.name).trim();
+    if (!name) return json({success:false,error:"Nome da categoria é obrigatório."},400,origin);
+    await env.V8_D1.prepare(`UPDATE categories SET name=?,description=?,image=?,active=?,sort_order=?,updated_at=? WHERE id=? AND project_id=?`).bind(name,String(body.description??current.description??""),String(body.image??current.image??""),boolInt(body.active,current.active),numberValue(body.sortOrder,current.sort_order),timestamp,categoryId,projectId).run();
+    return json({success:true,category:rowToCategory(await env.V8_D1.prepare(`SELECT * FROM categories WHERE id=?`).bind(categoryId).first())},200,origin);
+}
+
+async function ecommerceProducts(request, env, user, projectId, origin) {
+    const access=await ecommerceAuthProject(request,env,user,projectId,origin); if(access.error)return access.error;
+    if(request.method==="GET"){
+        const result=await env.V8_D1.prepare(`SELECT * FROM products WHERE project_id=? ORDER BY created_at DESC`).bind(projectId).all();
+        return json({success:true,products:result.results.map(rowToProduct)},200,origin);
+    }
+    if(request.method!=="POST")return json({success:false,error:"Método não permitido."},405,origin);
+    const b=await readJson(request), name=String(b.name||"").trim();
+    if(!name)return json({success:false,error:"Nome do produto é obrigatório."},400,origin);
+    const id=uuid(),timestamp=now(),price=numberValue(b.price,0),promo=b.promotionalPrice===""||b.promotionalPrice==null?null:numberValue(b.promotionalPrice,0);
+    await env.V8_D1.prepare(`INSERT INTO products (id,project_id,category_id,name,description,price,promotional_price,weight_kg,stock,sku,image,active,featured,on_sale,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,projectId,String(b.categoryId||""),name,String(b.description||""),price,promo,numberValue(b.weightKg,0),Math.max(0,Math.trunc(numberValue(b.stock,0))),String(b.sku||""),String(b.image||""),boolInt(b.active,true),boolInt(b.featured,false),boolInt(b.onSale,promo!==null),timestamp,timestamp).run();
+    return json({success:true,product:rowToProduct(await env.V8_D1.prepare(`SELECT * FROM products WHERE id=?`).bind(id).first())},201,origin);
+}
+
+async function ecommerceProductItem(request, env, user, projectId, productId, origin) {
+    const access=await ecommerceAuthProject(request,env,user,projectId,origin); if(access.error)return access.error;
+    const current=await env.V8_D1.prepare(`SELECT * FROM products WHERE id=? AND project_id=?`).bind(productId,projectId).first();
+    if(!current)return json({success:false,error:"Produto não encontrado."},404,origin);
+    if(request.method==="DELETE"){await env.V8_D1.prepare(`DELETE FROM products WHERE id=? AND project_id=?`).bind(productId,projectId).run();return json({success:true},200,origin);}
+    if(request.method!=="PUT"&&request.method!=="POST")return json({success:false,error:"Método não permitido."},405,origin);
+    const b=await readJson(request),timestamp=now(),name=String(b.name??current.name).trim(); if(!name)return json({success:false,error:"Nome do produto é obrigatório."},400,origin);
+    const promo=b.promotionalPrice===""||b.promotionalPrice==null?null:numberValue(b.promotionalPrice,current.promotional_price);
+    await env.V8_D1.prepare(`UPDATE products SET category_id=?,name=?,description=?,price=?,promotional_price=?,weight_kg=?,stock=?,sku=?,image=?,active=?,featured=?,on_sale=?,updated_at=? WHERE id=? AND project_id=?`).bind(String(b.categoryId??current.category_id??""),name,String(b.description??current.description??""),numberValue(b.price,current.price),promo,numberValue(b.weightKg,current.weight_kg),Math.max(0,Math.trunc(numberValue(b.stock,current.stock))),String(b.sku??current.sku??""),String(b.image??current.image??""),boolInt(b.active,current.active),boolInt(b.featured,current.featured),boolInt(b.onSale,current.on_sale),timestamp,productId,projectId).run();
+    return json({success:true,product:rowToProduct(await env.V8_D1.prepare(`SELECT * FROM products WHERE id=?`).bind(productId).first())},200,origin);
+}
+
+async function ecommerceSettings(request, env, user, projectId, origin) {
+    const access=await ecommerceAuthProject(request,env,user,projectId,origin); if(access.error)return access.error;
+    const current=await env.V8_D1.prepare(`SELECT * FROM store_settings WHERE project_id=?`).bind(projectId).first();
+    if(request.method==="GET") return json({success:true,settings:current?{projectId,originCep:current.origin_cep,originState:current.origin_state,pickupEnabled:Boolean(current.pickup_enabled),correiosEnabled:Boolean(current.correios_enabled),carrierEnabled:Boolean(current.carrier_enabled)}:{projectId,originCep:"",originState:"",pickupEnabled:true,correiosEnabled:true,carrierEnabled:true}},200,origin);
+    if(request.method!=="PUT"&&request.method!=="POST")return json({success:false,error:"Método não permitido."},405,origin);
+    const b=await readJson(request),timestamp=now();
+    await env.V8_D1.prepare(`INSERT INTO store_settings (project_id,origin_cep,origin_state,pickup_enabled,correios_enabled,carrier_enabled,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET origin_cep=excluded.origin_cep,origin_state=excluded.origin_state,pickup_enabled=excluded.pickup_enabled,correios_enabled=excluded.correios_enabled,carrier_enabled=excluded.carrier_enabled,updated_at=excluded.updated_at`).bind(projectId,String(b.originCep||""),String(b.originState||"").toUpperCase(),boolInt(b.pickupEnabled,true),boolInt(b.correiosEnabled,true),boolInt(b.carrierEnabled,true),timestamp,timestamp).run();
+    return ecommerceSettings(new Request(request.url,{method:"GET",headers:request.headers}),env,user,projectId,origin);
+}
+
+async function ecommerceShippingRules(request, env, user, projectId, origin) {
+    const access=await ecommerceAuthProject(request,env,user,projectId,origin); if(access.error)return access.error;
+    if(request.method==="GET"){const r=await env.V8_D1.prepare(`SELECT * FROM shipping_rules WHERE project_id=? ORDER BY method ASC,max_weight_kg ASC`).bind(projectId).all();return json({success:true,rules:r.results.map(rowToShippingRule)},200,origin);}
+    if(request.method!=="POST")return json({success:false,error:"Método não permitido."},405,origin);
+    const b=await readJson(request),method=String(b.method||"").trim().toLowerCase(); if(!["correios","transportadora"].includes(method))return json({success:false,error:"Transportador inválido."},400,origin);
+    const max=numberValue(b.maxWeightKg,0);if(max<=0)return json({success:false,error:"Informe uma faixa de peso maior que zero."},400,origin);
+    const id=uuid(),timestamp=now();await env.V8_D1.prepare(`INSERT INTO shipping_rules (id,project_id,method,max_weight_kg,same_state_price,other_state_price,active,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)`).bind(id,projectId,method,max,numberValue(b.sameStatePrice,0),numberValue(b.otherStatePrice,0),boolInt(b.active,true),timestamp,timestamp).run();return json({success:true,rule:rowToShippingRule(await env.V8_D1.prepare(`SELECT * FROM shipping_rules WHERE id=?`).bind(id).first())},201,origin);
+}
+
+async function ecommerceShippingRuleItem(request,env,user,projectId,ruleId,origin){
+    const access=await ecommerceAuthProject(request,env,user,projectId,origin);if(access.error)return access.error;
+    if(request.method==="DELETE"){await env.V8_D1.prepare(`DELETE FROM shipping_rules WHERE id=? AND project_id=?`).bind(ruleId,projectId).run();return json({success:true},200,origin);}
+    if(request.method!=="PUT"&&request.method!=="POST")return json({success:false,error:"Método não permitido."},405,origin);
+    const c=await env.V8_D1.prepare(`SELECT * FROM shipping_rules WHERE id=? AND project_id=?`).bind(ruleId,projectId).first();if(!c)return json({success:false,error:"Regra não encontrada."},404,origin);const b=await readJson(request),timestamp=now();
+    await env.V8_D1.prepare(`UPDATE shipping_rules SET method=?,max_weight_kg=?,same_state_price=?,other_state_price=?,active=?,updated_at=? WHERE id=? AND project_id=?`).bind(String(b.method??c.method).toLowerCase(),numberValue(b.maxWeightKg,c.max_weight_kg),numberValue(b.sameStatePrice,c.same_state_price),numberValue(b.otherStatePrice,c.other_state_price),boolInt(b.active,c.active),timestamp,ruleId,projectId).run();return json({success:true,rule:rowToShippingRule(await env.V8_D1.prepare(`SELECT * FROM shipping_rules WHERE id=?`).bind(ruleId).first())},200,origin);
+}
+
+async function ecommerceOrders(request,env,user,projectId,origin){
+    const access=await ecommerceAuthProject(request,env,user,projectId,origin);if(access.error)return access.error;
+    if(request.method!=="GET")return json({success:false,error:"Apenas leitura de pedidos disponível na V1."},405,origin);
+    const rows=await env.V8_D1.prepare(`SELECT * FROM orders WHERE project_id=? ORDER BY created_at DESC`).bind(projectId).all();
+    const orders=[];for(const row of rows.results){const items=await env.V8_D1.prepare(`SELECT * FROM order_items WHERE order_id=? ORDER BY rowid ASC`).bind(row.id).all();orders.push(rowToOrder(row,items.results.map(i=>({id:i.id,productId:i.product_id,productName:i.product_name,quantity:Number(i.quantity),unitPrice:Number(i.unit_price),total:Number(i.total),weightKg:Number(i.weight_kg)}))));}return json({success:true,orders},200,origin);
+}
+
+async function publicStore(request,env,projectId,origin){
+    await ensureEcommerceSchema(env);const project=await d1GetProject(env,projectId);if(!project||String(project.projectType||project.type||"").toLowerCase()!=="loja")return json({success:false,error:"Loja não encontrada."},404,origin);
+    const cats=await env.V8_D1.prepare(`SELECT * FROM categories WHERE project_id=? AND active=1 ORDER BY sort_order ASC,name ASC`).bind(projectId).all();
+    const products=await env.V8_D1.prepare(`SELECT * FROM products WHERE project_id=? AND active=1 ORDER BY featured DESC,on_sale DESC,created_at DESC`).bind(projectId).all();
+    return json({success:true,project:{id:project.id,name:project.name},categories:cats.results.map(rowToCategory),products:products.results.map(rowToProduct)},200,origin);
+}
+
+
 /* =========================================================
    ROUTER
    ========================================================= */
@@ -3183,6 +3457,12 @@ async function router(
     /* =====================================================
        PUBLIC
        ===================================================== */
+
+    match = path.match(/^\/api\/public\/store\/([^/]+)$/);
+    if (match && method === "GET") {
+        return publicStore(request, env, match[1], origin);
+    }
+
 
     let match =
         path.match(
@@ -3339,6 +3619,43 @@ async function router(
             ),
             origin
         );
+    }
+
+    /* =====================================================
+       E-COMMERCE V1 — CLIENT/ADMIN
+       ===================================================== */
+
+    let ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/categories$/);
+    if (ecommerceMatch && ["GET","POST"].includes(method)) {
+        return ecommerceCategories(request, env, user, decodeURIComponent(ecommerceMatch[1]), origin);
+    }
+    ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/categories\/([^/]+)$/);
+    if (ecommerceMatch && ["PUT","POST","DELETE"].includes(method)) {
+        return ecommerceCategoryItem(request, env, user, decodeURIComponent(ecommerceMatch[1]), decodeURIComponent(ecommerceMatch[2]), origin);
+    }
+    ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/products$/);
+    if (ecommerceMatch && ["GET","POST"].includes(method)) {
+        return ecommerceProducts(request, env, user, decodeURIComponent(ecommerceMatch[1]), origin);
+    }
+    ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/products\/([^/]+)$/);
+    if (ecommerceMatch && ["PUT","POST","DELETE"].includes(method)) {
+        return ecommerceProductItem(request, env, user, decodeURIComponent(ecommerceMatch[1]), decodeURIComponent(ecommerceMatch[2]), origin);
+    }
+    ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/settings$/);
+    if (ecommerceMatch && ["GET","PUT","POST"].includes(method)) {
+        return ecommerceSettings(request, env, user, decodeURIComponent(ecommerceMatch[1]), origin);
+    }
+    ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/shipping-rules$/);
+    if (ecommerceMatch && ["GET","POST"].includes(method)) {
+        return ecommerceShippingRules(request, env, user, decodeURIComponent(ecommerceMatch[1]), origin);
+    }
+    ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/shipping-rules\/([^/]+)$/);
+    if (ecommerceMatch && ["PUT","POST","DELETE"].includes(method)) {
+        return ecommerceShippingRuleItem(request, env, user, decodeURIComponent(ecommerceMatch[1]), decodeURIComponent(ecommerceMatch[2]), origin);
+    }
+    ecommerceMatch = path.match(/^\/api\/data\/ecommerce\/([^/]+)\/orders$/);
+    if (ecommerceMatch && method === "GET") {
+        return ecommerceOrders(request, env, user, decodeURIComponent(ecommerceMatch[1]), origin);
     }
 
     /* =====================================================
