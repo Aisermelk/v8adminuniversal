@@ -15,10 +15,16 @@ const state = {
   projectStatus: "",
   leadSearch: "",
   crmProjectId: "",
+  crmStatus: "",
+  crmSource: "",
+  crmClientId: "",
+  crmAssignedTo: "",
+  crmPeriod: "",
   editingClientId: null,
   editingProjectId: null,
   projectTab: "geral",
-  projectDraft: null
+  projectDraft: null,
+  paymentsProjectId: ""
 };
 
 const STATUS_BADGE = {
@@ -265,6 +271,8 @@ async function refreshData() {
     if (state.section === "projects") renderProjects();
     if (state.section === "leads") renderLeads();
     if (state.section === "store") renderStoreSection();
+    if (state.section === "catalog") renderCatalogSection();
+    if (state.section === "payments") renderPaymentsSection();
   } catch (error) {
     console.error(error);
     toast("Não foi possível carregar os dados.", "error");
@@ -1518,6 +1526,109 @@ async function deleteProject(id) {
    MODAIS
    ========================================================= */
 
+/* =========================================================
+   CATÁLOGO
+   ========================================================= */
+
+const catalogPage = { projectId: "" };
+
+async function renderCatalogSection() {
+  const el = $("catalog-content");
+  const select = $("catalog-project-select");
+  if (!el || !select) return;
+  const projects = state.projects || [];
+  if (!projects.length) {
+    select.innerHTML = "";
+    el.innerHTML = `<div class="empty-state"><strong>Nenhum projeto</strong><p>Crie um projeto para cadastrar itens no catálogo.</p></div>`;
+    return;
+  }
+  if (!catalogPage.projectId || !projects.some(p => p.id === catalogPage.projectId)) catalogPage.projectId = projects[0].id;
+  select.innerHTML = projects.map(p => `<option value="${escapeHtml(p.id)}" ${p.id===catalogPage.projectId?"selected":""}>${escapeHtml(p.name || "Projeto")}</option>`).join("");
+  select.onchange = () => { catalogPage.projectId = select.value; renderCatalogSection(); };
+
+  shopState.projectId = catalogPage.projectId;
+  const res = await API.get(`/api/data/products/${encodeURIComponent(catalogPage.projectId)}`);
+  if (!res || res.success === false) {
+    el.innerHTML = `<div class="empty-state"><strong>Não foi possível carregar o catálogo</strong><p>${escapeHtml(res?.error || "Erro desconhecido.")}</p></div>`;
+    return;
+  }
+  const products = res.products || [];
+  el.innerHTML = `
+    <div class="card">
+      <div class="page-header" style="margin-bottom:14px"><div><h2>Itens do catálogo</h2><p>${products.length} item${products.length===1?"":"s"} — a mesma base utilizada pela Loja.</p></div><button class="btn btn-primary btn-sm" onclick="openProductModal()">+ Novo item</button></div>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>SKU</th><th>Preço</th><th>Estoque</th><th>Status</th><th></th></tr></thead><tbody>
+      ${products.length ? products.map(p => `<tr><td><strong>${escapeHtml(p.name||"—")}</strong><small style="display:block;color:var(--text-muted)">${escapeHtml(p.brand||"")}</small></td><td>${escapeHtml(p.sku||"—")}</td><td>${formatCatalogMoney(p.price,p.promoPrice)}</td><td>${p.trackStock ? Number(p.stock||0) : "—"}</td><td><span class="badge ${p.status==="active"?"badge-success":"badge-muted"}">${escapeHtml(p.status||"—")}</span></td><td><button class="btn btn-ghost btn-sm" onclick="openProductModal('${escapeHtml(p.id)}')">Editar</button></td></tr>`).join("") : `<tr><td colspan="6"><div class="empty-state">Nenhum item cadastrado.</div></td></tr>`}
+      </tbody></table></div>
+    </div>`;
+}
+function formatCatalogMoney(price, promo) {
+  const p = Number(price||0), pp = Number(promo||0);
+  return pp > 0 && pp < p ? `<strong>${pp.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</strong> <del>${p.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</del>` : p.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+}
+window.renderCatalogSection = renderCatalogSection;
+
+/* =========================================================
+   PAGAMENTOS
+   ========================================================= */
+
+async function renderPaymentsSection() {
+  const el = $("payments-content");
+  const select = $("payment-project-select");
+  if (!el || !select) return;
+
+  const projects = state.projects || [];
+  if (!projects.length) {
+    select.innerHTML = "";
+    el.innerHTML = `<div class="empty-state"><strong>Nenhum projeto</strong><p>Crie um projeto antes de configurar pagamentos.</p></div>`;
+    return;
+  }
+
+  if (!state.paymentsProjectId || !projects.some(p => p.id === state.paymentsProjectId)) {
+    state.paymentsProjectId = projects[0].id;
+  }
+
+  select.innerHTML = projects.map(p =>
+    `<option value="${escapeHtml(p.id)}" ${p.id===state.paymentsProjectId?"selected":""}>${escapeHtml(p.name || "Projeto")}</option>`
+  ).join("");
+  select.onchange = () => {
+    state.paymentsProjectId = select.value;
+    renderPaymentsSection();
+  };
+
+  const id = encodeURIComponent(state.paymentsProjectId);
+  const [overview, integrations] = await Promise.all([
+    API.get(`/api/data/payments/overview/${id}`),
+    API.get(`/api/data/payments/integrations/${id}`)
+  ]);
+
+  if (overview?.success === false || integrations?.success === false) {
+    el.innerHTML = `<div class="empty-state"><strong>Banco de pagamentos ainda não preparado</strong><p>${escapeHtml(overview?.error || integrations?.error || "Aplique a migração D1 0002 antes de usar este módulo.")}</p></div>`;
+    return;
+  }
+
+  const o = overview.overview || {};
+  const list = integrations.integrations || [];
+  el.innerHTML = `
+    <div class="stat-grid">
+      <article class="stat-card"><span class="label">Pedidos</span><span class="value">${Number(o.orders?.total||0)}</span></article>
+      <article class="stat-card"><span class="label">Transações</span><span class="value">${Number(o.transactions?.total||0)}</span></article>
+      <article class="stat-card"><span class="label">Reembolsos</span><span class="value">${Number(o.refunds?.total||0)}</span></article>
+    </div>
+    <div class="card">
+      <h2>Integrações</h2>
+      <p class="muted-cell" style="text-align:left;padding:8px 0 16px">As integrações ficam no Worker. Nenhuma credencial é enviada ao frontend.</p>
+      <div class="payment-integrations">
+        ${["infinitepay","mercadopago"].map(g => {
+          const item = list.find(x => x.gateway === g);
+          return `<div class="payment-integration-row"><div><strong>${g === "infinitepay" ? "InfinitePay" : "Mercado Pago"}</strong><small>${item?.status || "Não configurado"}</small></div><span class="badge ${item?.enabled ? "badge-success" : "badge-muted"}">${item?.enabled ? "Ativo" : "Inativo"}</span></div>`;
+        }).join("")}
+      </div>
+    </div>
+    <div class="card payment-roadmap"><h2>Estrutura</h2><div class="payment-links"><span>Visão geral</span><span>Transações</span><span>Pedidos</span><span>Reembolsos</span><span>Integrações</span></div><p>Webhooks e chamadas de gateway permanecem desativados até validação da documentação oficial de cada provedor.</p></div>
+  `;
+}
+window.renderPaymentsSection = renderPaymentsSection;
+
 function showModal(content, maxWidth = "480px") {
   closeModal();
 
@@ -1526,20 +1637,38 @@ function showModal(content, maxWidth = "480px") {
   overlay.className = "modal-overlay";
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:${maxWidth}">
-      <button
-        class="modal-close"
-        onclick="closeModal()"
-        aria-label="Fechar">
-        ×
-      </button>
-
-      ${content}
+    <div class="modal" data-modal-max="${escapeHtml(maxWidth)}" style="max-width:${escapeHtml(maxWidth)}">
+      <div class="modal-window-tools" role="toolbar" aria-label="Controles da janela">
+        <button type="button" class="modal-tool" data-modal-action="minimize" aria-label="Minimizar">−</button>
+        <button type="button" class="modal-tool" data-modal-action="maximize" aria-label="Maximizar">□</button>
+        <button type="button" class="modal-tool modal-tool-close" data-modal-action="close" aria-label="Fechar">×</button>
+      </div>
+      <div class="modal-content">${content}</div>
     </div>
   `;
 
   overlay.addEventListener("click", event => {
     if (event.target === overlay) closeModal();
+  });
+
+  overlay.querySelectorAll("[data-modal-action]").forEach(button => {
+    button.addEventListener("click", () => {
+      const modal = overlay.querySelector(".modal");
+      const action = button.dataset.modalAction;
+      if (action === "close") return closeModal();
+      if (action === "minimize") {
+        modal.classList.toggle("modal-minimized");
+        return;
+      }
+      if (action === "maximize") {
+        modal.classList.toggle("modal-maximized");
+        if (modal.classList.contains("modal-maximized")) {
+          modal.style.maxWidth = "none";
+        } else {
+          modal.style.maxWidth = modal.dataset.modalMax || maxWidth;
+        }
+      }
+    });
   });
 
   document.body.appendChild(overlay);
