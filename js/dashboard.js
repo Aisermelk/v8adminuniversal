@@ -167,8 +167,8 @@ function switchSection(section) {
   if (section === "clients") renderClients();
   if (section === "projects") renderProjects();
   if (section === "leads") renderLeads();
+  if (section === "catalog") renderCatalogSection();
   if (section === "store") renderStoreSection();
-  if (section === "vitrines") renderVitrinesSection();
 }
 
 /* =========================================================
@@ -273,7 +273,6 @@ async function refreshData() {
     if (state.section === "leads") renderLeads();
     if (state.section === "store") renderStoreSection();
     if (state.section === "catalog") renderCatalogSection();
-    if (state.section === "vitrines") renderVitrinesSection();
     if (state.section === "payments") renderPaymentsSection();
   } catch (error) {
     console.error(error);
@@ -1162,9 +1161,12 @@ const CLIENT_ACCESS_MODULES = {
   seo: { label: "SEO", description: "Título, descrição, canonical, imagem e indexação.", icon: "◎" },
   scripts: { label: "Scripts", description: "Códigos Head, Body e Footer.", icon: "</>" },
   leads: { label: "Leads", description: "Visualização dos leads recebidos pelo projeto e CRM.", icon: "♙" },
-  catalog: { label: "Catálogo", description: "Produtos, categorias, tags e estoque do projeto.", icon: "▦" },
-  vitrines: { label: "Vitrines", description: "Organização comercial dos produtos do catálogo.", icon: "◈" },
-  ecommerce: { label: "Ecommerce", description: "Venda, loja, checkout, pedidos e pagamentos.", icon: "🛒" }
+  // Catálogo é o cadastro de itens do projeto — serve tanto para quem vende
+  // online quanto para quem só expõe uma lista (imóveis, cardápio, portfólio).
+  // "Destaque" já é um campo do próprio produto, então não existe uma tela
+  // separada de Vitrines: destacar um item é editar esse campo no Catálogo.
+  catalog: { label: "Catálogo", description: "Itens do projeto — produtos, imóveis ou serviços, com categorias, tags, estoque e destaque.", icon: "▦" },
+  ecommerce: { label: "Loja", description: "Camada opcional de venda: checkout, pagamento e pedidos, por cima do Catálogo.", icon: "🛒" }
 };
 
 function getAccessModules(p) {
@@ -1183,7 +1185,6 @@ function getAccessModules(p) {
       scripts: editable.some(x => ["site", "loja"].includes(x)),
       leads: editable.some(x => ["site", "loja"].includes(x)),
       catalog: editable.includes("loja"),
-      vitrines: editable.includes("loja"),
       ecommerce: editable.includes("loja")
     };
   }
@@ -1586,21 +1587,6 @@ window.renderCatalogSection = renderCatalogSection;
 
 async function createCatalogTaxonomy(kind) { const label=kind==="categories"?"categoria":"tag"; const name=prompt(`Nome da ${label}:`); if(!name?.trim()) return; const res=await API.post(`/api/data/catalog/${kind}/${encodeURIComponent(catalogPage.projectId)}`,{name:name.trim()}); if(res?.success===false||res?.error)return toast(res?.error||`Erro ao criar ${label}.`,"error"); toast(`${label[0].toUpperCase()+label.slice(1)} criada.`); renderCatalogSection(); }
 window.createCatalogTaxonomy=createCatalogTaxonomy;
-
-const vitrinePage = { projectId: "" };
-async function renderVitrinesSection() {
-  const el=$("vitrine-content"), select=$("vitrine-project-select"); if(!el||!select) return;
-  const projects=state.projects||[]; if(!projects.length){select.innerHTML="";el.innerHTML=`<div class="empty-state">Nenhum projeto cadastrado.</div>`;return;}
-  if(!vitrinePage.projectId || !projects.some(p=>p.id===vitrinePage.projectId)) vitrinePage.projectId=projects[0].id;
-  select.innerHTML=projects.map(p=>`<option value="${escapeHtml(p.id)}" ${p.id===vitrinePage.projectId?"selected":""}>${escapeHtml(p.name||"Projeto")}</option>`).join("");
-  select.onchange=()=>{vitrinePage.projectId=select.value;renderVitrinesSection();};
-  const [vr,pr]=await Promise.all([API.get(`/api/data/catalog/vitrines/${encodeURIComponent(vitrinePage.projectId)}`),API.get(`/api/data/products/${encodeURIComponent(vitrinePage.projectId)}`)]);
-  if(vr?.success===false||pr?.success===false){el.innerHTML=`<div class="empty-state">${escapeHtml(vr?.error||pr?.error||"Não foi possível carregar as vitrines.")}</div>`;return;}
-  const vitrines=vr?.vitrines||[], products=pr?.products||[];
-  el.innerHTML=`<div class="card"><div class="page-header" style="margin-bottom:14px"><div><h2>Vitrines do projeto</h2><p>${vitrines.length} vitrine${vitrines.length===1?"":"s"} — os produtos continuam vindo do Catálogo.</p></div><button class="btn btn-primary btn-sm" onclick="createVitrine()">+ Criar vitrine</button></div>${vitrines.length?vitrines.map(v=>`<div class="list-row" style="display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)"><div><strong>${escapeHtml(v.name)}</strong><small style="display:block;color:var(--text-muted)">${escapeHtml(v.description||v.slug||"")}</small></div><span class="badge ${v.active?"badge-success":"badge-muted"}">${v.active?"Ativa":"Inativa"}</span></div>`).join(""): `<div class="empty-state">Nenhuma vitrine criada. Crie uma para organizar os produtos do catálogo.</div>`}</div>`;
-}
-async function createVitrine(){ const name=prompt("Nome da vitrine:"); if(!name?.trim()) return; const res=await API.post(`/api/data/catalog/vitrines/${encodeURIComponent(vitrinePage.projectId)}`,{name:name.trim()}); if(res?.success===false||res?.error)return toast(res?.error||"Erro ao criar vitrine.","error"); toast("Vitrine criada."); renderVitrinesSection(); }
-window.renderVitrinesSection=renderVitrinesSection; window.createVitrine=createVitrine;
 
 /* =========================================================
    PAGAMENTOS
