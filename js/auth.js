@@ -152,10 +152,17 @@ const Auth = {
 
   logout() {
 
+    // Limpa a sessão antes de navegar. O replace evita que o botão
+    // "voltar" do navegador reabra a área protegida no histórico.
     this.clearSession();
 
-    window.location.href =
-      "login.html";
+    try {
+      sessionStorage.removeItem(this.TOKEN_KEY);
+      sessionStorage.removeItem(this.EXPIRES_KEY);
+      sessionStorage.removeItem(this.TYPE_KEY);
+    } catch (_) {}
+
+    window.location.replace("login.html");
   },
 
   // --------------------------------------------------------------
