@@ -1,6 +1,6 @@
 /* V8 ADMIN UNIVERSAL — Área do Cliente */
 (() => {
-  const state = { projects: [], leads: [], products: [], shopProjectId: "", client: null, user: null, permissions: [] };
+  const state = { projects: [], leads: [], products: [], shopProjectId: "", client: null, user: null, permissions: [], leadFilters: { search: "", project: "", status: "", period: "" } };
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[c]));
@@ -68,6 +68,7 @@
     await loadLeads();
     renderProjects();
     renderOverview();
+    setupLeadFilters();
     renderLeads();
     await loadProducts();
     renderShop();
@@ -104,12 +105,27 @@
     const allowed = state.projects.some(p => hasModule(p, "leads"));
     add?.classList.toggle("hidden", !allowed);
     if (!allowed) { list.innerHTML = `<div class="empty-state"><strong>CRM não liberado</strong><p>O gerenciamento de leads não está liberado para sua conta.</p></div>`; return; }
-    if (!state.leads.length) { list.innerHTML = `<div class="empty-state"><strong>Nenhum lead</strong><p>Adicione manualmente um lead recebido pelo WhatsApp ou outro canal.</p></div>`; return; }
+
+    const f = state.leadFilters;
+    const now = new Date();
+    const leads = state.leads.filter(lead => {
+      if (f.project && String(lead.projectId) !== String(f.project)) return false;
+      if (f.status && String(lead.status || "novo") !== f.status) return false;
+      if (f.period) {
+        const created = new Date(lead.createdAt || 0);
+        const start = new Date(now);
+        start.setHours(0,0,0,0);
+        start.setDate(start.getDate() - Number(f.period) + 1);
+        if (Number.isNaN(created.getTime()) || created < start) return false;
+      }
+      const text = [lead.name, lead.email, lead.phone, lead.message, lead.notes, lead.source, lead.projectName].join(" ").toLowerCase();
+      return !f.search || text.includes(f.search.toLowerCase().trim());
+    });
+
+    if (!leads.length) { list.innerHTML = `<div class="empty-state"><strong>Nenhum lead encontrado</strong><p>Ajuste os filtros ou adicione um lead manualmente.</p></div>`; return; }
     list.innerHTML = `
-      <div class="client-lead-row client-lead-head">
-        <span>Data</span><span>Nome</span><span>Contato</span><span>Projeto</span><span>Status</span><span></span>
-      </div>
-      ${state.leads.map(lead => `
+      <div class="client-lead-row client-lead-head"><span>Data</span><span>Nome</span><span>Contato</span><span>Projeto</span><span>Status</span><span></span></div>
+      ${leads.map(lead => `
         <div class="client-lead-row">
           <span>${esc(formatLeadDate(lead.createdAt))}</span>
           <strong>${esc(lead.name || "Sem nome")}</strong>
@@ -121,6 +137,17 @@
       `).join("")}
     `;
     list.querySelectorAll("[data-edit-client-lead]").forEach(btn => btn.addEventListener("click", () => openClientLeadEditor(btn.dataset.editClientLead, btn.dataset.projectId)));
+  }
+
+  function setupLeadFilters() {
+    const project = $("#client-lead-project-filter");
+    if (!project) return;
+    project.innerHTML = `<option value="">Todos os projetos</option>` + state.projects.filter(p => hasModule(p, "leads")).map(p => `<option value="${esc(p.id)}">${esc(p.name || "Projeto")}</option>`).join("");
+    const bind = (id, key) => $(id)?.addEventListener("input", e => { state.leadFilters[key] = e.target.value; renderLeads(); });
+    bind("#client-lead-search", "search");
+    bind("#client-lead-project-filter", "project");
+    bind("#client-lead-status-filter", "status");
+    bind("#client-lead-period-filter", "period");
   }
 
   function openClientLeadEditor(id = null, projectId = "") {
