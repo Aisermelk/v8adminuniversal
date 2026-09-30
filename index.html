@@ -185,9 +185,17 @@
         CRM
     </button>
 
+    <button type="button" class="nav-item" data-section="catalog">
+        <span class="dot"></span>
+        Catálogo
+    </button>
     <button type="button" class="nav-item" data-section="store">
         <span class="dot"></span>
         Loja
+    </button>
+    <button type="button" class="nav-item" data-section="payments">
+        <span class="dot"></span>
+        Pagamentos
     </button>
 
 
@@ -489,6 +497,32 @@
     <div class="loading">Carregando loja...</div>
 </div>
 
+</section>
+
+<!-- =========================================================
+     CATÁLOGO
+========================================================== -->
+
+<section class="section hidden" data-section="catalog">
+  <div class="page-header">
+    <div><h1>Catálogo</h1><p>Base reutilizável de produtos e serviços, compartilhada com a Loja.</p></div>
+  </div>
+  <div class="project-filters"><select id="catalog-project-select" aria-label="Projeto"></select></div>
+  <div id="catalog-content"><div class="loading">Carregando catálogo...</div></div>
+</section>
+
+<!-- =========================================================
+     PAGAMENTOS
+========================================================== -->
+
+<section class="section hidden" data-section="payments">
+  <div class="page-header">
+    <div><h1>Pagamentos</h1><p>Visão geral, pedidos, transações, reembolsos e integrações.</p></div>
+  </div>
+  <div class="project-filters">
+    <select id="payment-project-select" aria-label="Projeto"></select>
+  </div>
+  <div id="payments-content"><div class="loading">Carregando pagamentos...</div></div>
 </section>
 
 
