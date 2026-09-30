@@ -76,7 +76,7 @@ function formatMoney(value) {
 
 function getProductDraft(id) {
   if (!id) {
-    return { id: "", name: "", description: "", price: 0, weight: 0, stock: 0, trackStock: false, image: "", status: "active" };
+    return { id: "", name: "", shortDescription: "", description: "", price: 0, promoPrice: 0, sku: "", categoryId: "", subcategory: "", brand: "", featured: false, weight: 0, height: 0, width: 0, length: 0, stock: 0, minStock: 0, trackStock: false, availability: "available", image: "", images: [], videoUrl: "", slug: "", metaTitle: "", metaDescription: "", ogImage: "", minStock: 0, status: "active" };
   }
   return shopState.products.find(p => p.id === id) || null;
 }
@@ -106,50 +106,36 @@ function closeProductOverlay() {
 function openProductModal(id = null) {
   const p = getProductDraft(id);
   if (id && !p) return toast("Produto não encontrado.", "error");
-
   openProductOverlay(`
     <h2>${id ? "Editar produto" : "Novo produto"}</h2>
-
-    <label>Nome do produto</label>
-    <input id="prod-name" value="${escapeHtml(p.name || "")}" placeholder="Ex.: Caneca personalizada">
-
-    <label>Descrição</label>
-    <textarea id="prod-description" rows="3">${escapeHtml(p.description || "")}</textarea>
-
-    <div style="display:flex;gap:12px">
-      <div style="flex:1">
-        <label>Preço (R$)</label>
-        <input id="prod-price" type="number" min="0" step="0.01" value="${p.price ?? 0}">
-      </div>
-      <div style="flex:1">
-        <label>Peso (kg)</label>
-        <input id="prod-weight" type="number" min="0" step="0.01" value="${p.weight ?? 0}">
-      </div>
-    </div>
-
-    <label style="display:flex;align-items:center;gap:8px;margin-top:14px">
-      <input type="checkbox" id="prod-track-stock" ${p.trackStock ? "checked" : ""} onchange="document.getElementById('prod-stock-wrap').classList.toggle('hidden', !this.checked)">
-      Controlar estoque deste produto
-    </label>
-
-    <div id="prod-stock-wrap" class="${p.trackStock ? "" : "hidden"}">
-      <label>Estoque disponível</label>
-      <input id="prod-stock" type="number" min="0" step="1" value="${p.stock ?? 0}">
-    </div>
-
-    <label>Imagem (link)</label>
-    <input id="prod-image" value="${escapeHtml(p.image || "")}" placeholder="https://...">
-    <small class="form-help">Cole o link de uma imagem já hospedada.</small>
-
-    <label>Status</label>
-    <select id="prod-status">
-      <option value="active" ${p.status === "active" ? "selected" : ""}>Ativo (aparece na loja)</option>
-      <option value="inactive" ${p.status === "inactive" ? "selected" : ""}>Inativo (oculto)</option>
-    </select>
-
-    <div class="modal-actions">
-      <button class="btn" onclick="closeProductOverlay()">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveProduct('${escapeHtml(id || "")}')">Salvar</button>
+    <div class="store-form-grid">
+      <label>Nome<input id="prod-name" value="${escapeHtml(p.name || "")}" required></label>
+      <label>SKU<input id="prod-sku" value="${escapeHtml(p.sku || "")}"></label>
+      <label class="store-full">Descrição curta<input id="prod-short-description" value="${escapeHtml(p.shortDescription || "")}"></label>
+      <label class="store-full">Descrição completa<textarea id="prod-description" rows="4">${escapeHtml(p.description || "")}</textarea></label>
+      <label>Preço<input id="prod-price" type="number" min="0" step="0.01" value="${p.price ?? 0}"></label>
+      <label>Preço promocional<input id="prod-promo-price" type="number" min="0" step="0.01" value="${p.promoPrice ?? 0}"></label>
+      <label>SKU/Marca<input id="prod-brand" value="${escapeHtml(p.brand || "")}"></label>
+      <label>Categoria<input id="prod-category-id" value="${escapeHtml(p.categoryId || "")}"></label>
+      <label>Subcategoria<input id="prod-subcategory" value="${escapeHtml(p.subcategory || "")}"></label>
+      <label>Slug<input id="prod-slug" value="${escapeHtml(p.slug || "")}"></label>
+      <label>Imagem principal<input id="prod-image" value="${escapeHtml(p.image || "")}"></label>
+      <label>Vídeo (URL)<input id="prod-video-url" value="${escapeHtml(p.videoUrl || "")}"></label>
+      <label class="store-full">Galeria — uma URL por linha<textarea id="prod-images" rows="3">${escapeHtml((p.images || []).join("\n"))}</textarea></label>
+      <label>Peso<input id="prod-weight" type="number" min="0" step="0.01" value="${p.weight ?? 0}"></label>
+      <label>Estoque mínimo<input id="prod-min-stock" type="number" min="0" value="${p.minStock ?? 0}"></label>
+      <label>Altura<input id="prod-height" type="number" min="0" step="0.01" value="${p.height ?? 0}"></label>
+      <label>Largura<input id="prod-width" type="number" min="0" step="0.01" value="${p.width ?? 0}"></label>
+      <label>Comprimento<input id="prod-length" type="number" min="0" step="0.01" value="${p.length ?? 0}"></label>
+      <label>Disponibilidade<select id="prod-availability"><option value="available" ${p.availability==="available"?"selected":""}>Disponível</option><option value="unavailable" ${p.availability==="unavailable"?"selected":""}>Indisponível</option><option value="preorder" ${p.availability==="preorder"?"selected":""}>Pré-venda</option></select></label>
+      <label>Status<select id="prod-status"><option value="active" ${p.status==="active"?"selected":""}>Ativo</option><option value="inactive" ${p.status==="inactive"?"selected":""}>Inativo</option><option value="draft" ${p.status==="draft"?"selected":""}>Rascunho</option></select></label>
+      <label class="store-check"><input type="checkbox" id="prod-featured" ${p.featured ? "checked" : ""}> Destaque</label>
+      <label class="store-check"><input type="checkbox" id="prod-track-stock" ${p.trackStock ? "checked" : ""}> Controlar estoque</label>
+      <label>Estoque<input id="prod-stock" type="number" min="0" value="${p.stock ?? 0}"></label>
+      <label>Meta title<input id="prod-meta-title" value="${escapeHtml(p.metaTitle || "")}"></label>
+      <label class="store-full">Meta description<textarea id="prod-meta-description">${escapeHtml(p.metaDescription || "")}</textarea></label>
+      <label class="store-full">Imagem OG<input id="prod-og-image" value="${escapeHtml(p.ogImage || "")}"></label>
+      <div class="store-form-actions"><button class="btn" onclick="closeProductOverlay()">Cancelar</button><button class="btn btn-primary" onclick="saveProduct('${escapeHtml(id || "")}')">Salvar produto</button></div>
     </div>
   `);
 }
@@ -160,11 +146,29 @@ async function saveProduct(id) {
 
   const body = {
     name,
+    shortDescription: $("prod-short-description")?.value.trim() || "",
     description: $("prod-description")?.value.trim() || "",
     price: Number($("prod-price")?.value || 0),
+    promoPrice: Number($("prod-promo-price")?.value || 0),
+    sku: $("prod-sku")?.value.trim() || "",
+    categoryId: $("prod-category-id")?.value.trim() || "",
+    subcategory: $("prod-subcategory")?.value.trim() || "",
+    brand: $("prod-brand")?.value.trim() || "",
+    featured: !!$("prod-featured")?.checked,
+    slug: $("prod-slug")?.value.trim() || "",
+    videoUrl: $("prod-video-url")?.value.trim() || "",
+    images: ($("prod-images")?.value || "").split(/\r?\n/).map(v => v.trim()).filter(Boolean),
+    metaTitle: $("prod-meta-title")?.value.trim() || "",
+    metaDescription: $("prod-meta-description")?.value.trim() || "",
+    ogImage: $("prod-og-image")?.value.trim() || "",
     weight: Number($("prod-weight")?.value || 0),
+    height: Number($("prod-height")?.value || 0),
+    width: Number($("prod-width")?.value || 0),
+    length: Number($("prod-length")?.value || 0),
     trackStock: !!$("prod-track-stock")?.checked,
     stock: Number($("prod-stock")?.value || 0),
+    minStock: Number($("prod-min-stock")?.value || 0),
+    availability: $("prod-availability")?.value || "available",
     image: $("prod-image")?.value.trim() || "",
     status: $("prod-status")?.value || "active"
   };
@@ -220,6 +224,9 @@ function refreshShopView() {
   const storeWrap = $("store-tab-content");
   if (storeWrap && storePage.tab === "produtos") {
     paintStoreTab();
+  }
+  if (typeof state !== "undefined" && state.section === "catalog" && typeof renderCatalogSection === "function") {
+    renderCatalogSection();
   }
 }
 
