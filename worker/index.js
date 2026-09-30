@@ -156,7 +156,28 @@ async function verifyPassword(password, hash, salt) {
    TOKEN
    ========================================================= */
 
+async function hmacSha256(value, secret) {
+    if (!secret) return null;
+    const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign", "verify"]
+    );
+    const signature = await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(value)
+    );
+    return bytesToBase64(new Uint8Array(signature));
+}
+
 async function createToken(payload, env) {
+    if (!env.TOKEN_SECRET) {
+        throw new Error("TOKEN_SECRET não configurado.");
+    }
+
     const data = {
         ...payload,
         iat: Date.now(),
@@ -164,57 +185,53 @@ async function createToken(payload, env) {
     };
 
     const encoded = bytesToBase64(
-        new TextEncoder().encode(
-            JSON.stringify(data)
-        )
+        new TextEncoder().encode(JSON.stringify(data))
     );
 
-    const signature = await sha256(
-        `${encoded}.${env.TOKEN_SECRET || ""}`
+    const signature = await hmacSha256(
+        encoded,
+        env.TOKEN_SECRET
     );
 
     return `${encoded}.${signature}`;
 }
 
 async function verifyToken(request, env) {
-    const header =
-        request.headers.get("Authorization") || "";
-
-    if (!header.startsWith("Bearer ")) {
-        return null;
-    }
+    const header = request.headers.get("Authorization") || "";
+    if (!header.startsWith("Bearer ") || !env.TOKEN_SECRET) return null;
 
     const token = header.slice(7);
     const parts = token.split(".");
-
-    if (parts.length !== 2) {
-        return null;
-    }
+    if (parts.length !== 2) return null;
 
     const [encoded, signature] = parts;
-
-    const expected = await sha256(
-        `${encoded}.${env.TOKEN_SECRET || ""}`
+    const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(env.TOKEN_SECRET),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["verify"]
     );
 
-    if (signature !== expected) {
-        return null;
+    let valid = false;
+    try {
+        valid = await crypto.subtle.verify(
+            "HMAC",
+            key,
+            base64ToBytes(signature),
+            new TextEncoder().encode(encoded)
+        );
+    } catch {
+        valid = false;
     }
+
+    if (!valid) return null;
 
     try {
         const payload = JSON.parse(
-            new TextDecoder().decode(
-                base64ToBytes(encoded)
-            )
+            new TextDecoder().decode(base64ToBytes(encoded))
         );
-
-        if (
-            !payload.exp ||
-            Date.now() > payload.exp
-        ) {
-            return null;
-        }
-
+        if (!payload.exp || Date.now() > payload.exp) return null;
         return payload;
     } catch {
         return null;
@@ -1000,17 +1017,37 @@ function rowToProduct(row) {
         return null;
     }
 
+    let metadata = {};
+    try { metadata = JSON.parse(row.metadata_json || "{}"); } catch {}
     return {
         id: row.id,
         projectId: row.project_id,
         name: row.name,
+        shortDescription: row.short_description || "",
         description: row.description,
         price: Number(row.price || 0),
+        promoPrice: Number(row.promo_price || 0),
+        sku: row.sku || "",
+        categoryId: row.category_id || "",
+        subcategory: row.subcategory || "",
+        brand: row.brand || "",
+        status: row.status,
+        featured: !!row.featured,
+        image: row.image,
+        images: Array.isArray(metadata.images) ? metadata.images : [],
+        videoUrl: row.video_url || "",
+        slug: row.slug || "",
+        metaTitle: row.meta_title || "",
+        metaDescription: row.meta_description || "",
+        ogImage: row.og_image || "",
         weight: Number(row.weight || 0),
+        height: Number(row.height || 0),
+        width: Number(row.width || 0),
+        length: Number(row.length || 0),
         trackStock: !!row.track_stock,
         stock: Number(row.stock || 0),
-        image: row.image,
-        status: row.status,
+        minStock: Number(row.min_stock || 0),
+        availability: row.availability || "available",
         order: row.product_order,
         createdAt: row.created_at,
         updatedAt: row.updated_at
@@ -1019,20 +1056,47 @@ function rowToProduct(row) {
 
 function sanitizeProductInput(data, current) {
     const base = current || {};
+    const cleanUrl = value => {
+        const v = String(value ?? "").trim().slice(0, 2000);
+        return !v || /^https?:\/\//i.test(v) ? v : "";
+    };
     const name = String(data.name ?? base.name ?? "").trim().slice(0, 200);
-    const description = String(data.description ?? base.description ?? "").trim().slice(0, 5000);
-    const image = String(data.image ?? base.image ?? "").trim().slice(0, 1000);
+    const shortDescription = String(data.shortDescription ?? base.shortDescription ?? "").trim().slice(0, 1000);
+    const description = String(data.description ?? base.description ?? "").trim().slice(0, 10000);
+    const image = cleanUrl(data.image ?? base.image ?? "");
+    const images = Array.isArray(data.images ?? base.images) ? (data.images ?? base.images).map(cleanUrl).filter(Boolean).slice(0, 30) : [];
 
     const price = Math.max(0, Number(data.price ?? base.price ?? 0)) || 0;
+    const promoPrice = Math.max(0, Number(data.promoPrice ?? base.promoPrice ?? 0)) || 0;
     const weight = Math.max(0, Number(data.weight ?? base.weight ?? 0)) || 0;
+    const height = Math.max(0, Number(data.height ?? base.height ?? 0)) || 0;
+    const width = Math.max(0, Number(data.width ?? base.width ?? 0)) || 0;
+    const length = Math.max(0, Number(data.length ?? base.length ?? 0)) || 0;
     const stock = Math.max(0, Math.round(Number(data.stock ?? base.stock ?? 0))) || 0;
+    const minStock = Math.max(0, Math.round(Number(data.minStock ?? base.minStock ?? 0))) || 0;
     const trackStock = "trackStock" in data ? !!data.trackStock : !!base.trackStock;
 
-    const status = ["active", "inactive"].includes(data.status)
+    const status = ["active", "inactive", "draft"].includes(data.status)
         ? data.status
         : (base.status || "active");
+    const availability = ["available", "unavailable", "preorder"].includes(data.availability)
+        ? data.availability
+        : (base.availability || "available");
 
-    return { name, description, image, price, weight, stock, trackStock, status };
+    return {
+        name, shortDescription, description, image, images, price, promoPrice,
+        sku: String(data.sku ?? base.sku ?? "").trim().slice(0, 100),
+        categoryId: String(data.categoryId ?? base.categoryId ?? "").trim().slice(0, 100),
+        subcategory: String(data.subcategory ?? base.subcategory ?? "").trim().slice(0, 120),
+        brand: String(data.brand ?? base.brand ?? "").trim().slice(0, 120),
+        featured: "featured" in data ? !!data.featured : !!base.featured,
+        videoUrl: cleanUrl(data.videoUrl ?? base.videoUrl ?? ""),
+        slug: String(data.slug ?? base.slug ?? "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 160),
+        metaTitle: String(data.metaTitle ?? base.metaTitle ?? "").trim().slice(0, 160),
+        metaDescription: String(data.metaDescription ?? base.metaDescription ?? "").trim().slice(0, 320),
+        ogImage: cleanUrl(data.ogImage ?? base.ogImage ?? ""),
+        weight, height, width, length, stock, minStock, trackStock, availability, status
+    };
 }
 
 async function d1ListProducts(env, projectId) {
@@ -1072,16 +1136,22 @@ async function d1CreateProduct(env, projectId, data) {
     await env.V8_D1
         .prepare(
             `INSERT INTO products
-                (id, project_id, name, description, price, weight,
-                 track_stock, stock, image, status, product_order,
-                 created_at, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+                (id, project_id, name, short_description, description, price, promo_price,
+                 sku, category_id, subcategory, brand, status, featured, image,
+                 slug, meta_title, meta_description, og_image, weight, height, width, length,
+                 track_stock, stock, min_stock, availability, video_url, metadata_json,
+                 product_order, created_at, updated_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         )
         .bind(
-            product.id, projectId, product.name, product.description,
-            product.price, product.weight, product.trackStock ? 1 : 0,
-            product.stock, product.image, product.status, product.order,
-            product.createdAt, product.updatedAt
+            product.id, projectId, product.name, product.shortDescription, product.description,
+            product.price, product.promoPrice, product.sku, product.categoryId, product.subcategory,
+            product.brand, product.status, product.featured ? 1 : 0, product.image,
+            product.slug, product.metaTitle, product.metaDescription, product.ogImage,
+            product.weight, product.height, product.width, product.length,
+            product.trackStock ? 1 : 0, product.stock, product.minStock, product.availability,
+            product.videoUrl, JSON.stringify({ images: product.images }),
+            product.order, product.createdAt, product.updatedAt
         )
         .run();
 
@@ -1108,14 +1178,20 @@ async function d1UpdateProduct(env, projectId, productId, data) {
     await env.V8_D1
         .prepare(
             `UPDATE products SET
-                name=?, description=?, price=?, weight=?,
-                track_stock=?, stock=?, image=?, status=?, updated_at=?
+                name=?, short_description=?, description=?, price=?, promo_price=?,
+                sku=?, category_id=?, subcategory=?, brand=?, status=?, featured=?, image=?,
+                slug=?, meta_title=?, meta_description=?, og_image=?,
+                weight=?, height=?, width=?, length=?, track_stock=?, stock=?, min_stock=?,
+                availability=?, video_url=?, metadata_json=?, updated_at=?
              WHERE id=? AND project_id=?`
         )
         .bind(
-            clean.name, clean.description, clean.price, clean.weight,
-            clean.trackStock ? 1 : 0, clean.stock, clean.image, clean.status,
-            now(), productId, projectId
+            clean.name, clean.shortDescription, clean.description, clean.price, clean.promoPrice,
+            clean.sku, clean.categoryId || null, clean.subcategory, clean.brand, clean.status,
+            clean.featured ? 1 : 0, clean.image, clean.slug, clean.metaTitle, clean.metaDescription,
+            clean.ogImage, clean.weight, clean.height, clean.width, clean.length,
+            clean.trackStock ? 1 : 0, clean.stock, clean.minStock, clean.availability,
+            clean.videoUrl, JSON.stringify({ images: clean.images }), now(), productId, projectId
         )
         .run();
 
@@ -1741,6 +1817,30 @@ async function getProjectForUser(
 }
 
 /* =========================================================
+   LOGIN RATE LIMIT
+   ========================================================= */
+
+async function loginRateLimit(request, env) {
+    const ip = request.headers.get("CF-Connecting-IP")
+        || request.headers.get("X-Forwarded-For")
+        || "unknown";
+    const key = `auth:fail:${await sha256(String(ip).slice(0, 120))}`;
+    const current = Number(await env.V8_KV.get(key) || 0);
+    if (current >= 5) {
+        return { blocked: true, key, current };
+    }
+    return { blocked: false, key, current };
+}
+
+async function registerLoginFailure(env, key, current) {
+    await env.V8_KV.put(
+        key,
+        String(current + 1),
+        { expirationTtl: 15 * 60 }
+    );
+}
+
+/* =========================================================
    LOGIN
    ========================================================= */
 
@@ -1749,51 +1849,42 @@ async function login(
     env,
     origin
 ) {
-    const body =
-        await readJson(request);
+    const body = await readJson(request);
+    const limit = await loginRateLimit(request, env);
+
+    if (limit.blocked) {
+        return json({
+            success: false,
+            error: "Muitas tentativas. Tente novamente em 15 minutos."
+        }, 429, origin);
+    }
 
     /*
      * O login usa um único formulário.
      * Se o tipo não for enviado, tentamos primeiro
      * o administrador e, caso não seja, o cliente.
      */
-    const type =
-        String(body.type || "").trim().toLowerCase();
+    const type = String(body.type || "").trim().toLowerCase();
+    let response;
 
     if (type === "admin") {
-        return adminLogin(
-            body,
-            env,
-            origin
-        );
-    }
-
-    if (type === "client") {
-        return clientLogin(
-            body,
-            env,
-            origin
-        );
-    }
-
-    if (
-        String(body.email || "").trim() ===
-            String(env.ADMIN_EMAIL || "").trim() &&
-        String(body.password || "") ===
-            String(env.ADMIN_PASS || "")
+        response = await adminLogin(body, env, origin);
+    } else if (type === "client") {
+        response = await clientLogin(body, env, origin);
+    } else if (
+        String(body.email || "").trim() === String(env.ADMIN_EMAIL || "").trim() &&
+        String(body.password || "") === String(env.ADMIN_PASS || "")
     ) {
-        return adminLogin(
-            body,
-            env,
-            origin
-        );
+        response = await adminLogin(body, env, origin);
+    } else {
+        response = await clientLogin(body, env, origin);
     }
 
-    return clientLogin(
-        body,
-        env,
-        origin
-    );
+    if (response.status === 401) {
+        await registerLoginFailure(env, limit.key, limit.current);
+    }
+
+    return response;
 }
 
 async function adminLogin(
@@ -2718,7 +2809,22 @@ async function publicConfig(
     }
 
     const publicProject = {
-        ...project
+        ...project,
+        // Permissões internas nunca são necessárias no site público.
+        access: undefined,
+        ecommerce: project.ecommerce
+            ? {
+                ...project.ecommerce,
+                mercadoPago: {
+                    enabled: !!project.ecommerce.mercadoPago?.enabled,
+                    publicKey: project.ecommerce.mercadoPago?.publicKey || ""
+                },
+                infinitePay: {
+                    enabled: !!project.ecommerce.infinitePay?.enabled,
+                    handle: project.ecommerce.infinitePay?.handle || ""
+                }
+            }
+            : undefined
     };
 
     delete publicProject.clientId;
@@ -3338,7 +3444,7 @@ async function router(
         );
     }
 
-    if (path === "/api") {
+    if (path === "/api" || path === "/api/health") {
         return apiInfo(origin);
     }
 
@@ -3739,6 +3845,31 @@ async function router(
     }
 
     /* =====================================================
+       PAGAMENTOS
+       ===================================================== */
+
+    const paymentIntegrationMatch = path.match(/^\/api\/data\/payments\/integrations\/([^/]+)$/);
+    if (paymentIntegrationMatch) {
+        return paymentIntegrations(
+            env,
+            decodeURIComponent(paymentIntegrationMatch[1]),
+            user,
+            request,
+            origin
+        );
+    }
+
+    const paymentOverviewMatch = path.match(/^\/api\/data\/payments\/overview\/([^/]+)$/);
+    if (paymentOverviewMatch && method === "GET") {
+        return paymentOverview(
+            env,
+            decodeURIComponent(paymentOverviewMatch[1]),
+            user,
+            origin
+        );
+    }
+
+    /* =====================================================
        PRODUTOS (LOJA)
        ===================================================== */
 
@@ -3952,4 +4083,91 @@ export default {
             );
         }
     }
-};
+};/* =========================================================
+   PAYMENTS — configuração segura
+   Não executa chamadas de gateway. As credenciais ficam no D1
+   apenas como configuração privada e a comunicação externa será
+   feita pelo Worker quando a API oficial do gateway for validada.
+   ========================================================= */
+
+async function paymentIntegrations(env, projectId, user, request, origin) {
+    const project = await getProjectForUser(env, projectId, user);
+    if (!project) return json({ success: false, error: "Projeto não encontrado." }, 404, origin);
+    if (user.type !== "admin" && !hasClientModuleAccess(project, "ecommerce")) {
+        return json({ success: false, error: "Acesso a pagamentos não liberado para este projeto." }, 403, origin);
+    }
+
+    if (request.method === "GET") {
+        const result = await env.V8_D1.prepare(
+            `SELECT id, project_id, gateway, enabled, status, last_event_at, created_at, updated_at
+             FROM payment_integrations WHERE project_id=? ORDER BY gateway`
+        ).bind(projectId).all();
+        return json({ success: true, integrations: result.results || [] }, 200, origin);
+    }
+
+    if (request.method === "PUT" || request.method === "POST") {
+        if (user.type !== "admin") {
+            return json({ success: false, error: "Somente o administrador pode configurar gateways." }, 403, origin);
+        }
+        const body = await readJson(request);
+        const gateway = String(body.gateway || "").trim().toLowerCase();
+        const allowed = new Set(["infinitepay", "mercadopago"]);
+        if (!allowed.has(gateway)) {
+            return json({ success: false, error: "Gateway não suportado." }, 400, origin);
+        }
+
+        const config = body.config && typeof body.config === "object" ? body.config : {};
+        // Nunca retornamos config_json em GET. Aqui aceitamos apenas campos
+        // necessários à integração futura; secrets continuam no backend.
+        const sanitized = {};
+        for (const [key, value] of Object.entries(config)) {
+            sanitized[String(key).slice(0, 80)] = String(value ?? "").slice(0, 1000);
+        }
+
+        const id = uuid();
+        const timestamp = now();
+        await env.V8_D1.prepare(
+            `INSERT INTO payment_integrations
+             (id, project_id, gateway, enabled, status, config_json, created_at, updated_at)
+             VALUES (?,?,?,?,?,?,?,?)
+             ON CONFLICT(project_id, gateway) DO UPDATE SET
+               enabled=excluded.enabled,
+               status=excluded.status,
+               config_json=excluded.config_json,
+               updated_at=excluded.updated_at`
+        ).bind(
+            id, projectId, gateway, body.enabled ? 1 : 0,
+            body.enabled ? "configured" : "inactive",
+            JSON.stringify(sanitized), timestamp, timestamp
+        ).run();
+
+        return json({ success: true, gateway, enabled: !!body.enabled, status: body.enabled ? "configured" : "inactive" }, 200, origin);
+    }
+
+    return json({ success: false, error: "Método não permitido." }, 405, origin);
+}
+
+async function paymentOverview(env, projectId, user, origin) {
+    const project = await getProjectForUser(env, projectId, user);
+    if (!project) return json({ success: false, error: "Projeto não encontrado." }, 404, origin);
+    if (user.type !== "admin" && !hasClientModuleAccess(project, "ecommerce")) {
+        return json({ success: false, error: "Acesso a pagamentos não liberado para este projeto." }, 403, origin);
+    }
+
+    const [orders, transactions, refunds] = await Promise.all([
+        env.V8_D1.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(total),0) AS amount FROM payment_orders WHERE project_id=?`).bind(projectId).first(),
+        env.V8_D1.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS amount FROM payment_transactions WHERE project_id=?`).bind(projectId).first(),
+        env.V8_D1.prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(amount),0) AS amount FROM payment_refunds WHERE project_id=?`).bind(projectId).first()
+    ]);
+
+    return json({
+        success: true,
+        overview: {
+            orders: { total: Number(orders?.total || 0), amount: Number(orders?.amount || 0) },
+            transactions: { total: Number(transactions?.total || 0), amount: Number(transactions?.amount || 0) },
+            refunds: { total: Number(refunds?.total || 0), amount: Number(refunds?.amount || 0) }
+        }
+    }, 200, origin);
+}
+
+
