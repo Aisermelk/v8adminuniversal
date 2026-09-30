@@ -1681,19 +1681,31 @@ async function d1DeleteProject(
 /* =========================================================
    LEADS — SINCRONIZAÇÃO LEGADA KV → D1
    ========================================================= */
+// Migração de leads antigos do KV para o D1. É um "melhor esforço":
+// se o binding V8_KV estiver ausente ou a leitura falhar por qualquer
+// motivo, isso NUNCA pode derrubar a listagem de leads em si — por
+// isso todo o corpo roda dentro de um try/catch.
 async function syncLegacyLeadsToD1(env) {
-    const legacy = (await env.V8_KV.get(KEYS.leads, "json")) || [];
-    if (!Array.isArray(legacy) || !legacy.length) return 0;
-    let added = 0;
-    for (const item of legacy) {
-        if (!item?.projectId) continue;
-        const id = item.id || uuid();
-        const exists = await env.V8_D1.prepare(`SELECT id FROM leads WHERE id=? LIMIT 1`).bind(id).first();
-        if (exists) continue;
-        await env.V8_D1.prepare(`INSERT OR IGNORE INTO leads (id,project_id,name,email,phone,message,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?)`).bind(id,item.projectId,item.name||"",item.email||"",item.phone||"",item.message||"",JSON.stringify(item.metadata||{}),item.createdAt||now()).run();
-        added++;
+    try {
+        if (!env.V8_KV) return 0;
+
+        const legacy = (await env.V8_KV.get(KEYS.leads, "json")) || [];
+        if (!Array.isArray(legacy) || !legacy.length) return 0;
+
+        let added = 0;
+        for (const item of legacy) {
+            if (!item?.projectId) continue;
+            const id = item.id || uuid();
+            const exists = await env.V8_D1.prepare(`SELECT id FROM leads WHERE id=? LIMIT 1`).bind(id).first();
+            if (exists) continue;
+            await env.V8_D1.prepare(`INSERT OR IGNORE INTO leads (id,project_id,name,email,phone,message,metadata_json,created_at) VALUES (?,?,?,?,?,?,?,?)`).bind(id,item.projectId,item.name||"",item.email||"",item.phone||"",item.message||"",JSON.stringify(item.metadata||{}),item.createdAt||now()).run();
+            added++;
+        }
+        return added;
+    } catch (error) {
+        console.error("syncLegacyLeadsToD1 falhou (ignorado):", error);
+        return 0;
     }
-    return added;
 }
 
 /* =========================================================
