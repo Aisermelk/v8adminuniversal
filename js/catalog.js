@@ -1,4 +1,3 @@
-```javascript
 /* V8 — CATÁLOGO independente da Loja */
 
 const catalogState = {
@@ -663,4 +662,3 @@ window.openCatalogItem = openCatalogItem;
 window.closeCatalogItem = closeCatalogItem;
 window.saveCatalogItem = saveCatalogItem;
 window.deleteCatalogItem = deleteCatalogItem;
-```
