@@ -16,31 +16,56 @@ const CRM_STAGES = [
   ["proposta", "Proposta"], ["ganho", "Ganho"], ["perdido", "Perdido"]
 ];
 
+const CRM_STATUS_BADGE = { novo:"badge-warning", contato:"badge-muted", qualificado:"badge-muted", proposta:"badge-warning", ganho:"badge-success", perdido:"badge-danger" };
+
+/* Mesmo padrão de Clientes/Projetos: barra de filtros da página + .table-wrap com tabela. */
 function renderLeads() {
   const wrap = $("leads-table-wrap");
   if (!wrap) return;
   const search = (state.leadSearch || "").toLowerCase().trim();
-  const selected = state.crmProjectId;
+  const selected = state.crmProjectId || "";
   const selectedStatus = state.crmStatus || "";
-  const projects = [...state.projects].sort((a,b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
   const leads = state.leads.filter(lead => {
     if (selected && String(lead.projectId) !== String(selected)) return false;
     if (selectedStatus && String(lead.status || "novo") !== selectedStatus) return false;
     const text = [lead.name, lead.email, lead.phone, lead.message, lead.projectName || projectName(lead.projectId), lead.status, ...(lead.tags || [])].join(" ").toLowerCase();
     return !search || text.includes(search);
   });
-  const counts = Object.fromEntries(CRM_STAGES.map(([k]) => [k, leads.filter(l => (l.status || "novo") === k).length]));
-  wrap.outerHTML = `<div id="leads-table-wrap" class="crm-shell">
-    <div class="crm-toolbar">
-      <div class="crm-filters"><select id="crm-project-filter-board" onchange="setCrmProject(this.value)"><option value="">Todos os projetos</option>${projects.map(p => `<option value="${escapeHtml(p.id)}" ${String(selected) === String(p.id) ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}</select><span class="crm-summary">${leads.length} lead${leads.length === 1 ? "" : "s"}</span></div>
-      <div class="crm-summary-value">Pipeline: <strong>${formatMoney(leads.reduce((n,l) => n + Number(l.value || 0), 0))}</strong></div>
-    </div>
-    <div class="crm-board">${CRM_STAGES.map(([key,label]) => `
-      <section class="crm-column crm-${key}"><header><div><strong>${label}</strong><span>${counts[key]}</span></div></header><div class="crm-dropzone">
-        ${leads.filter(l => (l.status || "novo") === key).map(crmLeadCard).join("") || `<div class="crm-empty">Nenhum lead</div>`}
-      </div></section>`).join("")}</div>
-  </div>`;
+  wrap.className = "table-wrap";
+  if (!leads.length) { wrap.innerHTML = `<div class="empty-state">Nenhum lead encontrado.</div>`; return; }
+  const label = Object.fromEntries(CRM_STAGES);
+  const pipeline = leads.reduce((n, l) => n + Number(l.value || 0), 0);
+  wrap.innerHTML = `<table><thead><tr><th>Lead</th><th>E-mail</th><th>Projeto</th><th>Status</th><th></th></tr></thead><tbody>${leads.map(lead => {
+    const id = escapeHtml(lead.id), pid = escapeHtml(lead.projectId), st = lead.status || "novo";
+    return `
+    <tr class="row-clickable" onclick="openLeadCRM('${id}','${pid}')">
+      <td><strong>${escapeHtml(lead.name || "Sem nome")}</strong></td>
+      <td>${escapeHtml(lead.email || lead.phone || "—")}</td>
+      <td>${escapeHtml(lead.projectName || projectName(lead.projectId) || "—")}</td>
+      <td><span class="badge ${CRM_STATUS_BADGE[st] || "badge-muted"}">${escapeHtml(label[st] || st)}</span></td>
+      <td onclick="event.stopPropagation()"><div class="row-actions client-row-actions">
+        <button class="btn btn-primary btn-sm" title="Visualizar lead" onclick="openLeadCRM('${id}','${pid}')">◉ <span>Visualizar</span></button>
+        <button class="btn btn-ghost btn-sm" title="Editar lead" onclick="openLeadCRM('${id}','${pid}')">✎ <span>Editar</span></button>
+        <button class="icon-btn" title="Mais opções" onclick="openLeadActionsMenu(event,'${id}','${pid}')">⋯</button>
+      </div></td>
+    </tr>`;
+  }).join("")}</tbody></table>
+  <div class="list-summary">${leads.length} lead${leads.length === 1 ? "" : "s"}${pipeline ? ` · Pipeline: <strong>${formatMoney(pipeline)}</strong>` : ""}</div>`;
 }
+
+function openLeadActionsMenu(event, id, projectId) {
+  event.stopPropagation();
+  document.querySelector(".project-actions-menu")?.remove();
+  const menu = document.createElement("div");
+  menu.className = "project-actions-menu";
+  menu.innerHTML = `<button class="danger" onclick="deleteLeadCRM('${escapeHtml(id)}','${escapeHtml(projectId)}')">Excluir</button>`;
+  menu.style.position = "fixed";
+  menu.style.left = `${event.clientX}px`;
+  menu.style.top = `${event.clientY}px`;
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener("click", () => menu.remove(), { once:true }), 0);
+}
+window.openLeadActionsMenu = openLeadActionsMenu;
 
 function crmLeadCard(lead) {
   return `<article class="crm-lead-card crm-lead-card-compact" onclick="openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')">
@@ -137,4 +162,3 @@ async function renderDashboard() {
   const existing = $("dashboard-new-leads");
   if (existing) existing.innerHTML = `<div class="dashboard-leads-heading"><div><h2>Novos leads</h2><p>Leads recebidos recentemente.</p></div><button class="btn btn-ghost btn-sm" type="button" onclick="switchSection('leads')">Ver CRM</button></div><div class="dashboard-leads-list">${recent.length ? recent.map(lead => `<button type="button" class="dashboard-lead-row" onclick="openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')"><strong>${escapeHtml(lead.name || "Sem nome")}</strong><span class="icon-btn" aria-hidden="true">✎</span></button>`).join("") : `<div class="crm-empty">Nenhum lead recente.</div>`}</div>`;
 }
-
