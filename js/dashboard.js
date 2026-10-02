@@ -30,7 +30,7 @@ const STATUS_BADGE = {
   "Pausado": "badge-muted"
 };
 
-const $ = id => document.getElementById(id);
+const $ = id => document.getElementById(String(id).replace(/^#/, ""));
 
 function escapeHtml(value) {
   return String(value ?? "")
