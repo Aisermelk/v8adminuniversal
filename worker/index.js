@@ -1091,7 +1091,8 @@ function rowToProduct(row) {
         featured: !!row.featured, promotion: !!row.promotion,
         weight: Number(row.weight || 0), trackStock: !!row.track_stock,
         stock: Number(row.stock || 0), image: row.image || "", status: row.status || "active",
-        order: Number(row.product_order || 0), createdAt: row.created_at, updatedAt: row.updated_at
+        order: Number(row.product_order || 0), createdAt: row.created_at, updatedAt: row.updated_at,
+        tags: (() => { const t = parseJson(row.tags_json, []); return Array.isArray(t) ? t.map(String) : []; })()
     };
 }
 
@@ -1110,7 +1111,9 @@ function sanitizeProductInput(data, current) {
     const featured = "featured" in data ? !!data.featured : !!base.featured;
     const promotion = "promotion" in data ? !!data.promotion : !!base.promotion;
     const status = ["active", "inactive"].includes(data.status) ? data.status : (base.status || "active");
-    return { name, description, image, price, itemType, categoryId, featured, promotion, weight, stock, trackStock, status };
+    const rawTags = "tags" in data ? data.tags : (base.tags || []);
+    const tags = [...new Set((Array.isArray(rawTags) ? rawTags : []).map(t => String(t).trim().slice(0, 100)).filter(Boolean))].slice(0, 30);
+    return { name, description, image, price, itemType, categoryId, featured, promotion, weight, stock, trackStock, status, tags };
 }
 
 async function d1ListProducts(env, projectId) {
@@ -1153,13 +1156,14 @@ async function d1CreateProduct(env, projectId, data) {
         .prepare(
             `INSERT INTO products
                 (id, project_id, name, description, price, item_type, category_id, featured, promotion, weight,
-                 track_stock, stock, image, status, product_order, created_at, updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+                 track_stock, stock, image, status, product_order, created_at, updated_at, tags_json)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         )
         .bind(
             product.id, projectId, product.name, product.description, product.price, product.itemType, product.categoryId,
             product.featured ? 1 : 0, product.promotion ? 1 : 0, product.weight, product.trackStock ? 1 : 0,
-            product.stock, product.image, product.status, product.order, product.createdAt, product.updatedAt
+            product.stock, product.image, product.status, product.order, product.createdAt, product.updatedAt,
+            JSON.stringify(product.tags || [])
         )
         .run();
 
@@ -1188,13 +1192,13 @@ async function d1UpdateProduct(env, projectId, productId, data) {
         .prepare(
             `UPDATE products SET
                 name=?, description=?, price=?, item_type=?, category_id=?, featured=?, promotion=?, weight=?,
-                track_stock=?, stock=?, image=?, status=?, updated_at=?
+                track_stock=?, stock=?, image=?, status=?, updated_at=?, tags_json=?
              WHERE id=? AND project_id=?`
         )
         .bind(
             clean.name, clean.description, clean.price, clean.itemType, clean.categoryId, clean.featured ? 1 : 0, clean.promotion ? 1 : 0, clean.weight,
             clean.trackStock ? 1 : 0, clean.stock, clean.image, clean.status,
-            now(), productId, projectId
+            now(), JSON.stringify(clean.tags || []), productId, projectId
         )
         .run();
 
@@ -1219,27 +1223,112 @@ async function d1DeleteProduct(env, projectId, productId) {
 /* =========================================================
    CATÁLOGO / PAGAMENTOS
 ========================================================= */
+let productSchemaReady = false;
 async function ensureProductSchema(env) {
+    if (productSchemaReady) return;
     const columns = await env.V8_D1.prepare(`PRAGMA table_info(products)`).all();
-    const names = new Set((columns.results||[]).map(r=>r.name));
+    const info = columns.results || [];
+    const names = new Set(info.map(r=>r.name));
     const additions = [
       ["item_type", "TEXT NOT NULL DEFAULT 'product'"],
       ["category_id", "TEXT DEFAULT ''"],
       ["featured", "INTEGER NOT NULL DEFAULT 0"],
-      ["promotion", "INTEGER NOT NULL DEFAULT 0"]
+      ["promotion", "INTEGER NOT NULL DEFAULT 0"],
+      ["tags_json", "TEXT NOT NULL DEFAULT '[]'"]
     ];
     for (const [name, definition] of additions) if (!names.has(name)) await env.V8_D1.prepare(`ALTER TABLE products ADD COLUMN ${name} ${definition}`).run();
+
+    // Bancos antigos tinham price NOT NULL: impede "sob consulta" (preço vazio) e gera erro 500.
+    const priceCol = info.find(r=>r.name === "price");
+    if (priceCol && Number(priceCol.notnull) === 1) {
+        const cols = "id, project_id, name, description, price, item_type, category_id, featured, promotion, weight, track_stock, stock, image, status, product_order, created_at, updated_at, tags_json";
+        await env.V8_D1.batch([
+            env.V8_D1.prepare(`DROP TABLE IF EXISTS products_new`),
+            env.V8_D1.prepare(`CREATE TABLE products_new (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT DEFAULT '', price REAL DEFAULT NULL, item_type TEXT NOT NULL DEFAULT 'product', category_id TEXT DEFAULT '', featured INTEGER NOT NULL DEFAULT 0, promotion INTEGER NOT NULL DEFAULT 0, weight REAL NOT NULL DEFAULT 0, track_stock INTEGER NOT NULL DEFAULT 0, stock INTEGER NOT NULL DEFAULT 0, image TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'active', product_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, tags_json TEXT NOT NULL DEFAULT '[]')`),
+            env.V8_D1.prepare(`INSERT INTO products_new (${cols}) SELECT ${cols} FROM products`),
+            env.V8_D1.prepare(`DROP TABLE products`),
+            env.V8_D1.prepare(`ALTER TABLE products_new RENAME TO products`),
+            env.V8_D1.prepare(`CREATE INDEX IF NOT EXISTS idx_products_project ON products(project_id)`),
+            env.V8_D1.prepare(`CREATE INDEX IF NOT EXISTS idx_products_project_type ON products(project_id, item_type)`),
+            env.V8_D1.prepare(`CREATE INDEX IF NOT EXISTS idx_products_project_category ON products(project_id, category_id)`)
+        ]);
+    }
+    productSchemaReady = true;
 }
 
+let catalogSchemaReady = false;
 async function ensureCatalogSchema(env) {
+    if (catalogSchemaReady) return;
     await env.V8_D1.prepare(`CREATE TABLE IF NOT EXISTS catalog_categories (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT DEFAULT '', category_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`).run();
     await env.V8_D1.prepare(`CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, source_type TEXT NOT NULL DEFAULT 'manual', source_id TEXT DEFAULT '', customer_name TEXT DEFAULT '', customer_email TEXT DEFAULT '', description TEXT DEFAULT '', amount REAL NOT NULL DEFAULT 0, currency TEXT NOT NULL DEFAULT 'BRL', provider TEXT NOT NULL DEFAULT 'manual', provider_payment_id TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', due_date TEXT DEFAULT '', paid_at TEXT DEFAULT '', metadata_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`).run();
+    await env.V8_D1.prepare(`CREATE TABLE IF NOT EXISTS catalog_tags (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`).run();
+    await env.V8_D1.prepare(`CREATE INDEX IF NOT EXISTS idx_catalog_tags_project ON catalog_tags(project_id)`).run();
+    const catCols = await env.V8_D1.prepare(`PRAGMA table_info(catalog_categories)`).all();
+    if (!(catCols.results || []).some(c => c.name === "parent_id")) {
+        await env.V8_D1.prepare(`ALTER TABLE catalog_categories ADD COLUMN parent_id TEXT NOT NULL DEFAULT ''`).run();
+    }
+    catalogSchemaReady = true;
 }
-function rowToCategory(row) { return row ? { id:row.id, projectId:row.project_id, name:row.name, description:row.description||"", order:Number(row.category_order||0), createdAt:row.created_at, updatedAt:row.updated_at } : null; }
+function rowToTag(row) { return row ? { id:row.id, projectId:row.project_id, name:row.name, createdAt:row.created_at, updatedAt:row.updated_at } : null; }
+function rowToCategory(row) { return row ? { id:row.id, projectId:row.project_id, name:row.name, parentId:row.parent_id||"", description:row.description||"", order:Number(row.category_order||0), createdAt:row.created_at, updatedAt:row.updated_at } : null; }
 function rowToPayment(row) { return row ? { id:row.id, projectId:row.project_id, sourceType:row.source_type, sourceId:row.source_id||"", customerName:row.customer_name||"", customerEmail:row.customer_email||"", description:row.description||"", amount:Number(row.amount||0), currency:row.currency||"BRL", provider:row.provider||"manual", providerPaymentId:row.provider_payment_id||"", status:row.status||"pending", dueDate:row.due_date||"", paidAt:row.paid_at||"", metadata:parseJson(row.metadata_json,{}), createdAt:row.created_at, updatedAt:row.updated_at } : null; }
 async function d1ListCategories(env, projectId) { await ensureCatalogSchema(env); const r=await env.V8_D1.prepare(`SELECT * FROM catalog_categories WHERE project_id=? ORDER BY category_order ASC, name ASC`).bind(projectId).all(); return (r.results||[]).map(rowToCategory); }
-async function d1SaveCategory(env, projectId, data, id=null) { await ensureCatalogSchema(env); const name=String(data.name||"").trim().slice(0,120); if(!name) return {error:"Informe o nome da categoria."}; const nowValue=now(); if(id){ await env.V8_D1.prepare(`UPDATE catalog_categories SET name=?, description=?, updated_at=? WHERE id=? AND project_id=?`).bind(name,String(data.description||"").trim().slice(0,500),nowValue,id,projectId).run(); const row=await env.V8_D1.prepare(`SELECT * FROM catalog_categories WHERE id=? AND project_id=?`).bind(id,projectId).first(); return {category:rowToCategory(row)}; } const newId=uuid(); const count=await env.V8_D1.prepare(`SELECT COUNT(*) total FROM catalog_categories WHERE project_id=?`).bind(projectId).first(); await env.V8_D1.prepare(`INSERT INTO catalog_categories(id,project_id,name,description,category_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?)`).bind(newId,projectId,name,String(data.description||"").trim().slice(0,500),Number(count?.total||0),nowValue,nowValue).run(); return {category:rowToCategory(await env.V8_D1.prepare(`SELECT * FROM catalog_categories WHERE id=?`).bind(newId).first())}; }
-async function d1DeleteCategory(env, projectId, id) { await ensureCatalogSchema(env); await env.V8_D1.prepare(`UPDATE products SET category_id='' WHERE project_id=? AND category_id=?`).bind(projectId,id).run(); const r=await env.V8_D1.prepare(`DELETE FROM catalog_categories WHERE id=? AND project_id=?`).bind(id,projectId).run(); return Number(r.meta?.changes||0)>0; }
+async function d1SaveCategory(env, projectId, data, id=null) {
+    await ensureCatalogSchema(env);
+    const name = String(data.name||"").trim().slice(0,120);
+    if (!name) return {error:"Informe o nome da categoria."};
+    const description = String(data.description||"").trim().slice(0,500);
+    const nowValue = now();
+    let parentId = String(data.parentId||"").trim().slice(0,100);
+    if (parentId) {
+        if (id && parentId === id) return {error:"Uma categoria não pode ser subcategoria dela mesma."};
+        const parent = await env.V8_D1.prepare(`SELECT id, parent_id FROM catalog_categories WHERE id=? AND project_id=?`).bind(parentId,projectId).first();
+        if (!parent) return {error:"Categoria pai não encontrada."};
+        if (parent.parent_id) return {error:"Subcategorias só podem ficar dentro de uma categoria principal."};
+        if (id) {
+            const kids = await env.V8_D1.prepare(`SELECT COUNT(*) total FROM catalog_categories WHERE parent_id=? AND project_id=?`).bind(id,projectId).first();
+            if (Number(kids?.total||0) > 0) return {error:"Esta categoria já tem subcategorias e não pode virar subcategoria."};
+        }
+    }
+    if (id) {
+        await env.V8_D1.prepare(`UPDATE catalog_categories SET name=?, description=?, parent_id=?, updated_at=? WHERE id=? AND project_id=?`).bind(name,description,parentId,nowValue,id,projectId).run();
+        const row = await env.V8_D1.prepare(`SELECT * FROM catalog_categories WHERE id=? AND project_id=?`).bind(id,projectId).first();
+        return {category:rowToCategory(row)};
+    }
+    const newId = uuid();
+    const count = await env.V8_D1.prepare(`SELECT COUNT(*) total FROM catalog_categories WHERE project_id=?`).bind(projectId).first();
+    await env.V8_D1.prepare(`INSERT INTO catalog_categories(id,project_id,name,description,parent_id,category_order,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).bind(newId,projectId,name,description,parentId,Number(count?.total||0),nowValue,nowValue).run();
+    return {category:rowToCategory(await env.V8_D1.prepare(`SELECT * FROM catalog_categories WHERE id=?`).bind(newId).first())};
+}
+async function d1DeleteCategory(env, projectId, id) { await ensureCatalogSchema(env); await ensureProductSchema(env); await env.V8_D1.prepare(`UPDATE products SET category_id='' WHERE project_id=? AND category_id=?`).bind(projectId,id).run(); await env.V8_D1.prepare(`UPDATE catalog_categories SET parent_id='' WHERE project_id=? AND parent_id=?`).bind(projectId,id).run(); const r=await env.V8_D1.prepare(`DELETE FROM catalog_categories WHERE id=? AND project_id=?`).bind(id,projectId).run(); return Number(r.meta?.changes||0)>0; }
+async function d1ListTags(env, projectId) { await ensureCatalogSchema(env); const r=await env.V8_D1.prepare(`SELECT * FROM catalog_tags WHERE project_id=? ORDER BY name COLLATE NOCASE ASC`).bind(projectId).all(); return (r.results||[]).map(rowToTag); }
+async function d1SaveTag(env, projectId, data, id=null) {
+    await ensureCatalogSchema(env);
+    const name = String(data.name||"").trim().slice(0,60);
+    if (!name) return {error:"Informe o nome da tag."};
+    const dup = await env.V8_D1.prepare(`SELECT id FROM catalog_tags WHERE project_id=? AND LOWER(name)=LOWER(?) AND id<>?`).bind(projectId,name,id||"").first();
+    if (dup) return {error:"Já existe uma tag com esse nome.", tag: rowToTag(await env.V8_D1.prepare(`SELECT * FROM catalog_tags WHERE id=?`).bind(dup.id).first()), duplicate:true};
+    const nowValue = now();
+    if (id) {
+        await env.V8_D1.prepare(`UPDATE catalog_tags SET name=?, updated_at=? WHERE id=? AND project_id=?`).bind(name,nowValue,id,projectId).run();
+        return {tag:rowToTag(await env.V8_D1.prepare(`SELECT * FROM catalog_tags WHERE id=? AND project_id=?`).bind(id,projectId).first())};
+    }
+    const newId = uuid();
+    await env.V8_D1.prepare(`INSERT INTO catalog_tags(id,project_id,name,created_at,updated_at) VALUES(?,?,?,?,?)`).bind(newId,projectId,name,nowValue,nowValue).run();
+    return {tag:rowToTag(await env.V8_D1.prepare(`SELECT * FROM catalog_tags WHERE id=?`).bind(newId).first())};
+}
+async function d1DeleteTag(env, projectId, id) {
+    await ensureCatalogSchema(env); await ensureProductSchema(env);
+    const used = await env.V8_D1.prepare(`SELECT id, tags_json FROM products WHERE project_id=? AND tags_json LIKE ?`).bind(projectId, `%${id}%`).all();
+    const stmts = [];
+    for (const row of (used.results||[])) {
+        const list = parseJson(row.tags_json, []);
+        if (Array.isArray(list) && list.includes(id)) stmts.push(env.V8_D1.prepare(`UPDATE products SET tags_json=? WHERE id=? AND project_id=?`).bind(JSON.stringify(list.filter(t=>t!==id)),row.id,projectId));
+    }
+    if (stmts.length) await env.V8_D1.batch(stmts);
+    const r = await env.V8_D1.prepare(`DELETE FROM catalog_tags WHERE id=? AND project_id=?`).bind(id,projectId).run();
+    return Number(r.meta?.changes||0)>0;
+}
 async function d1ListPayments(env, projectId) { await ensureCatalogSchema(env); const r=await env.V8_D1.prepare(`SELECT * FROM payments WHERE project_id=? ORDER BY created_at DESC LIMIT 500`).bind(projectId).all(); return (r.results||[]).map(rowToPayment); }
 async function d1CreatePayment(env, projectId, data) { await ensureCatalogSchema(env); const amount=Math.max(0,Number(data.amount)||0); if(!amount) return {error:"Informe um valor maior que zero."}; const id=uuid(), nowValue=now(); await env.V8_D1.prepare(`INSERT INTO payments(id,project_id,source_type,source_id,customer_name,customer_email,description,amount,currency,provider,provider_payment_id,status,due_date,paid_at,metadata_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,projectId,String(data.sourceType||"manual"),String(data.sourceId||""),String(data.customerName||""),String(data.customerEmail||""),String(data.description||""),amount,"BRL",String(data.provider||"manual"),String(data.providerPaymentId||""),["pending","paid","cancelled","refunded"].includes(data.status)?data.status:"pending",String(data.dueDate||""),String(data.paidAt||""),JSON.stringify(data.metadata||{}),nowValue,nowValue).run(); return {payment:rowToPayment(await env.V8_D1.prepare(`SELECT * FROM payments WHERE id=?`).bind(id).first())}; }
 
@@ -3975,15 +4064,19 @@ async function router(
     const catalogMatch = path.match(/^\/api\/data\/catalog\/([^/]+)$/);
     const categoryMatch = path.match(/^\/api\/data\/catalog\/([^/]+)\/categories$/);
     const categoryItemMatch = path.match(/^\/api\/data\/catalog\/([^/]+)\/categories\/([^/]+)$/);
+    const tagMatch = path.match(/^\/api\/data\/catalog\/([^/]+)\/tags$/);
+    const tagItemMatch = path.match(/^\/api\/data\/catalog\/([^/]+)\/tags\/([^/]+)$/);
     const paymentsMatch = path.match(/^\/api\/data\/payments\/([^/]+)$/);
-    if (categoryMatch || categoryItemMatch || catalogMatch || paymentsMatch) {
-        const projectId = (categoryMatch||categoryItemMatch||catalogMatch||paymentsMatch)[1];
+    if (categoryMatch || categoryItemMatch || tagMatch || tagItemMatch || catalogMatch || paymentsMatch) {
+        const projectId = (categoryMatch||categoryItemMatch||tagMatch||tagItemMatch||catalogMatch||paymentsMatch)[1];
         const project = await getProjectForUser(env, projectId, user);
         if (!project) return json({success:false,error:"Projeto não encontrado."},404,origin);
         if (user.type !== "admin" && !(hasClientModuleAccess(project,"catalog") || hasClientModuleAccess(project,"ecommerce"))) return json({success:false,error:"Acesso ao Catálogo não liberado para este projeto."},403,origin);
         if (categoryMatch) { if(method==="GET") return json({success:true,categories:await d1ListCategories(env,projectId)},200,origin); if(method==="POST"){const r=await d1SaveCategory(env,projectId,await readJson(request)); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},200,origin);} }
         if (categoryItemMatch) { const id=categoryItemMatch[2]; if(method==="PUT"||method==="POST"){const r=await d1SaveCategory(env,projectId,await readJson(request),id); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},200,origin);} if(method==="DELETE") return json({success:await d1DeleteCategory(env,projectId,id)},200,origin); }
-        if (catalogMatch) { if(method==="GET") return json({success:true,products:await d1ListProducts(env,projectId),categories:await d1ListCategories(env,projectId)},200,origin); }
+        if (tagMatch) { if(method==="GET") return json({success:true,tags:await d1ListTags(env,projectId)},200,origin); if(method==="POST"){const r=await d1SaveTag(env,projectId,await readJson(request)); if(r.duplicate) return json({success:true,...r,error:undefined},200,origin); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},200,origin);} }
+        if (tagItemMatch) { const id=tagItemMatch[2]; if(method==="PUT"||method==="POST"){const r=await d1SaveTag(env,projectId,await readJson(request),id); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},200,origin);} if(method==="DELETE") return json({success:await d1DeleteTag(env,projectId,id)},200,origin); }
+        if (catalogMatch) { if(method==="GET") return json({success:true,products:await d1ListProducts(env,projectId),categories:await d1ListCategories(env,projectId),tags:await d1ListTags(env,projectId)},200,origin); }
         if (paymentsMatch) { if(method==="GET") return json({success:true,payments:await d1ListPayments(env,projectId)},200,origin); if(method==="POST"){const r=await d1CreatePayment(env,projectId,await readJson(request)); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},201,origin);} }
     }
 
@@ -4199,7 +4292,8 @@ export default {
                 {
                     success: false,
                     error:
-                        "Erro interno do servidor."
+                        "Erro interno do servidor.",
+                    detail: String(error?.message || error).slice(0, 300)
                 },
                 500,
                 cors(request)
