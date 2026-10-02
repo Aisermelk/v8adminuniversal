@@ -1,664 +1,248 @@
-/* V8 — CATÁLOGO independente da Loja */
+/* V8 — CATÁLOGO independente da Loja
+   Categorias, subcategorias (2 níveis) e tags por projeto. */
+const catalogState = { projectId:"", products:[], categories:[], tags:[], cat:"", sub:"", tag:"", editTags:new Set() };
 
-const catalogState = {
-  projectId: "",
-  products: [],
-  categories: []
-};
+const CATALOG_TYPES = [["product","Produto"],["service","Serviço"],["combo","Combo"],["package","Pacote"],["plan","Plano"],["other","Outro"]];
+const catUrl = (suffix="") => `/api/data/catalog/${encodeURIComponent(catalogState.projectId)}${suffix}`;
+const catRoots = () => catalogState.categories.filter(c => !c.parentId);
+const catChildren = id => catalogState.categories.filter(c => c.parentId === id);
+const catById = id => catalogState.categories.find(c => c.id === id);
+const tagById = id => catalogState.tags.find(t => t.id === id);
+function catPath(id){ const c=catById(id); if(!c) return ""; const p=c.parentId?catById(c.parentId):null; return p?`${p.name} › ${c.name}`:c.name; }
+function catFail(r, fallback){ if(r?.error||r?.success===false){ toast(r?.error||fallback,"error"); return true; } return false; }
 
-async function renderCatalogSection() {
-  const el = $("catalog-content");
-  if (!el) return;
-
-  const projects = Array.isArray(state?.projects) ? state.projects : [];
-
-  if (!projects.length) {
-    el.innerHTML = '<div class="empty-state">Nenhum projeto cadastrado.</div>';
-    return;
-  }
-
-  if (
-    !catalogState.projectId ||
-    !projects.some((p) => p.id === catalogState.projectId)
-  ) {
-    catalogState.projectId = projects[0].id;
-  }
-
+/* ---------- Tela principal: barra de filtros (padrão Clientes) + vitrine por categoria ---------- */
+catalogState.collapsed = new Set();
+async function renderCatalogSection(){
+  const el=$("catalog-content"); if(!el)return; const projects=state.projects||[];
+  if(!projects.length){el.innerHTML='<div class="empty-state">Nenhum projeto cadastrado.</div>';return;}
+  if(!catalogState.projectId || !projects.some(p=>p.id===catalogState.projectId)) catalogState.projectId=projects[0].id;
   await loadCatalog();
-
-  el.innerHTML = `
-    <div class="module-head">
-      <div>
-        <p class="eyebrow">V8 UNIVERSAL</p>
-        <h1>Catálogo</h1>
-        <p>Produtos, serviços, combos, pacotes e planos. Independente da Loja.</p>
-      </div>
-
-      <div class="module-actions">
-        <select id="catalog-project">
-          ${projects
-            .map(
-              (p) => `
-                <option
-                  value="${escapeHtml(p.id)}"
-                  ${p.id === catalogState.projectId ? "selected" : ""}
-                >
-                  ${escapeHtml(p.name || "Projeto")}
-                </option>
-              `
-            )
-            .join("")}
-        </select>
-
-        <button class="btn btn-primary" onclick="openCatalogItem()">
-          + Adicionar item
-        </button>
-      </div>
+  el.innerHTML=`<div class="module-head"><div><p class="eyebrow">V8 UNIVERSAL</p><h1>Catálogo</h1><p>Produtos, serviços, combos, pacotes e planos. Independente da Loja.</p></div>
+    <div class="module-actions"><select id="catalog-project">${projects.map(p=>`<option value="${escapeHtml(p.id)}" ${p.id===catalogState.projectId?'selected':''}>${escapeHtml(p.name||'Projeto')}</option>`).join('')}</select>
+    <button class="btn" onclick="openCatalogCategories()">Categorias</button><button class="btn" onclick="openCatalogTags()">Tags</button>
+    <button class="btn btn-primary" onclick="openCatalogItem()">+ Adicionar item</button></div></div>
+    <div class="entity-filters client-filters">
+      <div class="search-bar"><input type="text" id="catalog-search" placeholder="Buscar item, tag ou categoria..." oninput="paintCatalog()"></div>
+      <select id="catalog-category" onchange="setCatalogCategory(this.value)" aria-label="Filtrar por categoria"></select>
+      <select id="catalog-status" onchange="paintCatalog()" aria-label="Filtrar por status"><option value="">Todos os status</option><option value="active">Ativos</option><option value="inactive">Inativos</option></select>
     </div>
-
-    <div class="module-toolbar">
-      <input
-        id="catalog-search"
-        type="search"
-        placeholder="Buscar no catálogo..."
-      >
-
-      <select id="catalog-type">
-        <option value="">Todos os tipos</option>
-        <option value="product">Produto</option>
-        <option value="service">Serviço</option>
-        <option value="combo">Combo</option>
-        <option value="package">Pacote</option>
-        <option value="plan">Plano</option>
-        <option value="other">Outro</option>
-      </select>
-
-      <select id="catalog-status">
-        <option value="">Todos os status</option>
-        <option value="active">Ativos</option>
-        <option value="inactive">Inativos</option>
-      </select>
-    </div>
-
-    <div id="catalog-list"></div>
-  `;
-
-  const projectSelect = $("#catalog-project");
-  const searchInput = $("#catalog-search");
-  const typeSelect = $("#catalog-type");
-  const statusSelect = $("#catalog-status");
-
-  if (projectSelect) {
-    projectSelect.onchange = async (event) => {
-      catalogState.projectId = event.target.value;
-
-      await loadCatalog();
-      paintCatalog();
-    };
-  }
-
-  if (searchInput) {
-    searchInput.oninput = paintCatalog;
-  }
-
-  if (typeSelect) {
-    typeSelect.onchange = paintCatalog;
-  }
-
-  if (statusSelect) {
-    statusSelect.onchange = paintCatalog;
-  }
-
+    <div id="catalog-list"></div>`;
+  $("#catalog-project").onchange=async e=>{catalogState.projectId=e.target.value;catalogState.cat="";await loadCatalog();paintCatalog();};
   paintCatalog();
 }
+async function loadCatalog(){
+  const r=await API.get(catUrl());
+  catalogState.products=r?.products||[]; catalogState.categories=r?.categories||[]; catalogState.tags=r?.tags||[];
+  if(catalogState.cat && catalogState.cat!=="__none__" && !catById(catalogState.cat)) catalogState.cat="";
+}
+function setCatalogCategory(v){ catalogState.cat=v; paintCatalog(); }
+function toggleVitrine(id){ catalogState.collapsed.has(id)?catalogState.collapsed.delete(id):catalogState.collapsed.add(id); paintCatalog(); }
 
-async function loadCatalog() {
-  if (!catalogState.projectId) {
-    catalogState.products = [];
-    catalogState.categories = [];
+function fillCatalogCategorySelect(){
+  const sel=$("catalog-category"); if(!sel)return;
+  const sig=JSON.stringify(catalogState.categories.map(c=>[c.id,c.name,c.parentId]))+catalogState.cat;
+  if(sel.dataset.sig===sig) return; sel.dataset.sig=sig;
+  let html=`<option value="">Todas as categorias</option>`;
+  for(const c of catRoots()){
+    html+=`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`;
+    for(const k of catChildren(c.id)) html+=`<option value="${escapeHtml(k.id)}">${escapeHtml(c.name)} › ${escapeHtml(k.name)}</option>`;
+  }
+  html+=`<option value="__none__">Sem categoria</option>`;
+  sel.innerHTML=html; sel.value=catalogState.cat||"";
+}
+function catalogItemMatches(p,q,st){
+  if(st && p.status!==st) return false;
+  if(q){
+    const tagNames=(p.tags||[]).map(id=>tagById(id)?.name||'').join(' ');
+    const typeLabel=(CATALOG_TYPES.find(x=>x[0]===p.itemType)||[0,''])[1];
+    if(!`${p.name} ${p.description} ${tagNames} ${typeLabel} ${catPath(p.categoryId)}`.toLowerCase().includes(q)) return false;
+  }
+  const c=catalogState.cat;
+  if(!c) return true;
+  if(c==="__none__") return !p.categoryId || !catById(p.categoryId);
+  const cat=catById(c); if(!cat) return true;
+  if(cat.parentId) return p.categoryId===c;
+  return p.categoryId===c || catChildren(c).some(k=>k.id===p.categoryId);
+}
+function catalogCardHtml(p){
+  const tags=(p.tags||[]).map(tagById).filter(Boolean);
+  return `<article class="catalog-card"><div class="catalog-card-media">${p.image?`<img src="${escapeHtml(p.image)}" alt="">`:'◈'}</div><div class="catalog-card-body">
+    <div class="catalog-tags"><span class="badge badge-muted">${escapeHtml((CATALOG_TYPES.find(x=>x[0]===p.itemType)||[0,p.itemType||'Produto'])[1])}</span>${p.featured?'<span class="badge badge-success">Destaque</span>':''}${p.promotion?'<span class="badge">Promoção</span>':''}${p.status==='inactive'?'<span class="badge badge-muted">Inativo</span>':''}</div>
+    <h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description||'')}</p>
+    ${tags.length?`<div class="catalog-tags">${tags.map(x=>`<span class="tag-chip">#${escapeHtml(x.name)}</span>`).join('')}</div>`:''}
+    <strong>${p.price==null?'Sob consulta':formatMoney(p.price)}</strong></div>
+    <div class="catalog-card-actions"><button class="btn btn-sm" onclick="openCatalogItem('${escapeHtml(p.id)}')">Editar</button><button class="btn btn-sm btn-danger" onclick="deleteCatalogItem('${escapeHtml(p.id)}')">Excluir</button></div></article>`;
+}
+const catalogGrid=items=>`<div class="catalog-grid">${items.map(catalogCardHtml).join('')}</div>`;
+
+/* Vitrine: uma seção por categoria (com subcategorias dentro), sem abas. */
+function paintCatalog(){
+  fillCatalogCategorySelect();
+  const el=$("catalog-list"); if(!el)return;
+  const q=($("catalog-search")?.value||'').trim().toLowerCase(), st=$("catalog-status")?.value||'';
+  const filtered=!!(q||st||catalogState.cat);
+  const list=catalogState.products.filter(p=>catalogItemMatches(p,q,st));
+  const roots=catRoots();
+  if(!roots.length){
+    el.innerHTML=list.length?catalogGrid(list):`<div class="empty-state"><strong>Nenhum item encontrado</strong><p>Use os filtros ou adicione um item ao catálogo.</p></div>`;
     return;
   }
-
-  try {
-    const response = await API.get(
-      `/api/data/catalog/${encodeURIComponent(catalogState.projectId)}`
-    );
-
-    catalogState.products = Array.isArray(response?.products)
-      ? response.products
-      : [];
-
-    catalogState.categories = Array.isArray(response?.categories)
-      ? response.categories
-      : [];
-  } catch (error) {
-    console.error("Erro ao carregar catálogo:", error);
-
-    catalogState.products = [];
-    catalogState.categories = [];
-
-    toast("Erro ao carregar o catálogo.", "error");
+  const inCat=id=>list.filter(p=>p.categoryId===id);
+  const addBtn=id=>`<button type="button" class="btn btn-sm" onclick="event.stopPropagation();openCatalogItem(null,'${escapeHtml(id)}')">+ Item</button>`;
+  const head=(id,title,count,add)=>`<header class="vitrine-head" onclick="toggleVitrine('${escapeHtml(id)}')"><span class="vitrine-chevron">${catalogState.collapsed.has(id)&&!filtered?'▸':'▾'}</span><h2>${escapeHtml(title)}</h2><span class="vitrine-count">${count}</span>${add?addBtn(id):''}</header>`;
+  let html="";
+  for(const r of roots){
+    const direct=inCat(r.id), kids=catChildren(r.id).map(k=>({k,items:inCat(k.id)}));
+    const total=direct.length+kids.reduce((n,x)=>n+x.items.length,0);
+    if(filtered && !total) continue;
+    const closed=catalogState.collapsed.has(r.id)&&!filtered;
+    html+=`<section class="vitrine-section">${head(r.id,r.name,total,true)}`;
+    if(!closed){
+      html+=`<div class="vitrine-body">`;
+      if(direct.length) html+=catalogGrid(direct);
+      for(const {k,items} of kids){
+        if(filtered && !items.length) continue;
+        html+=`<div class="vitrine-sub"><div class="vitrine-subhead"><h3>${escapeHtml(k.name)}</h3><span class="vitrine-count">${items.length}</span>${addBtn(k.id)}</div>${items.length?catalogGrid(items):'<p class="vitrine-empty">Nenhum item nesta subcategoria.</p>'}</div>`;
+      }
+      if(!total) html+=`<p class="vitrine-empty">Nenhum item nesta categoria.</p>`;
+      html+=`</div>`;
+    }
+    html+=`</section>`;
   }
+  const known=new Set(catalogState.categories.map(c=>c.id));
+  const loose=list.filter(p=>!p.categoryId||!known.has(p.categoryId));
+  if(loose.length){
+    const closed=catalogState.collapsed.has("__none__")&&!filtered;
+    html+=`<section class="vitrine-section">${head("__none__","Sem categoria",loose.length,false)}${closed?'':`<div class="vitrine-body">${catalogGrid(loose)}</div>`}</section>`;
+  }
+  el.innerHTML=html||`<div class="empty-state"><strong>Nenhum item encontrado</strong><p>Use os filtros ou adicione um item ao catálogo.</p></div>`;
 }
 
-function paintCatalog() {
-  const el = $("#catalog-list");
-
-  if (!el) return;
-
-  const search = $("#catalog-search");
-  const type = $("#catalog-type");
-  const status = $("#catalog-status");
-
-  const q = String(search?.value || "").trim().toLowerCase();
-  const selectedType = String(type?.value || "");
-  const selectedStatus = String(status?.value || "");
-
-  const list = catalogState.products.filter((product) => {
-    const text = `
-      ${product?.name || ""}
-      ${product?.description || ""}
-    `.toLowerCase();
-
-    const matchesSearch = !q || text.includes(q);
-    const matchesType =
-      !selectedType || product?.itemType === selectedType;
-    const matchesStatus =
-      !selectedStatus || product?.status === selectedStatus;
-
-    return matchesSearch && matchesType && matchesStatus;
-  });
-
-  if (!list.length) {
-    el.innerHTML = `
-      <div class="empty-state">
-        <strong>Nenhum item encontrado</strong>
-        <p>Use os filtros ou adicione um item ao catálogo.</p>
-      </div>
-    `;
-
-    return;
+/* ---------- Item (criar / editar) ---------- */
+function categoryOptions(selected){
+  let html=`<option value="">Sem categoria</option>`;
+  for(const c of catRoots()){
+    html+=`<option value="${escapeHtml(c.id)}" ${selected===c.id?'selected':''}>${escapeHtml(c.name)}</option>`;
+    for(const k of catChildren(c.id)) html+=`<option value="${escapeHtml(k.id)}" ${selected===k.id?'selected':''}>${escapeHtml(c.name)} › ${escapeHtml(k.name)}</option>`;
   }
-
-  el.innerHTML = `
-    <div class="catalog-grid">
-      ${list
-        .map((product) => {
-          const id = escapeHtml(product.id || "");
-
-          return `
-            <article class="catalog-card">
-
-              <div class="catalog-card-media">
-                ${
-                  product.image
-                    ? `<img src="${escapeHtml(product.image)}" alt="">`
-                    : "◈"
-                }
-              </div>
-
-              <div class="catalog-card-body">
-
-                <div class="catalog-tags">
-
-                  <span class="badge badge-muted">
-                    ${escapeHtml(product.itemType || "product")}
-                  </span>
-
-                  ${
-                    product.featured
-                      ? '<span class="badge badge-success">Destaque</span>'
-                      : ""
-                  }
-
-                  ${
-                    product.promotion
-                      ? '<span class="badge">Promoção</span>'
-                      : ""
-                  }
-
-                </div>
-
-                <h3>
-                  ${escapeHtml(product.name || "")}
-                </h3>
-
-                <p>
-                  ${escapeHtml(product.description || "")}
-                </p>
-
-                <strong>
-                  ${
-                    product.price == null
-                      ? "Sob consulta"
-                      : formatMoney(product.price)
-                  }
-                </strong>
-
-              </div>
-
-              <div class="catalog-card-actions">
-
-                <button
-                  type="button"
-                  class="btn btn-sm"
-                  onclick="openCatalogItem('${id}')"
-                >
-                  Editar
-                </button>
-
-                <button
-                  type="button"
-                  class="btn btn-sm btn-danger"
-                  onclick="deleteCatalogItem('${id}')"
-                >
-                  Excluir
-                </button>
-
-              </div>
-
-            </article>
-          `;
-        })
-        .join("")}
-    </div>
-  `;
+  return html;
 }
-
-function openCatalogItem(id = null) {
+function paintCatalogTagPicker(){
+  const box=$("cat-tag-picker"); if(!box)return;
+  box.innerHTML=catalogState.tags.length?catalogState.tags.map(t=>`<button type="button" class="tag-chip tag-chip-btn ${catalogState.editTags.has(t.id)?'on':''}" onclick="toggleCatalogEditTag('${escapeHtml(t.id)}')">#${escapeHtml(t.name)}</button>`).join(''):'<span class="muted-note">Nenhuma tag criada ainda.</span>';
+}
+function toggleCatalogEditTag(id){ catalogState.editTags.has(id)?catalogState.editTags.delete(id):catalogState.editTags.add(id); paintCatalogTagPicker(); }
+async function addCatalogTagFromInput(){
+  const input=$("cat-tag-new"); const name=(input?.value||'').trim(); if(!name)return;
+  const r=await API.post(catUrl("/tags"),{name}); if(catFail(r,'Erro ao criar tag.'))return;
+  if(r.tag){ if(!tagById(r.tag.id)) catalogState.tags.push(r.tag); catalogState.editTags.add(r.tag.id); }
+  input.value=''; paintCatalogTagPicker();
+}
+function openCatalogItem(id=null,presetCat=''){
   closeCatalogItem();
-
-  const product = id
-    ? catalogState.products.find((item) => item.id === id)
-    : null;
-
-  const overlay = document.createElement("div");
-
-  overlay.className = "modal-overlay";
-  overlay.id = "catalog-editor";
-
-  overlay.innerHTML = `
-    <div class="modal universal-modal">
-
-      <button
-        type="button"
-        class="modal-close"
-        onclick="closeCatalogItem()"
-      >
-        ×
-      </button>
-
-      <div class="modal-max-row">
-        <span>Item do catálogo</span>
-
-        <button
-          type="button"
-          class="btn btn-sm"
-          onclick="this.closest('.modal').classList.toggle('modal-maximized')"
-        >
-          □ Maximizar
-        </button>
-      </div>
-
-      <h2>
-        ${product ? "Editar item" : "Adicionar item"}
-      </h2>
-
-      <label>
-        Nome
-
-        <input
-          id="cat-name"
-          type="text"
-          value="${escapeHtml(product?.name || "")}"
-        >
-      </label>
-
-      <label>
-        Tipo
-
-        <select id="cat-type-edit">
-          ${[
-            ["product", "Produto"],
-            ["service", "Serviço"],
-            ["combo", "Combo"],
-            ["package", "Pacote"],
-            ["plan", "Plano"],
-            ["other", "Outro"]
-          ]
-            .map(
-              ([value, label]) => `
-                <option
-                  value="${value}"
-                  ${
-                    product?.itemType === value
-                      ? "selected"
-                      : ""
-                  }
-                >
-                  ${label}
-                </option>
-              `
-            )
-            .join("")}
-        </select>
-      </label>
-
-      <label>
-        Descrição
-
-        <textarea
-          id="cat-desc"
-          rows="4"
-        >${escapeHtml(product?.description || "")}</textarea>
-      </label>
-
-      <div class="form-grid-2">
-
-        <label>
-          Preço
-
-          <input
-            id="cat-price"
-            type="number"
-            min="0"
-            step="0.01"
-            value="${product?.price ?? ""}"
-            placeholder="Deixe vazio para 'sob consulta'"
-          >
-        </label>
-
-        <label>
-          Peso (kg)
-
-          <input
-            id="cat-weight"
-            type="number"
-            min="0"
-            step="0.01"
-            value="${product?.weight ?? 0}"
-          >
-        </label>
-
-      </div>
-
-      <label>
-        Categoria
-
-        <select id="cat-category">
-          <option value="">Sem categoria</option>
-
-          ${catalogState.categories
-            .map(
-              (category) => `
-                <option
-                  value="${escapeHtml(category.id)}"
-                  ${
-                    product?.categoryId === category.id
-                      ? "selected"
-                      : ""
-                  }
-                >
-                  ${escapeHtml(category.name || "")}
-                </option>
-              `
-            )
-            .join("")}
-        </select>
-      </label>
-
-      <label>
-        Imagem
-
-        <input
-          id="cat-image"
-          type="text"
-          value="${escapeHtml(product?.image || "")}"
-          placeholder="URL da imagem"
-        >
-      </label>
-
-      <div class="form-grid-2">
-
-        <label class="check-row">
-          <input
-            id="cat-featured"
-            type="checkbox"
-            ${product?.featured ? "checked" : ""}
-          >
-
-          Destaque
-        </label>
-
-        <label class="check-row">
-          <input
-            id="cat-promo"
-            type="checkbox"
-            ${product?.promotion ? "checked" : ""}
-          >
-
-          Promoção
-        </label>
-
-      </div>
-
-      <label>
-        Status
-
-        <select id="cat-status-edit">
-          <option
-            value="active"
-            ${product?.status !== "inactive" ? "selected" : ""}
-          >
-            Ativo
-          </option>
-
-          <option
-            value="inactive"
-            ${product?.status === "inactive" ? "selected" : ""}
-          >
-            Inativo
-          </option>
-        </select>
-      </label>
-
-      <div class="modal-actions modal-save-bar">
-
-        <button
-          type="button"
-          class="btn"
-          onclick="closeCatalogItem()"
-        >
-          Cancelar
-        </button>
-
-        <button
-          type="button"
-          class="btn btn-primary modal-save-floating"
-          onclick="saveCatalogItem('${escapeHtml(id || "")}')"
-        >
-          Salvar
-        </button>
-
-      </div>
-
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
+  const p=id?catalogState.products.find(x=>x.id===id):null;
+  catalogState.editTags=new Set(p?.tags||[]);
+  const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id='catalog-editor';
+  overlay.onclick=e=>{ if(e.target===overlay) closeCatalogItem(); };
+  overlay.innerHTML=`<div class="modal universal-modal"><button class="modal-close" onclick="closeCatalogItem()">×</button>
+    <div class="modal-max-row"><span>Item do catálogo</span><button class="btn btn-sm" onclick="this.closest('.modal').classList.toggle('modal-maximized')">□ Maximizar</button></div>
+    <h2>${p?'Editar item':'Adicionar item'}</h2>
+    <label>Nome<input id="cat-name" value="${escapeHtml(p?.name||'')}"></label>
+    <label>Tipo<select id="cat-type-edit">${CATALOG_TYPES.map(([v,l])=>`<option value="${v}" ${p?.itemType===v?'selected':''}>${l}</option>`).join('')}</select></label>
+    <label>Descrição<textarea id="cat-desc" rows="4">${escapeHtml(p?.description||'')}</textarea></label>
+    <div class="form-grid-2"><label>Preço<input id="cat-price" type="number" min="0" step="0.01" value="${p?.price??''}" placeholder="Deixe vazio para 'sob consulta'"></label><label>Peso (kg)<input id="cat-weight" type="number" min="0" step="0.01" value="${p?.weight??0}"></label></div>
+    <label>Categoria / subcategoria<select id="cat-category">${categoryOptions(p?.categoryId||presetCat||'')}</select></label>
+    <div class="field-block"><span class="field-label">Tags</span><div id="cat-tag-picker" class="tag-picker"></div>
+      <div class="tag-add"><input id="cat-tag-new" placeholder="Nova tag (Enter para criar)" onkeydown="if(event.key==='Enter'){event.preventDefault();addCatalogTagFromInput();}"><button type="button" class="btn btn-sm" onclick="addCatalogTagFromInput()">+ Criar tag</button></div></div>
+    <label>Imagem<input id="cat-image" value="${escapeHtml(p?.image||'')}" placeholder="URL da imagem"></label>
+    <div class="form-grid-2"><label class="check-row"><input id="cat-featured" type="checkbox" ${p?.featured?'checked':''}> Destaque</label><label class="check-row"><input id="cat-promo" type="checkbox" ${p?.promotion?'checked':''}> Promoção</label></div>
+    <label>Status<select id="cat-status-edit"><option value="active" ${p?.status!=='inactive'?'selected':''}>Ativo</option><option value="inactive" ${p?.status==='inactive'?'selected':''}>Inativo</option></select></label>
+    <div class="modal-actions modal-save-bar"><button class="btn" onclick="closeCatalogItem()">Cancelar</button><button class="btn btn-primary modal-save-floating" onclick="saveCatalogItem('${escapeHtml(id||'')}')">Salvar</button></div></div>`;
+  document.body.appendChild(overlay); paintCatalogTagPicker();
+}
+function closeCatalogItem(){ $('#catalog-editor')?.remove(); }
+async function saveCatalogItem(id){
+  const body={name:$('#cat-name').value.trim(),description:$('#cat-desc').value.trim(),itemType:$('#cat-type-edit').value,price:$('#cat-price').value===''?null:Number($('#cat-price').value),weight:Number($('#cat-weight').value||0),categoryId:$('#cat-category').value,tags:[...catalogState.editTags],image:$('#cat-image').value.trim(),featured:$('#cat-featured').checked,promotion:$('#cat-promo').checked,status:$('#cat-status-edit').value,trackStock:false,stock:0};
+  if(!body.name)return toast('Informe o nome.','error');
+  const url=id?`/api/data/products/${encodeURIComponent(catalogState.projectId)}/${encodeURIComponent(id)}`:`/api/data/products/${encodeURIComponent(catalogState.projectId)}`;
+  const r=id?await API.put(url,body):await API.post(url,body);
+  if(catFail(r,'Erro ao salvar.'))return;
+  closeCatalogItem(); await loadCatalog(); paintCatalog(); toast(id?'Item atualizado.':'Item adicionado.');
+}
+async function deleteCatalogItem(id){
+  if(!confirm('Excluir este item do catálogo?'))return;
+  const r=await API.del(`/api/data/products/${encodeURIComponent(catalogState.projectId)}/${encodeURIComponent(id)}`);
+  if(catFail(r,'Erro ao excluir.'))return;
+  await loadCatalog(); paintCatalog(); toast('Item excluído.');
 }
 
-function closeCatalogItem() {
-  $("#catalog-editor")?.remove();
+/* ---------- Gerenciador de categorias / subcategorias ---------- */
+function openCatalogCategories(){
+  closeCatalogManager();
+  const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id='catalog-manager';
+  overlay.onclick=e=>{ if(e.target===overlay) closeCatalogManager(); };
+  overlay.innerHTML=`<div class="modal universal-modal"><button class="modal-close" onclick="closeCatalogManager()">×</button><h2>Categorias e subcategorias</h2>
+    <div class="manager-add"><input id="mgr-cat-name" placeholder="Nome da categoria ou subcategoria" onkeydown="if(event.key==='Enter'){event.preventDefault();addCatalogCategory();}"><select id="mgr-cat-parent"></select><button class="btn btn-primary" onclick="addCatalogCategory()">Adicionar</button></div>
+    <div id="mgr-cat-list" class="manager-list"></div><div class="modal-actions"><button class="btn" onclick="closeCatalogManager()">Fechar</button></div></div>`;
+  document.body.appendChild(overlay); paintCatalogCategoryManager();
+}
+function paintCatalogCategoryManager(){
+  const sel=$("mgr-cat-parent"), list=$("mgr-cat-list"); if(!sel||!list)return;
+  const keep=sel.value;
+  sel.innerHTML=`<option value="">Categoria principal</option>${catRoots().map(c=>`<option value="${escapeHtml(c.id)}">Subcategoria de ${escapeHtml(c.name)}</option>`).join('')}`; sel.value=keep||"";
+  const count=id=>catalogState.products.filter(p=>p.categoryId===id).length;
+  const row=(c,sub)=>`<div class="manager-row ${sub?'is-sub':''}"><span class="manager-name">${sub?'↳ ':''}${escapeHtml(c.name)} <small>${count(c.id)} item(ns)</small></span><span class="manager-actions"><button class="btn btn-sm" onclick="renameCatalogCategory('${escapeHtml(c.id)}')">Renomear</button><button class="btn btn-sm btn-danger" onclick="deleteCatalogCategory('${escapeHtml(c.id)}')">Excluir</button></span></div>`;
+  list.innerHTML=catRoots().length?catRoots().map(c=>row(c,false)+catChildren(c.id).map(k=>row(k,true)).join('')).join(''):'<div class="empty-state"><p>Nenhuma categoria ainda. Crie a primeira acima.</p></div>';
+}
+function closeCatalogManager(){ $('#catalog-manager')?.remove(); }
+async function addCatalogCategory(){
+  const name=$("mgr-cat-name").value.trim(); if(!name)return toast('Informe o nome.','error');
+  const r=await API.post(catUrl("/categories"),{name,parentId:$("mgr-cat-parent").value}); if(catFail(r,'Erro ao criar categoria.'))return;
+  $("mgr-cat-name").value=''; await loadCatalog(); paintCatalogCategoryManager(); paintCatalog(); toast('Categoria criada.');
+}
+async function renameCatalogCategory(id){
+  const c=catById(id); if(!c)return; const name=prompt('Novo nome:',c.name); if(name===null||!name.trim())return;
+  const r=await API.put(catUrl(`/categories/${encodeURIComponent(id)}`),{name:name.trim(),parentId:c.parentId,description:c.description}); if(catFail(r,'Erro ao renomear.'))return;
+  await loadCatalog(); paintCatalogCategoryManager(); paintCatalog();
+}
+async function deleteCatalogCategory(id){
+  const c=catById(id); if(!c)return; const kids=catChildren(id).length;
+  if(!confirm(`Excluir "${c.name}"? Os itens ficam sem categoria${kids?' e as subcategorias viram categorias principais':''}.`))return;
+  const r=await API.del(catUrl(`/categories/${encodeURIComponent(id)}`)); if(catFail(r,'Erro ao excluir.'))return;
+  await loadCatalog(); paintCatalogCategoryManager(); paintCatalog(); toast('Categoria excluída.');
 }
 
-function getCatalogFormValue(id, fallback = "") {
-  const element = document.getElementById(id);
-
-  if (!element) {
-    console.error(`Elemento do catálogo não encontrado: #${id}`);
-    return fallback;
-  }
-
-  return element.value;
+/* ---------- Gerenciador de tags ---------- */
+function openCatalogTags(){
+  closeCatalogTagManager();
+  const overlay=document.createElement('div'); overlay.className='modal-overlay'; overlay.id='catalog-tag-manager';
+  overlay.onclick=e=>{ if(e.target===overlay) closeCatalogTagManager(); };
+  overlay.innerHTML=`<div class="modal universal-modal"><button class="modal-close" onclick="closeCatalogTagManager()">×</button><h2>Tags</h2>
+    <div class="manager-add"><input id="mgr-tag-name" placeholder="Nome da tag" onkeydown="if(event.key==='Enter'){event.preventDefault();addCatalogTag();}"><button class="btn btn-primary" onclick="addCatalogTag()">Adicionar</button></div>
+    <div id="mgr-tag-list" class="manager-list"></div><div class="modal-actions"><button class="btn" onclick="closeCatalogTagManager()">Fechar</button></div></div>`;
+  document.body.appendChild(overlay); paintCatalogTagManager();
+}
+function paintCatalogTagManager(){
+  const list=$("mgr-tag-list"); if(!list)return;
+  const count=id=>catalogState.products.filter(p=>(p.tags||[]).includes(id)).length;
+  list.innerHTML=catalogState.tags.length?catalogState.tags.map(t=>`<div class="manager-row"><span class="manager-name">#${escapeHtml(t.name)} <small>${count(t.id)} item(ns)</small></span><span class="manager-actions"><button class="btn btn-sm" onclick="renameCatalogTag('${escapeHtml(t.id)}')">Renomear</button><button class="btn btn-sm btn-danger" onclick="deleteCatalogTag('${escapeHtml(t.id)}')">Excluir</button></span></div>`).join(''):'<div class="empty-state"><p>Nenhuma tag ainda. Crie a primeira acima.</p></div>';
+}
+function closeCatalogTagManager(){ $('#catalog-tag-manager')?.remove(); }
+async function addCatalogTag(){
+  const name=$("mgr-tag-name").value.trim(); if(!name)return toast('Informe o nome.','error');
+  const r=await API.post(catUrl("/tags"),{name}); if(catFail(r,'Erro ao criar tag.'))return;
+  $("mgr-tag-name").value=''; await loadCatalog(); paintCatalogTagManager(); paintCatalog(); toast('Tag criada.');
+}
+async function renameCatalogTag(id){
+  const t=tagById(id); if(!t)return; const name=prompt('Novo nome da tag:',t.name); if(name===null||!name.trim())return;
+  const r=await API.put(catUrl(`/tags/${encodeURIComponent(id)}`),{name:name.trim()}); if(catFail(r,'Erro ao renomear.'))return;
+  await loadCatalog(); paintCatalogTagManager(); paintCatalog();
+}
+async function deleteCatalogTag(id){
+  const t=tagById(id); if(!t)return; if(!confirm(`Excluir a tag "${t.name}"? Ela será removida dos itens.`))return;
+  const r=await API.del(catUrl(`/tags/${encodeURIComponent(id)}`)); if(catFail(r,'Erro ao excluir.'))return;
+  await loadCatalog(); paintCatalogTagManager(); paintCatalog(); toast('Tag excluída.');
 }
 
-function getCatalogChecked(id, fallback = false) {
-  const element = document.getElementById(id);
-
-  if (!element) {
-    console.error(`Checkbox do catálogo não encontrado: #${id}`);
-    return fallback;
-  }
-
-  return Boolean(element.checked);
-}
-
-async function saveCatalogItem(id) {
-  const editor = document.getElementById("catalog-editor");
-
-  if (!editor) {
-    return toast("Editor do catálogo não está aberto.", "error");
-  }
-
-  if (!catalogState.projectId) {
-    return toast("Selecione um projeto.", "error");
-  }
-
-  const name = getCatalogFormValue("cat-name").trim();
-
-  if (!name) {
-    return toast("Informe o nome.", "error");
-  }
-
-  const priceValue = getCatalogFormValue("cat-price");
-
-  const body = {
-    name,
-    description: getCatalogFormValue("cat-desc").trim(),
-    itemType: getCatalogFormValue("cat-type-edit", "product"),
-    price:
-      priceValue === ""
-        ? null
-        : Number(priceValue),
-
-    weight: Number(
-      getCatalogFormValue("cat-weight", "0") || 0
-    ),
-
-    categoryId: getCatalogFormValue("cat-category"),
-    image: getCatalogFormValue("cat-image").trim(),
-
-    featured: getCatalogChecked("cat-featured"),
-    promotion: getCatalogChecked("cat-promo"),
-
-    status: getCatalogFormValue(
-      "cat-status-edit",
-      "active"
-    ),
-
-    trackStock: false,
-    stock: 0
-  };
-
-  if (
-    Number.isNaN(body.price) &&
-    body.price !== null
-  ) {
-    return toast("Informe um preço válido.", "error");
-  }
-
-  if (Number.isNaN(body.weight)) {
-    return toast("Informe um peso válido.", "error");
-  }
-
-  try {
-    const url = id
-      ? `/api/data/products/${encodeURIComponent(
-          catalogState.projectId
-        )}/${encodeURIComponent(id)}`
-      : `/api/data/products/${encodeURIComponent(
-          catalogState.projectId
-        )}`;
-
-    const response = id
-      ? await API.put(url, body)
-      : await API.post(url, body);
-
-    if (
-      response?.error ||
-      response?.success === false
-    ) {
-      return toast(
-        response?.error || "Erro ao salvar.",
-        "error"
-      );
-    }
-
-    closeCatalogItem();
-
-    await loadCatalog();
-
-    paintCatalog();
-
-    toast(
-      id
-        ? "Item atualizado."
-        : "Item adicionado."
-    );
-  } catch (error) {
-    console.error("Erro ao salvar item do catálogo:", error);
-
-    toast(
-      "Não foi possível salvar o item.",
-      "error"
-    );
-  }
-}
-
-async function deleteCatalogItem(id) {
-  if (!id) {
-    return toast("Item inválido.", "error");
-  }
-
-  if (!confirm("Excluir este item do catálogo?")) {
-    return;
-  }
-
-  try {
-    const response = await API.del(
-      `/api/data/products/${encodeURIComponent(
-        catalogState.projectId
-      )}/${encodeURIComponent(id)}`
-    );
-
-    if (
-      response?.error ||
-      response?.success === false
-    ) {
-      return toast(
-        response?.error || "Erro ao excluir.",
-        "error"
-      );
-    }
-
-    await loadCatalog();
-
-    paintCatalog();
-
-    toast("Item excluído.");
-  } catch (error) {
-    console.error("Erro ao excluir item:", error);
-
-    toast(
-      "Não foi possível excluir o item.",
-      "error"
-    );
-  }
-}
-
-window.renderCatalogSection = renderCatalogSection;
-window.openCatalogItem = openCatalogItem;
-window.closeCatalogItem = closeCatalogItem;
-window.saveCatalogItem = saveCatalogItem;
-window.deleteCatalogItem = deleteCatalogItem;
+Object.assign(window,{renderCatalogSection,paintCatalog,openCatalogItem,closeCatalogItem,saveCatalogItem,deleteCatalogItem,setCatalogCategory,toggleVitrine,toggleCatalogEditTag,addCatalogTagFromInput,openCatalogCategories,closeCatalogManager,addCatalogCategory,renameCatalogCategory,deleteCatalogCategory,openCatalogTags,closeCatalogTagManager,addCatalogTag,renameCatalogTag,deleteCatalogTag});
