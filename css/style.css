@@ -1167,3 +1167,12 @@ input:focus, select:focus, textarea:focus {
 .entity-filters select:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 @media(max-width:850px){.entity-filters{grid-template-columns:1fr 1fr}.entity-filters .search-bar{grid-column:1/-1}}
 @media(max-width:520px){.entity-filters{grid-template-columns:1fr}.entity-filters .search-bar{grid-column:auto}}
+
+/* Celular: texto dos campos centralizado (painel do cliente e editor). Textareas ficam à esquerda para digitar. */
+@media (max-width:800px){
+  .client-page input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+  .client-page select,
+  .center-fields input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+  .center-fields select{text-align:center;text-align-last:center}
+  .client-page input::placeholder,.center-fields input::placeholder{text-align:center}
+}
