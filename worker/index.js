@@ -1128,7 +1128,8 @@ function rowToProduct(row) {
         shortDescription: row.short_description || "", sku: row.sku || "",
         originalPrice: row.original_price == null ? null : Number(row.original_price),
         images: (() => { const t = parseJson(row.images_json, []); return Array.isArray(t) ? t.map(String).filter(Boolean) : []; })(),
-        variations: (() => { const t = parseJson(row.variations_json, []); return Array.isArray(t) ? t : []; })()
+        variations: (() => { const t = parseJson(row.variations_json, []); return Array.isArray(t) ? t : []; })(),
+        cover: row.cover_image || "", banner: row.banner_image || "", video: row.video_url || ""
     };
 }
 
@@ -1155,7 +1156,9 @@ function sanitizeProductInput(data, current) {
     const originalPrice = rawOrig === null || rawOrig === undefined || rawOrig === "" ? null : (Math.max(0, Number(rawOrig)) || null);
     const rawImages = "images" in data ? data.images : (base.images || []);
     let images = [...new Set((Array.isArray(rawImages) ? rawImages : []).map(u => String(u).trim().slice(0, 1000)).filter(Boolean))].slice(0, 12);
-    const mainImage = images.length ? images[0] : image;
+    const urlField = (key) => String((key in data ? data[key] : base[key]) ?? "").trim().slice(0, 1000);
+    const cover = urlField("cover"), banner = urlField("banner"), video = urlField("video");
+    const mainImage = cover || (images.length ? images[0] : image);
     if (!images.length && image) images = [image];
     const rawVar = "variations" in data ? data.variations : (base.variations || []);
     const variations = (Array.isArray(rawVar) ? rawVar : []).slice(0, 30).map(v => {
@@ -1164,7 +1167,7 @@ function sanitizeProductInput(data, current) {
         const vs = v?.stock === null || v?.stock === undefined || v?.stock === "" ? null : Math.max(0, Math.round(Number(v.stock)) || 0);
         return { id: String(v?.id || uuid()).slice(0, 60), name: String(v?.name || "").trim().slice(0, 120), price: vp, originalPrice: vo, sku: String(v?.sku || "").trim().slice(0, 80), stock: vs };
     }).filter(v => v.name);
-    return { name, description, image: mainImage, price, itemType, categoryId, featured, promotion, weight, stock, trackStock, status, tags, shortDescription, sku, originalPrice, images, variations };
+    return { name, description, image: mainImage, price, itemType, categoryId, featured, promotion, weight, stock, trackStock, status, tags, shortDescription, sku, originalPrice, images, variations, cover, banner, video };
 }
 
 async function d1ListProducts(env, projectId) {
@@ -1208,15 +1211,16 @@ async function d1CreateProduct(env, projectId, data) {
             `INSERT INTO products
                 (id, project_id, name, description, price, item_type, category_id, featured, promotion, weight,
                  track_stock, stock, image, status, product_order, created_at, updated_at, tags_json,
-                 short_description, sku, original_price, images_json, variations_json)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+                 short_description, sku, original_price, images_json, variations_json, cover_image, banner_image, video_url)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
         )
         .bind(
             product.id, projectId, product.name, product.description, product.price, product.itemType, product.categoryId,
             product.featured ? 1 : 0, product.promotion ? 1 : 0, product.weight, product.trackStock ? 1 : 0,
             product.stock, product.image, product.status, product.order, product.createdAt, product.updatedAt,
             JSON.stringify(product.tags || []),
-            product.shortDescription, product.sku, product.originalPrice, JSON.stringify(product.images || []), JSON.stringify(product.variations || [])
+            product.shortDescription, product.sku, product.originalPrice, JSON.stringify(product.images || []), JSON.stringify(product.variations || []),
+            product.cover, product.banner, product.video
         )
         .run();
 
@@ -1246,7 +1250,8 @@ async function d1UpdateProduct(env, projectId, productId, data) {
             `UPDATE products SET
                 name=?, description=?, price=?, item_type=?, category_id=?, featured=?, promotion=?, weight=?,
                 track_stock=?, stock=?, image=?, status=?, updated_at=?, tags_json=?,
-                short_description=?, sku=?, original_price=?, images_json=?, variations_json=?
+                short_description=?, sku=?, original_price=?, images_json=?, variations_json=?,
+                cover_image=?, banner_image=?, video_url=?
              WHERE id=? AND project_id=?`
         )
         .bind(
@@ -1254,6 +1259,7 @@ async function d1UpdateProduct(env, projectId, productId, data) {
             clean.trackStock ? 1 : 0, clean.stock, clean.image, clean.status,
             now(), JSON.stringify(clean.tags || []),
             clean.shortDescription, clean.sku, clean.originalPrice, JSON.stringify(clean.images || []), JSON.stringify(clean.variations || []),
+            clean.cover, clean.banner, clean.video,
             productId, projectId
         )
         .run();
@@ -1308,17 +1314,20 @@ async function ensureProductSchemaRun(env) {
       ["sku", "TEXT NOT NULL DEFAULT ''"],
       ["original_price", "REAL DEFAULT NULL"],
       ["images_json", "TEXT NOT NULL DEFAULT '[]'"],
-      ["variations_json", "TEXT NOT NULL DEFAULT '[]'"]
+      ["variations_json", "TEXT NOT NULL DEFAULT '[]'"],
+      ["cover_image", "TEXT NOT NULL DEFAULT ''"],
+      ["banner_image", "TEXT NOT NULL DEFAULT ''"],
+      ["video_url", "TEXT NOT NULL DEFAULT ''"]
     ];
     for (const [name, definition] of additions) if (!names.has(name)) await safeAlter(env, `ALTER TABLE products ADD COLUMN ${name} ${definition}`);
 
     // Bancos antigos tinham price NOT NULL: impede "sob consulta" (preço vazio) e gera erro 500.
     const priceCol = info.find(r=>r.name === "price");
     if (priceCol && Number(priceCol.notnull) === 1) {
-        const cols = "id, project_id, name, description, price, item_type, category_id, featured, promotion, weight, track_stock, stock, image, status, product_order, created_at, updated_at, tags_json, short_description, sku, original_price, images_json, variations_json";
+        const cols = "id, project_id, name, description, price, item_type, category_id, featured, promotion, weight, track_stock, stock, image, status, product_order, created_at, updated_at, tags_json, short_description, sku, original_price, images_json, variations_json, cover_image, banner_image, video_url";
         await env.V8_D1.batch([
             env.V8_D1.prepare(`DROP TABLE IF EXISTS products_new`),
-            env.V8_D1.prepare(`CREATE TABLE products_new (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT DEFAULT '', price REAL DEFAULT NULL, item_type TEXT NOT NULL DEFAULT 'product', category_id TEXT DEFAULT '', featured INTEGER NOT NULL DEFAULT 0, promotion INTEGER NOT NULL DEFAULT 0, weight REAL NOT NULL DEFAULT 0, track_stock INTEGER NOT NULL DEFAULT 0, stock INTEGER NOT NULL DEFAULT 0, image TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'active', product_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, tags_json TEXT NOT NULL DEFAULT '[]', short_description TEXT NOT NULL DEFAULT '', sku TEXT NOT NULL DEFAULT '', original_price REAL DEFAULT NULL, images_json TEXT NOT NULL DEFAULT '[]', variations_json TEXT NOT NULL DEFAULT '[]')`),
+            env.V8_D1.prepare(`CREATE TABLE products_new (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT DEFAULT '', price REAL DEFAULT NULL, item_type TEXT NOT NULL DEFAULT 'product', category_id TEXT DEFAULT '', featured INTEGER NOT NULL DEFAULT 0, promotion INTEGER NOT NULL DEFAULT 0, weight REAL NOT NULL DEFAULT 0, track_stock INTEGER NOT NULL DEFAULT 0, stock INTEGER NOT NULL DEFAULT 0, image TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'active', product_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, tags_json TEXT NOT NULL DEFAULT '[]', short_description TEXT NOT NULL DEFAULT '', sku TEXT NOT NULL DEFAULT '', original_price REAL DEFAULT NULL, images_json TEXT NOT NULL DEFAULT '[]', variations_json TEXT NOT NULL DEFAULT '[]', cover_image TEXT NOT NULL DEFAULT '', banner_image TEXT NOT NULL DEFAULT '', video_url TEXT NOT NULL DEFAULT '')`),
             env.V8_D1.prepare(`INSERT INTO products_new (${cols}) SELECT ${cols} FROM products`),
             env.V8_D1.prepare(`DROP TABLE products`),
             env.V8_D1.prepare(`ALTER TABLE products_new RENAME TO products`),
@@ -3384,6 +3393,7 @@ async function publicCatalog(env, projectId, origin) {
         categoryId: p.categoryId, tags: p.tags || [], featured: p.featured, promotion: p.promotion,
         image: p.image, order: p.order,
         shortDescription: p.shortDescription, sku: p.sku, originalPrice: p.originalPrice, weight: p.weight,
+        cover: p.cover || p.image || "", banner: p.banner || "", video: p.video || "",
         images: p.images && p.images.length ? p.images : (p.image ? [p.image] : []),
         variations: (p.variations || []).map(v => ({ id: v.id, name: v.name, price: v.price, originalPrice: v.originalPrice, sku: v.sku, soldOut: v.stock !== null && v.stock !== undefined && Number(v.stock) <= 0 })),
         soldOut: (p.variations || []).length
