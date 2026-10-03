@@ -162,3 +162,4 @@ async function renderDashboard() {
   const existing = $("dashboard-new-leads");
   if (existing) existing.innerHTML = `<div class="dashboard-leads-heading"><div><h2>Novos leads</h2><p>Leads recebidos recentemente.</p></div><button class="btn btn-ghost btn-sm" type="button" onclick="switchSection('leads')">Ver CRM</button></div><div class="dashboard-leads-list">${recent.length ? recent.map(lead => `<button type="button" class="dashboard-lead-row" onclick="openLeadCRM('${escapeHtml(lead.id)}','${escapeHtml(lead.projectId)}')"><strong>${escapeHtml(lead.name || "Sem nome")}</strong><span class="icon-btn" aria-hidden="true">✎</span></button>`).join("") : `<div class="crm-empty">Nenhum lead recente.</div>`}</div>`;
 }
+
