@@ -19,3 +19,6 @@
 .pay-card span{color:var(--text-muted);font-size:13px}.pay-card strong{font-size:22px}.pay-card small{color:var(--text-muted)}.pay-card.is-alert{border-color:#e5484d}.pay-card.is-alert strong{color:#e5484d}
 .pay-detail-row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--border)}.pay-detail-row span{color:var(--text-muted)}.pay-link{display:flex;gap:8px;margin:14px 0}.pay-link input{flex:1;min-width:0}
 @media(max-width:700px){.pay-summary{grid-template-columns:1fr}}
+
+.var-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr auto;gap:6px;align-items:center}.var-row input{min-width:0}
+@media(max-width:700px){.var-row{grid-template-columns:1fr 1fr}.var-row .v-name{grid-column:1/-1}}
