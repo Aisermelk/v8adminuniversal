@@ -64,10 +64,14 @@ function projectName(id) {
 // Um cliente pode ter vários projetos vinculados (pela aba Acesso de cada projeto).
 function clientProjectNames(clientId) {
   const names = state.projects
-    .filter(p => Array.isArray(p.clientIds) ? p.clientIds.map(String).includes(String(clientId)) : String(p.clientId) === String(clientId))
+    .filter(p => Array.isArray(p.clientIds)
+      ? p.clientIds.map(String).includes(String(clientId))
+      : String(p.clientId) === String(clientId))
     .map(p => p.name);
+
   if (!names.length) return "Sem projeto";
   if (names.length === 1) return names[0];
+
   return `${names[0]} +${names.length - 1}`;
 }
 
@@ -98,17 +102,65 @@ function normalizeProject(project = {}) {
   return {
     ...base,
     ...project,
-    projectType: (() => { const v = String(project.projectType || project.type || "site").toLowerCase(); return v === "page" ? "page" : (v === "loja" || v === "store" ? "loja" : "site"); })(),
-    tracking: { ...base.tracking, ...(project.tracking || {}) },
-    contact: { ...base.contact, ...(project.contact || {}) },
-    social: { ...base.social, ...(project.social || {}) },
-    content: { ...base.content, ...(project.content || {}) },
-    media: { ...base.media, ...(project.media || {}) },
-    location: { ...base.location, ...(project.location || {}) },
-    reviews: { ...base.reviews, ...(project.reviews || {}) },
-    seo: { ...base.seo, ...(project.seo || {}) },
-    scripts: { ...base.scripts, ...(project.scripts || {}) },
-    ecommerce: { ...base.ecommerce, ...(project.ecommerce || {}) }
+    projectType: (() => {
+      const v = String(
+        project.projectType || project.type || "site"
+      ).toLowerCase();
+
+      return v === "page"
+        ? "page"
+        : (v === "loja" || v === "store" ? "loja" : "site");
+    })(),
+
+    tracking: {
+      ...base.tracking,
+      ...(project.tracking || {})
+    },
+
+    contact: {
+      ...base.contact,
+      ...(project.contact || {})
+    },
+
+    social: {
+      ...base.social,
+      ...(project.social || {})
+    },
+
+    content: {
+      ...base.content,
+      ...(project.content || {})
+    },
+
+    media: {
+      ...base.media,
+      ...(project.media || {})
+    },
+
+    location: {
+      ...base.location,
+      ...(project.location || {})
+    },
+
+    reviews: {
+      ...base.reviews,
+      ...(project.reviews || {})
+    },
+
+    seo: {
+      ...base.seo,
+      ...(project.seo || {})
+    },
+
+    scripts: {
+      ...base.scripts,
+      ...(project.scripts || {})
+    },
+
+    ecommerce: {
+      ...base.ecommerce,
+      ...(project.ecommerce || {})
+    }
   };
 }
 
@@ -210,6 +262,7 @@ function setupTheme() {
 
   toggle.addEventListener("change", () => {
     const theme = toggle.checked ? "light" : "dark";
+
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("v8_theme", theme);
   });
@@ -219,8 +272,6 @@ function setupTheme() {
    DADOS
    ========================================================= */
 
-// A API (D1) devolve listas embrulhadas: {success, clients:[...]}.
-// Aceita tanto o formato novo quanto array puro (formato antigo).
 function unwrapList(res, key) {
   if (Array.isArray(res)) return res;
   if (res && Array.isArray(res[key])) return res[key];
@@ -255,19 +306,48 @@ async function refreshData() {
 
     state.clients = unwrapList(clients, "clients").map(client => ({
       ...client,
-      projectId: client.projectId || state.projects.find(p => p.clientId === client.id)?.id || client.legacyProjectId || ""
+      projectId:
+        client.projectId ||
+        state.projects.find(p => p.clientId === client.id)?.id ||
+        client.legacyProjectId ||
+        ""
     }));
 
     const projectFilter = $("client-project-filter");
+
     if (projectFilter) {
       const current = state.clientProjectId;
-      projectFilter.innerHTML = `<option value="">Todos os projetos</option>${state.projects.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}`;
+
+      projectFilter.innerHTML =
+        `<option value="">Todos os projetos</option>` +
+        state.projects
+          .map(
+            p =>
+              `<option value="${escapeHtml(p.id)}">${escapeHtml(
+                p.name
+              )}</option>`
+          )
+          .join("");
+
       projectFilter.value = current;
     }
+
     const crmProjectFilter = $("crm-project-filter-page");
+
     if (crmProjectFilter) {
       const current = state.crmProjectId;
-      crmProjectFilter.innerHTML = `<option value="">Todos os projetos</option>${state.projects.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}`;
+
+      crmProjectFilter.innerHTML =
+        `<option value="">Todos os projetos</option>` +
+        state.projects
+          .map(
+            p =>
+              `<option value="${escapeHtml(p.id)}">${escapeHtml(
+                p.name
+              )}</option>`
+          )
+          .join("");
+
       crmProjectFilter.value = current;
     }
 
@@ -293,210 +373,101 @@ async function refreshData() {
 
 function renderClients() {
   const wrap = $("clients-table-wrap");
+
   if (!wrap) return;
+
   const search = state.clientSearch.toLowerCase().trim();
   const status = state.clientStatus || "";
   const projectId = state.clientProjectId || "";
+
   const clients = state.clients.filter(client => {
-    const text = [client.name, client.email, client.phone, clientProjectNames(client.id)].join(" ").toLowerCase();
-    const matchesSearch = !search || text.includes(search);
-    const matchesStatus = !status || String(client.status || "active") === status;
-    const projectIds = state.projects.filter(p => Array.isArray(p.clientIds) ? p.clientIds.includes(client.id) : p.clientId === client.id).map(p => p.id);
-    const matchesProject = !projectId || projectIds.includes(projectId) || String(client.projectId || "") === projectId;
+    const text = [
+      client.name,
+      client.email,
+      client.phone,
+      clientProjectNames(client.id)
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const matchesSearch =
+      !search || text.includes(search);
+
+    const matchesStatus =
+      !status ||
+      String(client.status || "active") === status;
+
+    const projectIds = state.projects
+      .filter(p =>
+        Array.isArray(p.clientIds)
+          ? p.clientIds.includes(client.id)
+          : p.clientId === client.id
+      )
+      .map(p => p.id);
+
+    const matchesProject =
+      !projectId ||
+      projectIds.includes(projectId) ||
+      String(client.projectId || "") === projectId;
+
     return matchesSearch && matchesStatus && matchesProject;
   });
-  if (!clients.length) { wrap.innerHTML = `<div class="empty-state">Nenhum cliente encontrado.</div>`; return; }
-  wrap.innerHTML = `<table><thead><tr><th>Cliente</th><th>E-mail</th><th>Projeto</th><th></th></tr></thead><tbody>${clients.map(client => `
-    <tr class="row-clickable" onclick="openClientViewPopup('${escapeHtml(client.id)}')">
-      <td><strong>${escapeHtml(client.name || "—")}</strong></td>
-      <td>${escapeHtml(client.email || "—")}</td>
-      <td>${escapeHtml(clientProjectNames(client.id))}</td>
-      <td onclick="event.stopPropagation()"><div class="row-actions client-row-actions">
-        <button class="btn btn-primary btn-sm" title="Visualizar cliente" onclick="openClientViewPopup('${escapeHtml(client.id)}')">◉ <span>Visualizar</span></button>
-        <button class="btn btn-ghost btn-sm" title="Editar cliente" onclick="openClientModal('${escapeHtml(client.id)}')">✎ <span>Editar</span></button>
-        <button class="icon-btn" title="Mais opções" onclick="openClientActionsMenu(event,'${escapeHtml(client.id)}')">⋯</button>
-      </div></td>
-    </tr>`).join("")}</tbody></table>`;
-}
 
-function handleClientSearch(value) { state.clientSearch = value; renderClients(); }
-function handleClientStatus(value) { state.clientStatus = value || ""; renderClients(); }
-function handleClientProjectFilter(value) { state.clientProjectId = value || ""; renderClients(); }
-window.handleClientStatus = handleClientStatus;
-window.handleClientProjectFilter = handleClientProjectFilter;
-
-function openClientActionsMenu(event, id) {
-  event.stopPropagation();
-  document.querySelector(".project-actions-menu")?.remove();
-  const menu = document.createElement("div");
-  menu.className = "project-actions-menu";
-  menu.innerHTML = `<button class="danger" onclick="confirmDeleteClient('${escapeHtml(id)}')">Excluir</button>`;
-  menu.style.position = "fixed";
-  menu.style.left = `${event.clientX}px`;
-  menu.style.top = `${event.clientY}px`;
-  document.body.appendChild(menu);
-  setTimeout(() => document.addEventListener("click", () => menu.remove(), { once:true }), 0);
-}
-
-function openClientViewPopup(id) {
-  const client = getClient(id);
-  if (!client) return;
-
-  showModal(`
-    <h2>${escapeHtml(client.name)}</h2>
-
-    <div class="detail-list">
-      <div><strong>E-mail</strong><span>${escapeHtml(client.email)}</span></div>
-      <div><strong>Telefone</strong><span>${escapeHtml(client.phone)}</span></div>
-      <div><strong>Projetos</strong><span>${escapeHtml(clientProjectNames(client.id))}</span></div>
-      <div><strong>Status</strong><span>${escapeHtml(client.status || "active")}</span></div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal();openClientModal('${escapeHtml(client.id)}')">
-        Editar
-      </button>
-
-      <button class="btn btn-danger" onclick="confirmDeleteClient('${escapeHtml(client.id)}')">
-        Excluir
-      </button>
-    </div>
-  `);
-}
-
-function openClientModal(id = null) {
-  state.editingClientId = id;
-
-  const client = id
-    ? getClient(id)
-    : {
-        name: "",
-        email: "",
-        phone: "",
-        projectId: ""
-      };
-
-  if (!client) return;
-
-  showModal(`
-    <h2>${id ? "Editar cliente" : "Novo cliente"}</h2>
-
-    <label>Nome</label>
-    <input id="client-name" value="${escapeHtml(client.name)}">
-
-    <label>E-mail</label>
-    <input id="client-email" type="email" value="${escapeHtml(client.email)}">
-
-    <label>Telefone</label>
-    <input id="client-phone" value="${escapeHtml(client.phone)}">
-
-    <label>Projeto</label>
-    <select id="client-project">
-      <option value="">Sem projeto</option>
-      ${state.projects.map(project => `
-        <option
-          value="${escapeHtml(project.id)}"
-          ${String(client.projectId || "") === String(project.id) ? "selected" : ""}>
-          ${escapeHtml(project.name)}
-        </option>
-      `).join("")}
-    </select>
-
-    <label>${id ? "Nova senha (opcional)" : "Senha (opcional)"}</label>
-    <input
-      id="client-password"
-      type="password"
-      autocomplete="new-password"
-      minlength="8"
-      placeholder="${id ? "Deixe em branco para manter a atual" : "Mínimo 8 caracteres"}">
-    <small class="form-help">
-      ${id
-        ? "Preencha só se quiser redefinir a senha deste cliente."
-        : "Se deixar em branco, o cliente cria a própria senha em \"Primeiro acesso\" na tela de login, usando este mesmo e-mail."}
-    </small>
-
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveClient()">
-        Salvar
-      </button>
-    </div>
-  `);
-}
-
-async function saveClient() {
-  const name = $("client-name")?.value.trim();
-  const email = $("client-email")?.value.trim();
-  const phone = $("client-phone")?.value.trim();
-  const projectId = $("client-project")?.value || "";
-  const password = $("client-password")?.value || "";
-
-  if (!name) {
-    toast("Informe o nome do cliente.", "error");
+  if (!clients.length) {
+    wrap.innerHTML =
+      `<div class="empty-state">Nenhum cliente encontrado.</div>`;
     return;
   }
 
-  if (!email) {
-    toast("Informe o e-mail do cliente.", "error");
-    return;
-  }
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>E-mail</th>
+          <th>Projeto</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
 
-  if (password && password.length < 8) {
-    toast("A senha deve ter pelo menos 8 caracteres.", "error");
-    return;
-  }
+      <tbody>
+        ${clients
+          .map(
+            client => `
+              <tr>
+                <td>
+                  <strong>${escapeHtml(client.name || "Sem nome")}</strong>
+                </td>
 
-  const body = { name, email, phone, projectId };
+                <td>
+                  ${escapeHtml(client.email || "")}
+                </td>
 
-  if (password) body.password = password;
+                <td>
+                  ${escapeHtml(clientProjectNames(client.id))}
+                </td>
 
-  try {
-    const result = state.editingClientId
-      ? await API.put("/api/data/clients", {
-          id: state.editingClientId,
-          ...body
-        })
-      : await API.post("/api/data/clients", body);
+                <td>
+                  ${escapeHtml(client.status || "active")}
+                </td>
 
-    if (result?.error) {
-      toast(result.error, "error");
-      return;
-    }
-
-    closeModal();
-    toast("Cliente salvo.");
-    await refreshData();
-  } catch (error) {
-    console.error(error);
-    toast("Erro ao salvar cliente.", "error");
-  }
-}
-
-function confirmDeleteClient(id) {
-  confirmModal(
-    "Excluir este cliente?",
-    () => deleteClient(id),
-    "Excluir"
-  );
-}
-
-async function deleteClient(id) {
-  try {
-    const result = await API.del(
-      `/api/data/clients?id=${encodeURIComponent(id)}`
-    );
-
-    if (result?.error) {
-      toast(result.error, "error");
-      return;
-    }
-
-    closeModal();
-    toast("Cliente excluído.");
-    await refreshData();
-  } catch (error) {
-    console.error(error);
-    toast("Erro ao excluir cliente.", "error");
-  }
+                <td>
+                  <button
+                    class="btn"
+                    onclick="openClientViewPopup('${escapeHtml(
+                      client.id
+                    )}')">
+                    Visualizar
+                  </button>
+                </td>
+              </tr>
+            `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 /* =========================================================
@@ -505,33 +476,47 @@ async function deleteClient(id) {
 
 function renderProjects() {
   const wrap = $("projects-table-wrap");
+
   if (!wrap) return;
 
   const search = state.projectSearch.toLowerCase().trim();
   const status = state.projectStatus || "";
-  const sort = state.projectSort || "name-asc";
 
-  const dateValue = project => {
-    const value = project.createdAt || project.created_at || project.updatedAt || project.updated_at || project.date || 0;
-    const time = new Date(value).getTime();
-    return Number.isNaN(time) ? 0 : time;
-  };
+  let projects = state.projects.filter(project => {
+    const text = [
+      project.name,
+      project.id,
+      project.siteUrl,
+      project.projectType,
+      project.status
+    ]
+      .join(" ")
+      .toLowerCase();
 
-  const projects = [...state.projects]
-    .filter(project => {
-      const matchesSearch = !search || String(project.name || "").toLowerCase().includes(search);
-      const matchesStatus = !status || String(project.status || "") === status;
-      return matchesSearch && matchesStatus;
-    })
-    .sort((a, b) => {
-      if (sort === "name-desc") return String(b.name || "").localeCompare(String(a.name || ""), "pt-BR");
-      if (sort === "date-desc") return dateValue(b) - dateValue(a);
-      if (sort === "date-asc") return dateValue(a) - dateValue(b);
-      return String(a.name || "").localeCompare(String(b.name || ""), "pt-BR");
-    });
+    const matchesSearch =
+      !search || text.includes(search);
+
+    const matchesStatus =
+      !status ||
+      String(project.status || "") === status;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  projects.sort((a, b) => {
+    const aName = String(a.name || "").toLowerCase();
+    const bName = String(b.name || "").toLowerCase();
+
+    if (state.projectSort === "name-desc") {
+      return bName.localeCompare(aName);
+    }
+
+    return aName.localeCompare(bName);
+  });
 
   if (!projects.length) {
-    wrap.innerHTML = `<div class="empty-state">Nenhum projeto encontrado.</div>`;
+    wrap.innerHTML =
+      `<div class="empty-state">Nenhum projeto encontrado.</div>`;
     return;
   }
 
@@ -540,806 +525,1355 @@ function renderProjects() {
       <thead>
         <tr>
           <th>Projeto</th>
+          <th>ID</th>
+          <th>Tipo</th>
           <th>Status</th>
           <th>Leads</th>
-          <th></th>
+          <th>Ações</th>
         </tr>
       </thead>
+
       <tbody>
-        ${projects.map(project => {
-          const leads = getUnseenLeadsCount(project.id);
-          const statusClass = STATUS_BADGE[project.status] || "badge-muted";
-          const typeKey = String(project.projectType || project.type || "site").toLowerCase();
-          const typeClass = typeKey === "page" ? "page" : (typeKey === "loja" || typeKey === "store" ? "loja" : "site");
-          const typeLabel = typeClass === "page" ? "Page" : (typeClass === "loja" ? "Loja" : "Site");
-          return `
-            <tr class="row-clickable" onclick="openProjectModal('${escapeHtml(project.id)}')">
-              <td><strong>${escapeHtml(project.name)}</strong><div class="project-type-tag project-type-${typeClass}">${typeLabel}</div></td>
-              <td><span class="badge ${statusClass}">${escapeHtml(project.status)}</span></td>
-              <td>${leads ? `<span class="badge badge-danger">${leads}</span>` : "—"}</td>
-              <td onclick="event.stopPropagation()">
-                <div class="row-actions project-row-actions">
-                  <button class="btn btn-primary btn-sm" title="Editar projeto" onclick="openProjectModal('${escapeHtml(project.id)}')">✎ <span>Editar</span></button>
-                  <button class="btn btn-ghost btn-sm" title="Abrir CRM do projeto" onclick="state.crmProjectId='${escapeHtml(project.id)}';switchSection('leads')">♙ <span>CRM</span></button>
-                  <button class="icon-btn" title="Mais opções" onclick="openProjectActionsMenu(event,'${escapeHtml(project.id)}')">⋯</button>
-                </div>
-              </td>
-            </tr>`;
-        }).join("")}
+        ${projects
+          .map(project => {
+            const projectId = String(project.id || "");
+
+            const leadsInfo =
+              state.leadsByProject?.[projectId];
+
+            const leadsCount =
+              Number(leadsInfo?.count || 0);
+
+            const badgeClass =
+              STATUS_BADGE[project.status] ||
+              "badge-muted";
+
+            return `
+              <tr>
+                <td>
+                  <strong>
+                    ${escapeHtml(project.name || "Sem nome")}
+                  </strong>
+                </td>
+
+                <td>
+                  <div class="project-id-cell">
+                    <code
+                      class="project-id-value"
+                      title="ID do projeto">
+                      ${escapeHtml(projectId)}
+                    </code>
+
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      title="Copiar ID do projeto"
+                      aria-label="Copiar ID do projeto"
+                      onclick="copyProjectId(event, '${escapeHtml(
+                        projectId
+                      )}')">
+                      📋
+                    </button>
+                  </div>
+                </td>
+
+                <td>
+                  ${escapeHtml(
+                    project.projectType ||
+                      project.type ||
+                      "site"
+                  )}
+                </td>
+
+                <td>
+                  <span class="badge ${badgeClass}">
+                    ${escapeHtml(
+                      project.status ||
+                        "Em desenvolvimento"
+                    )}
+                  </span>
+                </td>
+
+                <td>
+                  ${leadsCount}
+                </td>
+
+                <td>
+                  <div class="table-actions">
+                    <button
+                      class="btn"
+                      onclick="openProjectViewPopup('${escapeHtml(
+                        projectId
+                      )}')">
+                      Visualizar
+                    </button>
+
+                    <button
+                      class="btn"
+                      onclick="openProjectActionsMenu('${escapeHtml(
+                        projectId
+                      )}')">
+                      ⋯
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          })
+          .join("")}
       </tbody>
-    </table>`;
-}
-
-function handleProjectSearch(value) {
-  state.projectSearch = value;
-  renderProjects();
-}
-
-function handleProjectSort(value) {
-  state.projectSort = value || "name-asc";
-  renderProjects();
-}
-
-function handleProjectStatus(value) {
-  state.projectStatus = value || "";
-  renderProjects();
-}
-
-
-function openProjectActionsMenu(event, id) {
-  event.stopPropagation();
-
-  document.querySelector(".project-actions-menu")?.remove();
-
-  const menu = document.createElement("div");
-  menu.className = "project-actions-menu";
-
-  menu.innerHTML = `
-    <button onclick="openProjectViewPopup('${escapeHtml(id)}')">
-      Visualizar
-    </button>
-
-    <button onclick="openProjectModal('${escapeHtml(id)}')">
-      Editar
-    </button>
-
-    <button class="danger" onclick="confirmDeleteProject('${escapeHtml(id)}')">
-      Excluir
-    </button>
+    </table>
   `;
-
-  menu.style.position = "fixed";
-  menu.style.left = `${event.clientX}px`;
-  menu.style.top = `${event.clientY}px`;
-
-  document.body.appendChild(menu);
-
-  setTimeout(() => {
-    document.addEventListener(
-      "click",
-      () => menu.remove(),
-      { once: true }
-    );
-  });
-}
-
-function openProjectViewPopup(id) {
-  const project = getProject(id);
-  if (!project) return;
-
-  showModal(`
-    <h2>${escapeHtml(project.name)}</h2>
-
-    <div class="detail-list">
-      <div>
-        <strong>Status</strong>
-        <span>${escapeHtml(project.status)}</span>
-      </div>
-
-      <div>
-        <strong>Cliente</strong>
-        <span>${escapeHtml(getClient(project.clientId)?.name || "Não vinculado")}</span>
-      </div>
-
-      <div>
-        <strong>Site</strong>
-        <span>${escapeHtml(project.siteUrl || "—")}</span>
-      </div>
-
-      <div>
-        <strong>WhatsApp</strong>
-        <span>${escapeHtml(project.contact?.whatsapp || "—")}</span>
-      </div>
-
-      <div>
-        <strong>E-mail</strong>
-        <span>${escapeHtml(project.contact?.email || "—")}</span>
-      </div>
-
-      <div>
-        <strong>ID</strong>
-        <span>${escapeHtml(project.id)}</span>
-      </div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal();openProjectModal('${escapeHtml(project.id)}')">
-        Editar
-      </button>
-
-      <button class="btn btn-danger" onclick="confirmDeleteProject('${escapeHtml(project.id)}')">
-        Excluir
-      </button>
-    </div>
-  `);
 }
 
 /* =========================================================
-   EDITOR DE PROJETO
+   COPIAR ID DO PROJETO
+   ========================================================= */
+
+async function copyProjectId(event, id) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const value = String(id || "").trim();
+
+  if (!value) {
+    toast("ID do projeto não encontrado.", "error");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(value);
+    toast("ID do projeto copiado.");
+  } catch (error) {
+    console.error(error);
+
+    try {
+      const textarea = document.createElement("textarea");
+
+      textarea.value = value;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      textarea.style.pointerEvents = "none";
+
+      document.body.appendChild(textarea);
+
+      textarea.focus();
+      textarea.select();
+
+      document.execCommand("copy");
+
+      textarea.remove();
+
+      toast("ID do projeto copiado.");
+    } catch (fallbackError) {
+      console.error(fallbackError);
+      toast("Não foi possível copiar o ID.", "error");
+    }
+  }
+}
+
+/* =========================================================
+   BUSCA / FILTROS
+   ========================================================= */
+
+function handleClientSearch(value) {
+  state.clientSearch = value || "";
+  renderClients();
+}
+
+function handleProjectSearch(value) {
+  state.projectSearch = value || "";
+  renderProjects();
+}
+
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
+
+function renderDashboard() {
+  const totalClients =
+    state.stats?.totalClients ??
+    state.clients.length;
+
+  const totalProjects =
+    state.stats?.totalProjects ??
+    state.projects.length;
+
+  const totalLeads =
+    state.stats?.totalLeads ??
+    state.leads.length;
+
+  const clientsEl = $("stat-total-clients");
+  const projectsEl = $("stat-total-projects");
+  const leadsEl = $("stat-total-leads");
+
+  if (clientsEl) clientsEl.textContent = totalClients;
+  if (projectsEl) projectsEl.textContent = totalProjects;
+  if (leadsEl) leadsEl.textContent = totalLeads;
+}
+
+/* =========================================================
+   LEADS / CRM
+   ========================================================= */
+
+function renderLeads() {
+  const wrap = $("leads-table-wrap");
+
+  if (!wrap) return;
+
+  const search = state.leadSearch.toLowerCase().trim();
+  const projectId = state.crmProjectId || "";
+  const status = state.crmStatus || "";
+
+  const leads = state.leads.filter(lead => {
+    const text = [
+      lead.name,
+      lead.email,
+      lead.phone,
+      lead.message
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const matchesSearch =
+      !search || text.includes(search);
+
+    const matchesProject =
+      !projectId ||
+      String(lead.projectId || "") ===
+        String(projectId);
+
+    const matchesStatus =
+      !status ||
+      String(lead.status || "") ===
+        String(status);
+
+    return (
+      matchesSearch &&
+      matchesProject &&
+      matchesStatus
+    );
+  });
+
+  if (!leads.length) {
+    wrap.innerHTML =
+      `<div class="empty-state">Nenhum lead encontrado.</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Contato</th>
+          <th>Projeto</th>
+          <th>Status</th>
+          <th>Data</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        ${leads
+          .map(
+            lead => `
+              <tr>
+                <td>
+                  <strong>
+                    ${escapeHtml(
+                      lead.name || "Sem nome"
+                    )}
+                  </strong>
+                </td>
+
+                <td>
+                  ${escapeHtml(
+                    lead.email ||
+                      lead.phone ||
+                      ""
+                  )}
+                </td>
+
+                <td>
+                  ${escapeHtml(
+                    projectName(
+                      lead.projectId
+                    )
+                  )}
+                </td>
+
+                <td>
+                  ${escapeHtml(
+                    lead.status || "novo"
+                  )}
+                </td>
+
+                <td>
+                  ${escapeHtml(
+                    lead.createdAt
+                      ? new Date(
+                          lead.createdAt
+                        ).toLocaleString("pt-BR")
+                      : ""
+                  )}
+                </td>
+              </tr>
+            `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+/* =========================================================
+   MODAL DO PROJETO
+   ========================================================= */
+
+function openProjectViewPopup(id) {
+  const project = getProject(id);
+
+  if (!project) {
+    toast("Projeto não encontrado.", "error");
+    return;
+  }
+
+  showModal(
+    `
+      <h2>${escapeHtml(project.name || "Projeto")}</h2>
+
+      <div class="preview-box">
+        <strong>ID do projeto</strong>
+
+        <div class="project-id-cell">
+          <code class="project-id-value">
+            ${escapeHtml(project.id)}
+          </code>
+
+          <button
+            type="button"
+            class="icon-btn"
+            title="Copiar ID do projeto"
+            onclick="copyProjectId(event, '${escapeHtml(
+              project.id
+            )}')">
+            📋
+          </button>
+        </div>
+      </div>
+
+      <div class="preview-box">
+        <strong>Tipo</strong><br>
+        ${escapeHtml(
+          project.projectType ||
+            project.type ||
+            "site"
+        )}
+      </div>
+
+      <div class="preview-box">
+        <strong>Status</strong><br>
+        ${escapeHtml(
+          project.status ||
+            "Em desenvolvimento"
+        )}
+      </div>
+
+      ${
+        project.siteUrl
+          ? `
+            <div class="preview-box">
+              <strong>URL</strong><br>
+              ${escapeHtml(project.siteUrl)}
+            </div>
+          `
+          : ""
+      }
+
+      <div class="modal-actions">
+        <button
+          class="btn"
+          onclick="closeModal()">
+          Fechar
+        </button>
+
+        <button
+          class="btn btn-primary"
+          onclick="closeModal();openProjectModal('${escapeHtml(
+            project.id
+          )}')">
+          Editar projeto
+        </button>
+      </div>
+    `,
+    "700px"
+  );
+}
+
+/* =========================================================
+   PROJETO — EDIÇÃO
    ========================================================= */
 
 function openProjectModal(id = null) {
   state.editingProjectId = id;
+
+  const existing = id
+    ? getProject(id)
+    : null;
+
+  state.projectDraft = normalizeProject(
+    existing || defaultProject()
+  );
+
   state.projectTab = "geral";
 
-  const project = id ? getProject(id) : defaultProject();
-  if (!project) return;
+  renderProjectModal();
+}
 
-  state.projectDraft = normalizeProject(project);
+function renderProjectModal() {
+  const p = state.projectDraft;
 
-  const tabs = [
-    ["geral", "Geral"],
-    ["config", "Configuração"]
-  ];
+  if (!p) return;
 
-  if (id) {
-    tabs.push(
-      ["content", "Conteúdo"],
-      ["media", "Mídia"],
-      ["location", "Localização"],
-      ["reviews", "Reviews"],
-      ["seo", "SEO"],
-      ["scripts", "Scripts"],
-      ["acesso", "Acesso"],
-      ["leads", "Leads"],
-      ["loja", "Loja"]
-    );
-  }
+  showModal(
+    `
+      <h2>
+        ${
+          state.editingProjectId
+            ? "Editar projeto"
+            : "Novo projeto"
+        }
+      </h2>
 
-  showModal(`
-    <div class="project-editor">
-      <div class="project-tabs">
-        ${tabs.map(([key, label]) => `
-          <button
-            class="project-tab ${key === "geral" ? "active" : ""}"
-            data-tab="${key}">
-            ${label}
-          </button>
-        `).join("")}
+      <div class="modal-tabs">
+        <button
+          class="btn ${
+            state.projectTab === "geral"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('geral')">
+          Geral
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "config"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('config')">
+          Configuração
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "content"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('content')">
+          Conteúdo
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "media"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('media')">
+          Mídia
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "location"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('location')">
+          Localização
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "reviews"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('reviews')">
+          Avaliações
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "seo"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('seo')">
+          SEO
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "scripts"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('scripts')">
+          Scripts
+        </button>
+
+        <button
+          class="btn ${
+            state.projectTab === "acesso"
+              ? "btn-primary"
+              : ""
+          }"
+          onclick="setProjectTab('acesso')">
+          Acesso
+        </button>
       </div>
 
-      <div id="project-tab-content"></div>
-    </div>
-  `, "900px");
-
-  document.querySelectorAll(".project-tab").forEach(button => {
-    button.addEventListener("click", () => {
-      state.projectTab = button.dataset.tab;
-
-      document.querySelectorAll(".project-tab").forEach(tab => {
-        tab.classList.toggle(
-          "active",
-          tab.dataset.tab === state.projectTab
-        );
-      });
-
-      renderProjectTab();
-    });
-  });
+      <div id="project-modal-content"></div>
+    `,
+    "1000px"
+  );
 
   renderProjectTab();
 }
 
-const PROJECT_TABS = {
-  geral: renderProjectGeneral,
-  config: renderProjectConfig,
-  content: renderProjectContent,
-  media: renderProjectMedia,
-  location: renderProjectLocation,
-  reviews: renderProjectReviews,
-  seo: renderProjectSeo,
-  scripts: renderProjectScripts,
-  acesso: renderProjectAccess,
-  leads: renderProjectLeads,
-  // renderProjectShop mora em js/shop.js, carregado depois deste arquivo;
-  // a função-seta só resolve o nome na hora do clique, não na hora da leitura deste objeto.
-  loja: (el) => renderProjectShop(el)
-};
+function setProjectTab(tab) {
+  state.projectTab = tab;
+  renderProjectModal();
+}
 
 function renderProjectTab() {
-  const renderer = PROJECT_TABS[state.projectTab];
-  if (renderer) renderer($("project-tab-content"));
-}
-
-/* =========================================================
-   ABA — GERAL
-   ========================================================= */
-
-function renderProjectGeneral(el) {
-  const p = state.projectDraft;
-
-  el.innerHTML = `
-    <label>Nome do projeto</label>
-    <input id="p-name" value="${escapeHtml(p.name)}">
-
-    <label>Tipo de projeto</label>
-    <select id="p-project-type">
-      <option value="page" ${p.projectType === "page" ? "selected" : ""}>Page</option>
-      <option value="site" ${p.projectType === "site" ? "selected" : ""}>Site</option>
-      <option value="loja" ${p.projectType === "loja" ? "selected" : ""}>Loja</option>
-    </select>
-
-    <label>Status</label>
-    <select id="p-status">
-      ${["Em produção", "Em desenvolvimento", "Pausado"].map(status => `
-        <option ${p.status === status ? "selected" : ""}>
-          ${status}
-        </option>
-      `).join("")}
-    </select>
-
-    <label>URL do site</label>
-    <input id="p-site-url" value="${escapeHtml(p.siteUrl)}">
-
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-  `;
-}
-
-/* =========================================================
-   ABA — CONFIGURAÇÃO
-   ========================================================= */
-
-function renderProjectConfig(el) {
-  const p = state.projectDraft;
-
-  el.innerHTML = `
-    <h3>Tracking</h3>
-
-    <label>Meta Pixel</label>
-    <input id="p-pixel" value="${escapeHtml(p.tracking.pixel)}">
-
-    <label>Google Tag / GTM</label>
-    <input id="p-tag" value="${escapeHtml(p.tracking.tag)}">
-
-    <label>Google Analytics</label>
-    <input id="p-analytics" value="${escapeHtml(p.tracking.analytics)}">
-
-    <h3>Contato</h3>
-
-    <label>WhatsApp</label>
-    <input id="p-whatsapp" value="${escapeHtml(p.contact.whatsapp)}">
-
-    <label>E-mail</label>
-    <input id="p-email" value="${escapeHtml(p.contact.email)}">
-
-    <label>Telefone</label>
-    <input id="p-phone" value="${escapeHtml(p.contact.phone)}">
-
-    <h3>Redes sociais</h3>
-
-    ${[
-      ["facebook", "Facebook"],
-      ["instagram", "Instagram"],
-      ["tiktok", "TikTok"],
-      ["youtube", "YouTube"],
-      ["linkedin", "LinkedIn"]
-    ].map(([key, label]) => `
-      <label>${label}</label>
-      <input id="p-${key}" value="${escapeHtml(p.social[key])}">
-    `).join("")}
-
-    <label>Formspree</label>
-    <input id="p-formspree" value="${escapeHtml(p.formspree)}">
-
-    <div class="modal-actions">
-      <button class="btn" onclick="copyTrackingSnippet()">
-        Copiar tracking
-      </button>
-
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-
-    <div id="tracking-preview"></div>
-  `;
-
-  renderTrackingPreview();
-}
-
-function renderTrackingPreview() {
-  const el = $("tracking-preview");
-  const p = state.projectDraft;
+  const el = $("project-modal-content");
 
   if (!el) return;
 
-  const items = [];
+  const p = state.projectDraft;
 
-  if (p.contact.whatsapp) items.push("WhatsApp");
-  if (p.contact.email) items.push("E-mail");
-  if (p.contact.phone) items.push("Telefone");
+  if (state.projectTab === "geral") {
+    el.innerHTML = `
+      ${
+        state.editingProjectId
+          ? `
+            <div class="preview-box">
+              <strong>ID do projeto</strong>
 
-  el.innerHTML = items.length
-    ? `<div class="preview-box">${items.map(escapeHtml).join(" · ")}</div>`
-    : "";
-}
+              <div class="project-id-cell">
+                <code class="project-id-value">
+                  ${escapeHtml(p.id)}
+                </code>
 
-async function copyTrackingSnippet() {
-  const pixel = $("p-pixel")?.value.trim();
-  const analytics = $("p-analytics")?.value.trim();
+                <button
+                  type="button"
+                  class="icon-btn"
+                  title="Copiar ID do projeto"
+                  onclick="copyProjectId(event, '${escapeHtml(
+                    p.id
+                  )}')">
+                  📋
+                </button>
+              </div>
+            </div>
+          `
+          : ""
+      }
 
-  let code = "";
+      <label>
+        Nome do projeto
+        <input
+          id="p-name"
+          value="${escapeHtml(p.name)}">
+      </label>
 
-  if (pixel) {
-    code += `
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window,document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init','${pixel}');
-fbq('track','PageView');
-</script>`.trim();
-  }
+      <label>
+        Tipo
+        <select id="p-project-type">
+          <option value="site" ${
+            p.projectType === "site"
+              ? "selected"
+              : ""
+          }>
+            Site
+          </option>
 
-  if (analytics) {
-    code += `
+          <option value="page" ${
+            p.projectType === "page"
+              ? "selected"
+              : ""
+          }>
+            Página
+          </option>
 
-<script async src="https://www.googletagmanager.com/gtag/js?id=${analytics}"></script>
-<script>
-window.dataLayer=window.dataLayer||[];
-function gtag(){dataLayer.push(arguments);}
-gtag('js',new Date());
-gtag('config','${analytics}');
-</script>`.trim();
-  }
+          <option value="loja" ${
+            p.projectType === "loja"
+              ? "selected"
+              : ""
+          }>
+            Loja
+          </option>
+        </select>
+      </label>
 
-  if (!code) {
-    toast("Nenhum tracking configurado.", "error");
+      <label>
+        Status
+        <select id="p-status">
+          <option ${
+            p.status === "Em produção"
+              ? "selected"
+              : ""
+          }>
+            Em produção
+          </option>
+
+          <option ${
+            p.status === "Em desenvolvimento"
+              ? "selected"
+              : ""
+          }>
+            Em desenvolvimento
+          </option>
+
+          <option ${
+            p.status === "Pausado"
+              ? "selected"
+              : ""
+          }>
+            Pausado
+          </option>
+        </select>
+      </label>
+
+      <label>
+        URL do site
+        <input
+          id="p-site-url"
+          value="${escapeHtml(
+            p.siteUrl
+          )}">
+      </label>
+
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar projeto
+        </button>
+      </div>
+    `;
+
     return;
   }
 
-  await navigator.clipboard.writeText(code);
-  toast("Código copiado.");
-}
-
-/* =========================================================
-   ABA — CONTEÚDO
-   ========================================================= */
-
-function renderProjectContent(el) {
-  const c = state.projectDraft.content;
-
-  const fields = [
-    ["name", "Nome"],
-    ["job", "Profissão"],
-    ["headline", "Título principal"],
-    ["description", "Descrição"],
-    ["specialization", "Especialização"],
-    ["experience", "Experiência"],
-    ["address", "Endereço"],
-    ["registration", "Registro"]
-  ];
-
-  el.innerHTML = fields.map(([key, label]) => `
-    <label>${label}</label>
-    ${key === "description"
-      ? `<textarea id="c-${key}">${escapeHtml(c[key])}</textarea>`
-      : `<input id="c-${key}" value="${escapeHtml(c[key])}">`
-    }
-  `).join("") + `
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-  `;
-}
-
-/* =========================================================
-   ABA — MÍDIA
-   ========================================================= */
-
-function renderProjectMedia(el) {
-  const m = state.projectDraft.media;
-
-  el.innerHTML = `
-    <label>Galeria — uma URL por linha</label>
-    <textarea id="m-gallery">${escapeHtml(
-      Array.isArray(m.galleryImages)
-        ? m.galleryImages.join("\n")
-        : ""
-    )}</textarea>
-
-    <label>
-      <input
-        type="checkbox"
-        id="m-gallery-enabled"
-        ${m.galleryEnabled ? "checked" : ""}>
-      Ativar galeria
-    </label>
-
-    <label>Vídeo</label>
-    <input id="m-video" value="${escapeHtml(m.video)}">
-
-    <label>
-      <input
-        type="checkbox"
-        id="m-video-enabled"
-        ${m.videoEnabled ? "checked" : ""}>
-      Ativar vídeo
-    </label>
-
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-  `;
-}
-
-/* =========================================================
-   ABA — LOCALIZAÇÃO
-   ========================================================= */
-
-function renderProjectLocation(el) {
-  const l = state.projectDraft.location;
-
-  el.innerHTML = `
-    <label>Endereço</label>
-    <input id="l-address" value="${escapeHtml(l.address)}">
-
-    <label>URL do Google Maps</label>
-    <input id="l-maps-url" value="${escapeHtml(l.mapsUrl)}">
-
-    <label>Embed</label>
-    <textarea id="l-embed">${escapeHtml(l.embed)}</textarea>
-
-    <label>
-      <input
-        type="checkbox"
-        id="l-enabled"
-        ${l.enabled ? "checked" : ""}>
-      Ativar localização
-    </label>
-
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-  `;
-}
-
-/* =========================================================
-   ABA — REVIEWS
-   ========================================================= */
-
-function renderProjectReviews(el) {
-  const r = state.projectDraft.reviews;
-
-  el.innerHTML = `
-    <label>Google Place ID</label>
-    <input id="r-place-id" value="${escapeHtml(r.placeId)}">
-
-    <label>
-      <input
-        type="checkbox"
-        id="r-enabled"
-        ${r.enabled ? "checked" : ""}>
-      Ativar avaliações
-    </label>
-
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-
-    <div id="reviews-preview"></div>
-  `;
-
-  if (state.editingProjectId) {
-    previewGoogleReviews(state.editingProjectId);
-  }
-}
-
-async function previewGoogleReviews(projectId) {
-  const el = $("reviews-preview");
-  if (!el) return;
-
-  el.innerHTML = `<div class="loading">Carregando avaliações...</div>`;
-
-  try {
-    const data = await API.get(`/api/public/reviews/${encodeURIComponent(projectId)}`);
-
-    if (data?.disabled) {
-      el.innerHTML = `<div class="empty-state">Reviews desativadas.</div>`;
-      return;
-    }
-
-    if (data?.error) {
-      el.innerHTML = `<div class="empty-state">${escapeHtml(data.error)}</div>`;
-      return;
-    }
-
-    const rating = Number(data.rating || 0);
-    const total = Number(data.user_ratings_total || data.totalReviews || 0);
-
+  if (state.projectTab === "config") {
     el.innerHTML = `
-      <div class="reviews-summary">
-        <strong>${rating.toFixed(1)} ★</strong>
-        <span>${total} avaliações</span>
+      <label>
+        Meta Pixel
+        <input
+          id="p-pixel"
+          value="${escapeHtml(
+            p.tracking?.pixel || ""
+          )}">
+      </label>
+
+      <label>
+        Google Tag
+        <input
+          id="p-tag"
+          value="${escapeHtml(
+            p.tracking?.tag || ""
+          )}">
+      </label>
+
+      <label>
+        Google Analytics
+        <input
+          id="p-analytics"
+          value="${escapeHtml(
+            p.tracking?.analytics || ""
+          )}">
+      </label>
+
+      <label>
+        WhatsApp
+        <input
+          id="p-whatsapp"
+          value="${escapeHtml(
+            p.contact?.whatsapp || ""
+          )}">
+      </label>
+
+      <label>
+        E-mail
+        <input
+          id="p-email"
+          value="${escapeHtml(
+            p.contact?.email || ""
+          )}">
+      </label>
+
+      <label>
+        Telefone
+        <input
+          id="p-phone"
+          value="${escapeHtml(
+            p.contact?.phone || ""
+          )}">
+      </label>
+
+      <label>
+        Facebook
+        <input
+          id="p-facebook"
+          value="${escapeHtml(
+            p.social?.facebook || ""
+          )}">
+      </label>
+
+      <label>
+        Instagram
+        <input
+          id="p-instagram"
+          value="${escapeHtml(
+            p.social?.instagram || ""
+          )}">
+      </label>
+
+      <label>
+        TikTok
+        <input
+          id="p-tiktok"
+          value="${escapeHtml(
+            p.social?.tiktok || ""
+          )}">
+      </label>
+
+      <label>
+        YouTube
+        <input
+          id="p-youtube"
+          value="${escapeHtml(
+            p.social?.youtube || ""
+          )}">
+      </label>
+
+      <label>
+        LinkedIn
+        <input
+          id="p-linkedin"
+          value="${escapeHtml(
+            p.social?.linkedin || ""
+          )}">
+      </label>
+
+      <label>
+        Formspree
+        <input
+          id="p-formspree"
+          value="${escapeHtml(
+            p.formspree || ""
+          )}">
+      </label>
+
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar configuração
+        </button>
       </div>
-
-      ${(data.reviews || []).map(review => `
-        <div class="review-item">
-          <strong>${escapeHtml(review.author_name || "Cliente")}</strong>
-          <span>${escapeHtml(review.relative_time_description || "")}</span>
-          <p>${escapeHtml(review.text || "")}</p>
-        </div>
-      `).join("")}
     `;
-  } catch (error) {
-    console.error(error);
-    el.innerHTML = `<div class="empty-state">Erro ao carregar avaliações.</div>`;
+
+    return;
   }
-}
 
-/* =========================================================
-   ABA — SEO
-   ========================================================= */
+  if (state.projectTab === "content") {
+    el.innerHTML = `
+      <label>
+        Nome
+        <input
+          id="c-name"
+          value="${escapeHtml(
+            p.content?.name || ""
+          )}">
+      </label>
 
-function renderProjectSeo(el) {
-  const s = state.projectDraft.seo;
+      <label>
+        Profissão
+        <input
+          id="c-job"
+          value="${escapeHtml(
+            p.content?.job || ""
+          )}">
+      </label>
 
-  el.innerHTML = `
-    <label>Título</label>
-    <input id="s-title" value="${escapeHtml(s.title)}">
+      <label>
+        Headline
+        <input
+          id="c-headline"
+          value="${escapeHtml(
+            p.content?.headline || ""
+          )}">
+      </label>
 
-    <label>Descrição</label>
-    <textarea id="s-description">${escapeHtml(s.description)}</textarea>
+      <label>
+        Descrição
+        <textarea id="c-description">${escapeHtml(
+          p.content?.description || ""
+        )}</textarea>
+      </label>
 
-    <label>Imagem OG</label>
-    <input id="s-og-image" value="${escapeHtml(s.ogImage)}">
+      <label>
+        Especialização
+        <textarea id="c-specialization">${escapeHtml(
+          p.content?.specialization || ""
+        )}</textarea>
+      </label>
 
-    <label>Canonical</label>
-    <input id="s-canonical" value="${escapeHtml(s.canonical)}">
+      <label>
+        Experiência
+        <input
+          id="c-experience"
+          value="${escapeHtml(
+            p.content?.experience || ""
+          )}">
+      </label>
 
-    <label>Palavras-chave</label>
-    <input id="s-keywords" value="${escapeHtml(s.keywords)}">
+      <label>
+        Endereço
+        <input
+          id="c-address"
+          value="${escapeHtml(
+            p.content?.address || ""
+          )}">
+      </label>
 
-    <label>Robots</label>
-    <input id="s-robots" value="${escapeHtml(s.robots)}">
+      <label>
+        Registro
+        <input
+          id="c-registration"
+          value="${escapeHtml(
+            p.content?.registration || ""
+          )}">
+      </label>
 
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-  `;
-}
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar conteúdo
+        </button>
+      </div>
+    `;
 
-/* =========================================================
-   ABA — SCRIPTS
-   ========================================================= */
-
-function renderProjectScripts(el) {
-  const s = state.projectDraft.scripts;
-
-  el.innerHTML = `
-    <label>Head</label>
-    <textarea id="sc-head">${escapeHtml(s.head)}</textarea>
-
-    <label>Body</label>
-    <textarea id="sc-body">${escapeHtml(s.body)}</textarea>
-
-    <label>Footer</label>
-    <textarea id="sc-footer">${escapeHtml(s.footer)}</textarea>
-
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar
-      </button>
-    </div>
-  `;
-}
-
-/* =========================================================
-   ABA — ACESSO
-   ========================================================= */
-
-const CLIENT_ACCESS_MODULES = {
-  configuracao: { label: "Configuração", description: "Informações básicas, tracking, contato e redes sociais.", icon: "⚙" },
-  content: { label: "Conteúdo", description: "Textos, apresentação, especialização e informações profissionais.", icon: "✦" },
-  media: { label: "Mídia", description: "Galeria, imagens e vídeos do projeto.", icon: "▧" },
-  location: { label: "Localização", description: "Endereço, mapa e informações de localização.", icon: "⌖" },
-  reviews: { label: "Reviews", description: "Avaliações e integração com Google Reviews.", icon: "★" },
-  seo: { label: "SEO", description: "Título, descrição, canonical, imagem e indexação.", icon: "◎" },
-  scripts: { label: "Scripts", description: "Códigos Head, Body e Footer.", icon: "</>" },
-  leads: { label: "Leads", description: "Visualização dos leads recebidos pelo projeto e CRM.", icon: "♙" },
-  ecommerce: { label: "Loja", description: "Cadastro de produtos da loja virtual do projeto.", icon: "🛒" }
-};
-
-function getAccessModules(p) {
-  const editable = Array.isArray(p?.access?.editable) ? p.access.editable : [];
-  if (!editable.length && p?.access?.configured !== true) {
-    return Object.fromEntries(Object.keys(CLIENT_ACCESS_MODULES).map(k => [k, true]));
+    return;
   }
-  if (editable.some(x => ["page", "site", "loja"].includes(x))) {
-    return {
-      configuracao: editable.some(x => ["page", "site", "loja"].includes(x)),
-      content: editable.some(x => ["page", "site", "loja"].includes(x)),
-      media: editable.some(x => ["site", "loja"].includes(x)),
-      location: editable.some(x => ["site", "loja"].includes(x)),
-      reviews: editable.some(x => ["site", "loja"].includes(x)),
-      seo: editable.some(x => ["site", "loja"].includes(x)),
-      scripts: editable.some(x => ["site", "loja"].includes(x)),
-      leads: editable.some(x => ["site", "loja"].includes(x))
-    };
+
+  if (state.projectTab === "media") {
+    el.innerHTML = `
+      <label>
+        Galeria — uma URL por linha
+        <textarea id="m-gallery">${escapeHtml(
+          (p.media?.galleryImages || []).join("\n")
+        )}</textarea>
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          id="m-gallery-enabled"
+          ${
+            p.media?.galleryEnabled
+              ? "checked"
+              : ""
+          }>
+        Ativar galeria
+      </label>
+
+      <label>
+        Vídeo
+        <input
+          id="m-video"
+          value="${escapeHtml(
+            p.media?.video || ""
+          )}">
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          id="m-video-enabled"
+          ${
+            p.media?.videoEnabled
+              ? "checked"
+              : ""
+          }>
+        Ativar vídeo
+      </label>
+
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar mídia
+        </button>
+      </div>
+    `;
+
+    return;
   }
-  return Object.fromEntries(Object.keys(CLIENT_ACCESS_MODULES).map(k => [k, editable.includes(k)]));
-}
 
-function renderClientPermissions(p) {
-  const modules = getAccessModules(p);
-  return `
-    <div class="access-heading">
-      <div><h3>Acesso do cliente</h3><p class="form-help">Cada módulo é independente. O padrão é <strong>liberado</strong>; desmarque manualmente o que quiser bloquear.</p></div>
-      <span class="access-default-badge">ACESSO LIBERADO</span>
-    </div>
-    <div class="client-access-grid client-access-modules">
-      ${Object.entries(CLIENT_ACCESS_MODULES).map(([key, info]) => `
-        <label class="client-access-card ${modules[key] ? "is-on" : ""}">
-          <span class="client-access-check"><input type="checkbox" data-access-module="${key}" ${modules[key] ? "checked" : ""} onchange="toggleAccessModule('${key}', this.checked)"></span>
-          <span class="client-access-icon">${info.icon}</span>
-          <span class="client-access-copy"><strong>${escapeHtml(info.label)}</strong><small>${escapeHtml(info.description)}</small></span>
-          <span class="client-access-status">${modules[key] ? "Acesso liberado" : "Bloqueado"}</span>
-        </label>`).join("")}
-    </div>`;
-}
-function toggleAccessModule(module, on) {
-  const card = document.querySelector(`[data-access-module="${module}"]`)?.closest(".client-access-card");
-  card?.classList.toggle("is-on", on);
-  const status = card?.querySelector(".client-access-status");
-  if (status) status.textContent = on ? "Acesso liberado" : "Bloqueado";
-}
-window.toggleAccessModule = toggleAccessModule;
-function collectClientPermissions() {
-  return { editable: [...document.querySelectorAll("[data-access-module]:checked")].map(input => input.dataset.accessModule), configured: true };
-}
+  if (state.projectTab === "location") {
+    el.innerHTML = `
+      <label>
+        Endereço
+        <input
+          id="l-address"
+          value="${escapeHtml(
+            p.location?.address || ""
+          )}">
+      </label>
 
-function renderProjectAccess(el) {
-  const p = state.projectDraft;
+      <label>
+        URL do Google Maps
+        <input
+          id="l-maps-url"
+          value="${escapeHtml(
+            p.location?.mapsUrl || ""
+          )}">
+      </label>
 
-  const linkedClient =
-    getClient(p.clientId) ||
-    state.clients.find(client =>
-      String(client.projectId || "") === String(p.id || "")
+      <label>
+        Embed
+        <textarea id="l-embed">${escapeHtml(
+          p.location?.embed || ""
+        )}</textarea>
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          id="l-enabled"
+          ${
+            p.location?.enabled
+              ? "checked"
+              : ""
+          }>
+        Ativar localização
+      </label>
+
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar localização
+        </button>
+      </div>
+    `;
+
+    return;
+  }
+
+  if (state.projectTab === "reviews") {
+    el.innerHTML = `
+      <label>
+        Google Place ID
+        <input
+          id="r-place-id"
+          value="${escapeHtml(
+            p.reviews?.placeId || ""
+          )}">
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          id="r-enabled"
+          ${
+            p.reviews?.enabled
+              ? "checked"
+              : ""
+          }>
+        Ativar avaliações
+      </label>
+
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar avaliações
+        </button>
+      </div>
+    `;
+
+    return;
+  }
+
+  if (state.projectTab === "seo") {
+    el.innerHTML = `
+      <label>
+        Título
+        <input
+          id="s-title"
+          value="${escapeHtml(
+            p.seo?.title || ""
+          )}">
+      </label>
+
+      <label>
+        Descrição
+        <textarea id="s-description">${escapeHtml(
+          p.seo?.description || ""
+        )}</textarea>
+      </label>
+
+      <label>
+        OG Image
+        <input
+          id="s-og-image"
+          value="${escapeHtml(
+            p.seo?.ogImage || ""
+          )}">
+      </label>
+
+      <label>
+        Canonical
+        <input
+          id="s-canonical"
+          value="${escapeHtml(
+            p.seo?.canonical || ""
+          )}">
+      </label>
+
+      <label>
+        Keywords
+        <input
+          id="s-keywords"
+          value="${escapeHtml(
+            p.seo?.keywords || ""
+          )}">
+      </label>
+
+      <label>
+        Robots
+        <input
+          id="s-robots"
+          value="${escapeHtml(
+            p.seo?.robots || ""
+          )}">
+      </label>
+
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar SEO
+        </button>
+      </div>
+    `;
+
+    return;
+  }
+
+  if (state.projectTab === "scripts") {
+    el.innerHTML = `
+      <label>
+        Head
+        <textarea id="sc-head">${escapeHtml(
+          p.scripts?.head || ""
+        )}</textarea>
+      </label>
+
+      <label>
+        Body
+        <textarea id="sc-body">${escapeHtml(
+          p.scripts?.body || ""
+        )}</textarea>
+      </label>
+
+      <label>
+        Footer
+        <textarea id="sc-footer">${escapeHtml(
+          p.scripts?.footer || ""
+        )}</textarea>
+      </label>
+
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary"
+          onclick="saveProject()">
+          Salvar scripts
+        </button>
+      </div>
+    `;
+
+    return;
+  }
+
+  if (state.projectTab === "acesso") {
+    const linkedClient = state.clients.find(
+      client =>
+        String(client.id) ===
+        String(p.clientId || "")
     );
 
-  el.innerHTML = `
-    <h3>Acesso do cliente</h3>
+    el.innerHTML = `
+      <label>
+        Cliente vinculado
+        <select id="a-client">
+          <option value="">
+            Nenhum cliente vinculado
+          </option>
 
-    <p class="form-help">
-      Cada cliente possui um único login e pode acessar apenas seus projetos.
-    </p>
+          ${state.clients
+            .map(
+              client => `
+                <option
+                  value="${escapeHtml(
+                    client.id
+                  )}"
+                  ${
+                    String(
+                      linkedClient?.id ||
+                        p.clientId ||
+                        ""
+                    ) ===
+                    String(client.id)
+                      ? "selected"
+                      : ""
+                  }>
+                  ${escapeHtml(
+                    client.name
+                  )} — ${escapeHtml(
+                    client.email
+                  )}
+                </option>
+              `
+            )
+            .join("")}
+        </select>
+      </label>
 
-    <label>Cliente responsável</label>
+      ${
+        linkedClient
+          ? `
+            <div class="preview-box">
+              <strong>
+                ${escapeHtml(
+                  linkedClient.name
+                )}
+              </strong><br>
 
-    <select id="a-client">
-      <option value="">Nenhum cliente vinculado</option>
+              ${escapeHtml(
+                linkedClient.email
+              )}<br>
 
-      ${state.clients.map(client => `
-        <option
-          value="${escapeHtml(client.id)}"
-          ${String(linkedClient?.id || p.clientId || "") === String(client.id) ? "selected" : ""}>
-          ${escapeHtml(client.name)} — ${escapeHtml(client.email)}
-        </option>
-      `).join("")}
-    </select>
+              <small>
+                Status:
+                ${escapeHtml(
+                  linkedClient.status ||
+                    "active"
+                )}
+              </small>
+            </div>
 
-    ${
-      linkedClient
-        ? `
-          <div class="preview-box">
-            <strong>${escapeHtml(linkedClient.name)}</strong><br>
-            ${escapeHtml(linkedClient.email)}<br>
-            <small>Status: ${escapeHtml(linkedClient.status || "active")}</small>
-          </div>
+            <div class="modal-actions">
+              <button
+                class="btn"
+                onclick="closeModal();openClientModal('${escapeHtml(
+                  linkedClient.id
+                )}')">
+                Editar cliente
+              </button>
+            </div>
+          `
+          : `
+            <div class="empty-state">
+              Nenhum cliente vinculado.
+            </div>
+          `
+      }
 
-          <div class="modal-actions">
-            <button
-              class="btn"
-              onclick="closeModal();openClientModal('${escapeHtml(linkedClient.id)}')">
-              Editar cliente
-            </button>
-          </div>
-        `
-        : `
-          <div class="empty-state">
-            Nenhum cliente vinculado.
-          </div>
-        `
-    }
+      ${renderClientPermissions(p)}
 
-    ${renderClientPermissions(p)}
+      <div class="modal-actions">
+        <button
+          class="btn btn-primary modal-save-floating"
+          onclick="saveProject()">
+          Salvar acesso
+        </button>
+      </div>
+    `;
 
-    <div class="modal-actions">
-      <button class="btn btn-primary modal-save-floating" onclick="saveProject()">
-        Salvar acesso
-      </button>
+    return;
+  }
+}
+
+/* =========================================================
+   PERMISSÕES
+   ========================================================= */
+
+function renderClientPermissions(project) {
+  const permissions =
+    project?.access?.permissions || {};
+
+  const checked = key =>
+    permissions[key] ? "checked" : "";
+
+  return `
+    <div class="preview-box">
+      <strong>Permissões do cliente</strong>
+
+      <label>
+        <input
+          type="checkbox"
+          data-client-permission="leads"
+          ${checked("leads")}>
+        CRM / Leads
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          data-client-permission="content"
+          ${checked("content")}>
+        Conteúdo
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          data-client-permission="settings"
+          ${checked("settings")}>
+        Configurações
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          data-client-permission="catalog"
+          ${checked("catalog")}>
+        Catálogo
+      </label>
+
+      <label>
+        <input
+          type="checkbox"
+          data-client-permission="store"
+          ${checked("store")}>
+        Ecommerce
+      </label>
     </div>
   `;
 }
 
+function collectClientPermissions() {
+  const permissions = {};
+
+  document
+    .querySelectorAll(
+      "[data-client-permission]"
+    )
+    .forEach(input => {
+      permissions[
+        input.dataset.clientPermission
+      ] = input.checked;
+    });
+
+  return {
+    permissions
+  };
+}
+
 /* =========================================================
-   ABA — LEADS
+   LEADS DO PROJETO
    ========================================================= */
 
 async function renderProjectLeads(el) {
-  const projectId = state.editingProjectId;
+  const projectId =
+    state.editingProjectId;
 
   if (!projectId) {
-    el.innerHTML = `<div class="empty-state">Salve o projeto primeiro.</div>`;
+    el.innerHTML =
+      `<div class="empty-state">Salve o projeto primeiro.</div>`;
     return;
   }
 
   markLeadsSeen(projectId);
 
-  el.innerHTML = `<div class="loading">Carregando leads...</div>`;
+  el.innerHTML =
+    `<div class="loading">Carregando leads...</div>`;
 
   try {
     const leads = unwrapList(
-      await API.get(`/api/data/leads/${encodeURIComponent(projectId)}`),
+      await API.get(
+        `/api/data/leads/${encodeURIComponent(
+          projectId
+        )}`
+      ),
       "leads"
     );
 
     if (!leads.length) {
-      el.innerHTML = `<div class="empty-state">Nenhum lead encontrado.</div>`;
+      el.innerHTML =
+        `<div class="empty-state">Nenhum lead encontrado.</div>`;
       return;
     }
 
-    el.innerHTML = leads.map(lead => `
-      <div class="lead-item">
-        <strong>${escapeHtml(lead.name || "Sem nome")}</strong>
+    el.innerHTML = leads
+      .map(
+        lead => `
+          <div class="lead-item">
+            <strong>
+              ${escapeHtml(
+                lead.name || "Sem nome"
+              )}
+            </strong>
 
-        <span>${escapeHtml(lead.email || "")}</span>
+            <span>
+              ${escapeHtml(
+                lead.email || ""
+              )}
+            </span>
 
-        <span>${escapeHtml(lead.phone || "")}</span>
+            <span>
+              ${escapeHtml(
+                lead.phone || ""
+              )}
+            </span>
 
-        <p>${escapeHtml(lead.message || "")}</p>
+            <p>
+              ${escapeHtml(
+                lead.message || ""
+              )}
+            </p>
 
-        <small>
-          ${escapeHtml(
-            lead.createdAt
-              ? new Date(lead.createdAt).toLocaleString("pt-BR")
-              : ""
-          )}
-        </small>
-      </div>
-    `).join("");
+            <small>
+              ${escapeHtml(
+                lead.createdAt
+                  ? new Date(
+                      lead.createdAt
+                    ).toLocaleString("pt-BR")
+                  : ""
+              )}
+            </small>
+          </div>
+        `
+      )
+      .join("");
   } catch (error) {
     console.error(error);
-    el.innerHTML = `<div class="empty-state">Erro ao carregar leads.</div>`;
+
+    el.innerHTML =
+      `<div class="empty-state">Erro ao carregar leads.</div>`;
   }
 }
 
@@ -1355,15 +1889,23 @@ function markLeadsSeen(projectId) {
 }
 
 function getUnseenLeadsCount(projectId) {
-  const info = state.leadsByProject?.[projectId];
+  const info =
+    state.leadsByProject?.[projectId];
 
   if (!info?.latestCreatedAt) return 0;
 
-  const seen = localStorage.getItem(getSeenKey(projectId));
+  const seen =
+    localStorage.getItem(
+      getSeenKey(projectId)
+    );
 
-  if (!seen) return Number(info.count || 0);
+  if (!seen) {
+    return Number(info.count || 0);
+  }
 
-  return new Date(info.latestCreatedAt) > new Date(seen)
+  return new Date(
+    info.latestCreatedAt
+  ) > new Date(seen)
     ? Number(info.count || 0)
     : 0;
 }
@@ -1378,130 +1920,244 @@ async function saveProject() {
   if (!p) return;
 
   if (state.projectTab === "geral") {
-    p.name = $("p-name")?.value.trim();
-    p.projectType = $("p-project-type")?.value || "site";
-    p.status = $("p-status")?.value;
-    p.siteUrl = $("p-site-url")?.value.trim();
+    p.name =
+      $("p-name")?.value.trim();
+
+    p.projectType =
+      $("p-project-type")?.value ||
+      "site";
+
+    p.status =
+      $("p-status")?.value;
+
+    p.siteUrl =
+      $("p-site-url")?.value.trim();
   }
 
   if (state.projectTab === "config") {
     p.tracking = {
-      pixel: $("p-pixel")?.value.trim(),
-      tag: $("p-tag")?.value.trim(),
-      analytics: $("p-analytics")?.value.trim()
+      pixel:
+        $("p-pixel")?.value.trim(),
+
+      tag:
+        $("p-tag")?.value.trim(),
+
+      analytics:
+        $("p-analytics")?.value.trim()
     };
 
     p.contact = {
-      whatsapp: $("p-whatsapp")?.value.trim(),
-      email: $("p-email")?.value.trim(),
-      phone: $("p-phone")?.value.trim()
+      whatsapp:
+        $("p-whatsapp")?.value.trim(),
+
+      email:
+        $("p-email")?.value.trim(),
+
+      phone:
+        $("p-phone")?.value.trim()
     };
 
     p.social = {
-      facebook: $("p-facebook")?.value.trim(),
-      instagram: $("p-instagram")?.value.trim(),
-      tiktok: $("p-tiktok")?.value.trim(),
-      youtube: $("p-youtube")?.value.trim(),
-      linkedin: $("p-linkedin")?.value.trim()
+      facebook:
+        $("p-facebook")?.value.trim(),
+
+      instagram:
+        $("p-instagram")?.value.trim(),
+
+      tiktok:
+        $("p-tiktok")?.value.trim(),
+
+      youtube:
+        $("p-youtube")?.value.trim(),
+
+      linkedin:
+        $("p-linkedin")?.value.trim()
     };
 
-    p.formspree = $("p-formspree")?.value.trim();
+    p.formspree =
+      $("p-formspree")?.value.trim();
   }
 
   if (state.projectTab === "content") {
     p.content = {
-      name: $("c-name")?.value.trim(),
-      job: $("c-job")?.value.trim(),
-      headline: $("c-headline")?.value.trim(),
-      description: $("c-description")?.value.trim(),
-      specialization: $("c-specialization")?.value.trim(),
-      experience: $("c-experience")?.value.trim(),
-      address: $("c-address")?.value.trim(),
-      registration: $("c-registration")?.value.trim()
+      name:
+        $("c-name")?.value.trim(),
+
+      job:
+        $("c-job")?.value.trim(),
+
+      headline:
+        $("c-headline")?.value.trim(),
+
+      description:
+        $("c-description")?.value.trim(),
+
+      specialization:
+        $("c-specialization")?.value.trim(),
+
+      experience:
+        $("c-experience")?.value.trim(),
+
+      address:
+        $("c-address")?.value.trim(),
+
+      registration:
+        $("c-registration")?.value.trim()
     };
   }
 
   if (state.projectTab === "media") {
     p.media = {
-      galleryImages: ($("m-gallery")?.value || "")
-        .split("\n")
-        .map(v => v.trim())
-        .filter(Boolean),
-      galleryEnabled: $("m-gallery-enabled")?.checked || false,
-      video: $("m-video")?.value.trim(),
-      videoEnabled: $("m-video-enabled")?.checked || false
+      galleryImages:
+        ($("m-gallery")?.value || "")
+          .split("\n")
+          .map(v => v.trim())
+          .filter(Boolean),
+
+      galleryEnabled:
+        $("m-gallery-enabled")?.checked ||
+        false,
+
+      video:
+        $("m-video")?.value.trim(),
+
+      videoEnabled:
+        $("m-video-enabled")?.checked ||
+        false
     };
   }
 
   if (state.projectTab === "location") {
     p.location = {
-      address: $("l-address")?.value.trim(),
-      mapsUrl: $("l-maps-url")?.value.trim(),
-      embed: $("l-embed")?.value.trim(),
-      enabled: $("l-enabled")?.checked || false
+      address:
+        $("l-address")?.value.trim(),
+
+      mapsUrl:
+        $("l-maps-url")?.value.trim(),
+
+      embed:
+        $("l-embed")?.value.trim(),
+
+      enabled:
+        $("l-enabled")?.checked ||
+        false
     };
   }
 
   if (state.projectTab === "reviews") {
     p.reviews = {
-      placeId: $("r-place-id")?.value.trim(),
-      enabled: $("r-enabled")?.checked || false
+      placeId:
+        $("r-place-id")?.value.trim(),
+
+      enabled:
+        $("r-enabled")?.checked ||
+        false
     };
   }
 
   if (state.projectTab === "seo") {
     p.seo = {
-      title: $("s-title")?.value.trim(),
-      description: $("s-description")?.value.trim(),
-      ogImage: $("s-og-image")?.value.trim(),
-      canonical: $("s-canonical")?.value.trim(),
-      keywords: $("s-keywords")?.value.trim(),
-      robots: $("s-robots")?.value.trim()
+      title:
+        $("s-title")?.value.trim(),
+
+      description:
+        $("s-description")?.value.trim(),
+
+      ogImage:
+        $("s-og-image")?.value.trim(),
+
+      canonical:
+        $("s-canonical")?.value.trim(),
+
+      keywords:
+        $("s-keywords")?.value.trim(),
+
+      robots:
+        $("s-robots")?.value.trim()
     };
   }
 
   if (state.projectTab === "scripts") {
     p.scripts = {
-      head: $("sc-head")?.value || "",
-      body: $("sc-body")?.value || "",
-      footer: $("sc-footer")?.value || ""
+      head:
+        $("sc-head")?.value || "",
+
+      body:
+        $("sc-body")?.value || "",
+
+      footer:
+        $("sc-footer")?.value || ""
     };
   }
 
   if (state.projectTab === "acesso") {
-    p.clientId = $("a-client")?.value || "";
-    p.access = collectClientPermissions();
+    p.clientId =
+      $("a-client")?.value || "";
+
+    p.access =
+      collectClientPermissions();
   }
 
   if (!p.name) {
-    toast("Informe o nome do projeto.", "error");
+    toast(
+      "Informe o nome do projeto.",
+      "error"
+    );
+
     return;
   }
 
   try {
-    const result = state.editingProjectId
-      ? await API.put("/api/data/projects", {
-          id: state.editingProjectId,
-          ...p
-        })
-      : await API.post("/api/data/projects", p);
+    const result =
+      state.editingProjectId
+        ? await API.put(
+            "/api/data/projects",
+            {
+              id:
+                state.editingProjectId,
+              ...p
+            }
+          )
+        : await API.post(
+            "/api/data/projects",
+            p
+          );
 
     if (result?.error) {
-      toast(result.error, "error");
+      toast(
+        result.error,
+        "error"
+      );
+
       return;
     }
 
     toast("Projeto salvo.");
+
     closeModal();
+
     await refreshData();
 
     if (state.editingProjectId) {
-      const updated = getProject(state.editingProjectId);
-      if (updated) state.projectDraft = normalizeProject(updated);
+      const updated =
+        getProject(
+          state.editingProjectId
+        );
+
+      if (updated) {
+        state.projectDraft =
+          normalizeProject(
+            updated
+          );
+      }
     }
   } catch (error) {
     console.error(error);
-    toast("Erro ao salvar projeto.", "error");
+
+    toast(
+      "Erro ao salvar projeto.",
+      "error"
+    );
   }
 }
 
@@ -1521,20 +2177,32 @@ function confirmDeleteProject(id) {
 
 async function deleteProject(id) {
   try {
-    const result = await API.del(
-      `/api/data/projects?id=${encodeURIComponent(id)}`
-    );
+    const result =
+      await API.del(
+        `/api/data/projects?id=${encodeURIComponent(
+          id
+        )}`
+      );
 
     if (result?.error) {
-      toast(result.error, "error");
+      toast(
+        result.error,
+        "error"
+      );
+
       return;
     }
 
     toast("Projeto excluído.");
+
     await refreshData();
   } catch (error) {
     console.error(error);
-    toast("Erro ao excluir projeto.", "error");
+
+    toast(
+      "Erro ao excluir projeto.",
+      "error"
+    );
   }
 }
 
@@ -1542,15 +2210,26 @@ async function deleteProject(id) {
    MODAIS
    ========================================================= */
 
-function showModal(content, maxWidth = "480px") {
+function showModal(
+  content,
+  maxWidth = "480px"
+) {
   closeModal();
 
-  const overlay = document.createElement("div");
-  overlay.id = "modal-overlay";
-  overlay.className = "modal-overlay";
+  const overlay =
+    document.createElement("div");
+
+  overlay.id =
+    "modal-overlay";
+
+  overlay.className =
+    "modal-overlay";
 
   overlay.innerHTML = `
-    <div class="modal" style="max-width:${maxWidth}">
+    <div
+      class="modal"
+      style="max-width:${maxWidth}">
+
       <button
         class="modal-close"
         onclick="closeModal()"
@@ -1562,25 +2241,42 @@ function showModal(content, maxWidth = "480px") {
     </div>
   `;
 
-  overlay.addEventListener("click", event => {
-    if (event.target === overlay) closeModal();
-  });
+  overlay.addEventListener(
+    "click",
+    event => {
+      if (
+        event.target === overlay
+      ) {
+        closeModal();
+      }
+    }
+  );
 
-  document.body.appendChild(overlay);
+  document.body.appendChild(
+    overlay
+  );
 }
 
 function closeModal() {
   $("modal-overlay")?.remove();
 }
 
-function confirmModal(message, onConfirm, label = "Confirmar") {
+function confirmModal(
+  message,
+  onConfirm,
+  label = "Confirmar"
+) {
   showModal(`
     <h2>Confirmação</h2>
 
-    <p>${escapeHtml(message)}</p>
+    <p>
+      ${escapeHtml(message)}
+    </p>
 
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal()">
+      <button
+        class="btn"
+        onclick="closeModal()">
         Cancelar
       </button>
 
@@ -1592,34 +2288,103 @@ function confirmModal(message, onConfirm, label = "Confirmar") {
     </div>
   `);
 
-  $("confirm-modal-yes")?.addEventListener("click", () => {
-    closeModal();
-    onConfirm();
-  });
+  $("confirm-modal-yes")
+    ?.addEventListener(
+      "click",
+      () => {
+        closeModal();
+        onConfirm();
+      }
+    );
 }
 
 /* =========================================================
    EXPORTAÇÕES PARA HTML INLINE
    ========================================================= */
 
-window.switchSection = switchSection;
-window.handleClientSearch = handleClientSearch;
-window.handleProjectSearch = handleProjectSearch;
-window.openClientModal = openClientModal;
-window.openClientViewPopup = openClientViewPopup;
-window.openClientActionsMenu = openClientActionsMenu;
-window.saveClient = saveClient;
-window.confirmDeleteClient = confirmDeleteClient;
+window.switchSection =
+  switchSection;
 
-window.openProjectModal = openProjectModal;
-window.openProjectViewPopup = openProjectViewPopup;
-window.openProjectActionsMenu = openProjectActionsMenu;
-window.saveProject = saveProject;
-window.confirmDeleteProject = confirmDeleteProject;
+window.handleClientSearch =
+  handleClientSearch;
 
-window.copyTrackingSnippet = copyTrackingSnippet;
-window.closeModal = closeModal;
+window.copyProjectId =
+  copyProjectId;
+
+window.handleProjectSearch =
+  handleProjectSearch;
+
+window.openClientModal =
+  openClientModal;
+
+window.openClientViewPopup =
+  openClientViewPopup;
+
+window.openClientActionsMenu =
+  openClientActionsMenu;
+
+window.saveClient =
+  saveClient;
+
+window.confirmDeleteClient =
+  confirmDeleteClient;
+
+window.openProjectModal =
+  openProjectModal;
+
+window.openProjectViewPopup =
+  openProjectViewPopup;
+
+window.openProjectActionsMenu =
+  openProjectActionsMenu;
+
+window.saveProject =
+  saveProject;
+
+window.confirmDeleteProject =
+  confirmDeleteProject;
+
+window.copyTrackingSnippet =
+  copyTrackingSnippet;
+
+window.closeModal =
+  closeModal;
+
+window.setProjectTab =
+  setProjectTab;
 
 
 // V8 universal modules navigation fallback
-document.addEventListener("click", e => { const b=e.target.closest(".nav-item[data-section]"); if(!b)return; if(b.dataset.section==="catalog") setTimeout(()=>renderCatalogSection?.(),0); if(b.dataset.section==="payments") setTimeout(()=>renderPaymentsSection?.(),0); });
+document.addEventListener(
+  "click",
+  e => {
+    const b =
+      e.target.closest(
+        ".nav-item[data-section]"
+      );
+
+    if (!b) return;
+
+    if (
+      b.dataset.section ===
+      "catalog"
+    ) {
+      setTimeout(
+        () =>
+          renderCatalogSection?.(),
+        0
+      );
+    }
+
+    if (
+      b.dataset.section ===
+      "payments"
+    ) {
+      setTimeout(
+        () =>
+          renderPaymentsSection?.(),
+        0
+      );
+    }
+  }
+);
