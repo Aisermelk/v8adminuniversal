@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR" data-theme="dark">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<meta
+    name="theme-color"
+    content="#09070F"
+>
+
+<meta
+    name="description"
+    content="V8 ADMIN — Painel administrativo universal para gerenciamento de sites"
+>
+
+<meta
+    name="robots"
+    content="noindex, nofollow"
+>
+
+<title>V8 ADMIN — Universal V2</title>
+
+
+<!-- =====================================================
+     FAVICON
+====================================================== -->
+
+<link
+    rel="icon"
+    type="image/png"
+    href="assets/v8p.png"
+>
+
+
+<!-- =====================================================
+     FONTES
+====================================================== -->
+
+<link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+>
+
+<link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+>
+
+<link
+    href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet"
+>
+
+
+<!-- =====================================================
+     CSS
+====================================================== -->
+
+<link
+    rel="stylesheet"
+    href="css/variables.css"
+>
+
+<link
+    rel="stylesheet"
+    href="css/style.css"
+>
+
+<link
+    rel="stylesheet"
+    href="css/loja.css"
+>
+<link rel="stylesheet" href="css/universal-modules.css">
+
+</head>
+
+<body>
+
+<div class="app">
+
+<!-- =========================================================
+     TOPBAR MOBILE (hamburger)
+========================================================== -->
+
+<div class="sidebar-topbar">
+
+    <div class="sidebar-brand" style="border:none;padding:0;margin:0">
+        <img src="assets/v8p.png" alt="V8 ADMIN" loading="eager">
+        <span>V8 ADMIN</span>
+    </div>
+
+    <button type="button" class="hamburger-btn" id="hamburger-btn" aria-label="Abrir menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+</div>
+
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- =========================================================
+     SIDEBAR
+========================================================== -->
+
+<aside class="sidebar" id="sidebar">
+
+<div class="sidebar-brand">
+
+    <img
+        src="assets/v8p.png"
+        alt="V8 ADMIN"
+        loading="eager"
+    >
+
+    <span>V8 ADMIN</span>
+
+</div>
+
+
+<nav
+    class="nav"
+    aria-label="Navegação principal"
+>
+
+
+    <!-- DASHBOARD -->
+
+    <button
+        type="button"
+        class="nav-item active"
+        data-section="dashboard"
+    >
+
+        <span class="dot"></span>
+
+        Dashboard
+
+    </button>
+
+
+    <!-- CLIENTES -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="clients"
+    >
+
+        <span class="dot"></span>
+
+        Clientes
+
+    </button>
+
+
+    <!-- PROJETOS -->
+
+    <button
+        type="button"
+        class="nav-item"
+        data-section="projects"
+    >
+
+        <span class="dot"></span>
+
+        Projetos
+
+    </button>
+
+
+    <!-- CRM -->
+    <button type="button" class="nav-item" data-section="leads">
+        <span class="dot"></span>
+        CRM
+    </button>
+
+    <button type="button" class="nav-item" data-section="catalog">
+        <span class="dot"></span>
+        Catálogo
+    </button>
+
+    <button type="button" class="nav-item" data-section="store">
+        <span class="dot"></span>
+        Loja
+    </button>
+
+    <button type="button" class="nav-item" data-section="payments">
+        <span class="dot"></span>
+        Pagamentos
+    </button>
+
+
+</nav>
+
+
+<!-- =====================================================
+     SIDEBAR FOOTER
+====================================================== -->
+
+<div class="sidebar-footer">
+
+    <div
+        class="checkbox-row"
+        style="padding:6px 8px"
+    >
+
+        <label
+            style="
+                margin:0;
+                font-weight:400;
+                color:var(--text-muted);
+                font-size:12.5px;
+                display:flex;
+                align-items:center;
+                gap:8px;
+                cursor:pointer;
+            "
+        >
+
+            <input
+                type="checkbox"
+                id="theme-toggle"
+                style="width:auto"
+            >
+
+            Tema claro
+
+        </label>
+
+    </div>
+
+
+    <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        id="logout-btn"
+        style="
+            width:100%;
+            justify-content:center;
+        "
+    >
+
+        Sair
+
+    </button>
+
+</div>
+
+</aside>
+
+<!-- =========================================================
+     CONTEÚDO PRINCIPAL
+========================================================== -->
+
+<main class="main">
+
+<!-- =========================================================
+     DASHBOARD
+========================================================== -->
+
+<section
+    class="section"
+    data-section="dashboard"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Dashboard</h1>
+
+        <p>
+            Visão geral de todos os seus projetos
+        </p>
+
+    </div>
+
+</div>
+
+
+<div
+    class="stat-grid"
+    id="dashboard-stats"
+>
+
+    <div class="loading">
+        Carregando...
+    </div>
+
+</div>
+
+<div id="dashboard-new-leads" class="client-panel dashboard-leads-panel">
+    <div class="dashboard-leads-heading"><div><h2>Novos leads</h2><p>Leads recebidos recentemente.</p></div><button class="btn btn-ghost btn-sm" type="button" onclick="switchSection('leads')">Ver CRM</button></div>
+    <div class="dashboard-leads-list"><div class="crm-empty">Carregando...</div></div>
+</div>
+</section>
+
+<!-- =========================================================
+     CLIENTES
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="clients"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Clientes</h1>
+
+        <p>
+            Pessoas ou empresas para quem você presta serviço
+        </p>
+
+    </div>
+
+
+    <button
+        type="button"
+        class="btn btn-primary"
+        id="new-client-btn"
+    >
+
+        + Novo cliente
+
+    </button>
+
+</div>
+
+
+<div class="entity-filters client-filters">
+    <div class="search-bar">
+        <input type="text" id="client-search" placeholder="Buscar cliente por nome ou e-mail..." oninput="handleClientSearch(this.value)">
+    </div>
+    <select id="client-status-filter" onchange="handleClientStatus(this.value)" aria-label="Filtrar clientes por status">
+        <option value="">Todos os status</option>
+        <option value="active">Ativos</option>
+        <option value="inactive">Inativos</option>
+    </select>
+    <select id="client-project-filter" onchange="handleClientProjectFilter(this.value)" aria-label="Filtrar clientes por projeto">
+        <option value="">Todos os projetos</option>
+    </select>
+</div>
+
+
+<div
+    class="table-wrap"
+    id="clients-table-wrap"
+>
+
+    <div class="loading">
+        Carregando clientes...
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     PROJETOS
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="projects"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>Projetos</h1>
+
+        <p>
+            Sites gerenciados pelo V8 ADMIN Universal
+        </p>
+
+    </div>
+
+
+    <button
+        type="button"
+        class="btn btn-primary"
+        id="new-project-btn"
+    >
+
+        + Novo projeto
+
+    </button>
+
+</div>
+
+
+<div class="project-filters">
+    <div class="search-bar">
+        <input
+            type="text"
+            id="project-search"
+            placeholder="Buscar projeto por nome..."
+            oninput="handleProjectSearch(this.value)"
+        >
+    </div>
+    <select id="project-sort" onchange="handleProjectSort(this.value)" aria-label="Ordenar projetos">
+        <option value="name-asc">Alfabético A–Z</option>
+        <option value="name-desc">Alfabético Z–A</option>
+        <option value="date-desc">Mais recentes</option>
+        <option value="date-asc">Mais antigos</option>
+    </select>
+    <select id="project-status-filter" onchange="handleProjectStatus(this.value)" aria-label="Filtrar por status">
+        <option value="">Todos os status</option>
+        <option value="Em produção">Em produção</option>
+        <option value="Em desenvolvimento">Em desenvolvimento</option>
+        <option value="Pausado">Pausado</option>
+    </select>
+</div>
+
+
+<div
+    class="table-wrap"
+    id="projects-table-wrap"
+>
+
+    <div class="loading">
+        Carregando projetos...
+    </div>
+
+</div>
+
+</section>
+
+<!-- =========================================================
+     LEADS
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="leads"
+>
+
+<div class="page-header">
+
+    <div>
+
+        <h1>CRM</h1>
+
+        <p>
+            Pipeline, acompanhamento e leads organizados por projeto
+        </p>
+
+    </div>
+
+    <button type="button" class="btn btn-primary" id="new-lead-btn">+ Novo lead</button>
+
+</div>
+
+
+<div class="entity-filters client-filters">
+    <div class="search-bar">
+        <input type="text" id="lead-search" placeholder="Buscar lead, contato, tag ou projeto..." oninput="handleLeadSearch(this.value)">
+    </div>
+    <select id="crm-status-filter" onchange="setCrmStatus(this.value)" aria-label="Filtrar CRM por status">
+        <option value="">Todos os status</option>
+        <option value="novo">Novo</option><option value="contato">Contato</option><option value="qualificado">Qualificado</option>
+        <option value="proposta">Proposta</option><option value="ganho">Ganho</option><option value="perdido">Perdido</option>
+    </select>
+    <select id="crm-project-filter-page" onchange="setCrmProject(this.value)" aria-label="Filtrar CRM por projeto">
+        <option value="">Todos os projetos</option>
+    </select>
+</div>
+
+
+<div
+    class="table-wrap"
+    id="leads-table-wrap"
+>
+
+    <div class="loading">
+        Carregando leads...
+    </div>
+
+</div>
+
+</section>
+
+
+<!-- =========================================================
+     CATÁLOGO
+========================================================== -->
+<section class="section hidden" data-section="catalog">
+  <div id="catalog-content"><div class="loading">Carregando catálogo...</div></div>
+</section>
+
+<!-- =========================================================
+     LOJA
+========================================================== -->
+
+<section
+    class="section hidden"
+    data-section="store"
+>
+
+<div id="store-content">
+    <div class="loading">Carregando loja...</div>
+</div>
+
+</section>
+
+<section class="section hidden" data-section="payments">
+  <div id="payments-content"><div class="loading">Carregando pagamentos...</div></div>
+</section>
+
+</main>
+
+</div>
+
+<!-- =========================================================
+     CONFIGURAÇÃO DA API
+========================================================== -->
+
+<script>
+
+window.V8_ADMIN_CONFIG = {
+
+    API_URL:
+        "https://v8adminuniversal.aisermelk.workers.dev",
+
+    API_PREFIX:
+        "/api"
+
+};
+
+</script>
+
+<!-- =========================================================
+     JAVASCRIPT EXISTENTE
+========================================================== -->
+
+<script src="js/api.js"></script>
+
+<script src="js/auth.js"></script>
+
+<script src="js/dashboard.js"></script>
+<script src="js/crm.js"></script>
+<script src="js/shop.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/payments.js"></script>
+
+<!-- =========================================================
+     NAVEGAÇÃO V2
+========================================================== -->
+
+<script>
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+
+
+        const navItems =
+            document.querySelectorAll(
+                ".nav-item"
+            );
+
+
+        const sections =
+            document.querySelectorAll(
+                ".section"
+            );
+
+
+        navItems.forEach(
+            function (button) {
+
+                button.addEventListener(
+                    "click",
+                    function () {
+
+                        const target =
+                            button.dataset.section;
+
+
+                        if (!target) {
+                            return;
+                        }
+
+
+                        navItems.forEach(
+                            function (item) {
+
+                                item.classList.remove(
+                                    "active"
+                                );
+
+                            }
+                        );
+
+
+                        sections.forEach(
+                            function (section) {
+
+                                section.classList.add(
+                                    "hidden"
+                                );
+
+                            }
+                        );
+
+
+                        button.classList.add(
+                            "active"
+                        );
+
+
+                        const section =
+                            document.querySelector(
+                                '.section[data-section="' +
+                                target +
+                                '"]'
+                            );
+
+
+                        if (section) {
+
+                            section.classList.remove(
+                                "hidden"
+                            );
+
+                        }
+
+                    }
+                );
+
+            }
+        );
+
+
+
+        /* ==================================================
+           TEMA
+        ================================================== */
+
+        const themeToggle =
+            document.getElementById(
+                "theme-toggle"
+            );
+
+
+        if (themeToggle) {
+
+            const savedTheme =
+                localStorage.getItem(
+                    "v8admin_theme"
+                );
+
+
+            if (
+                savedTheme ===
+                "light"
+            ) {
+
+                document.documentElement
+                    .setAttribute(
+                        "data-theme",
+                        "light"
+                    );
+
+                themeToggle.checked =
+                    true;
+
+            }
+
+
+            themeToggle.addEventListener(
+                "change",
+                function () {
+
+                    const theme =
+                        themeToggle.checked
+                            ? "light"
+                            : "dark";
+
+
+                    document.documentElement
+                        .setAttribute(
+                            "data-theme",
+                            theme
+                        );
+
+
+                    localStorage.setItem(
+                        "v8admin_theme",
+                        theme
+                    );
+
+                }
+            );
+
+        }
+
+
+
+        /* ==================================================
+           NOVO CLIENTE
+        ================================================== */
+
+        const newClientButton =
+            document.getElementById(
+                "new-client-btn"
+            );
+
+
+        if (
+            newClientButton &&
+            typeof window.openClientModal ===
+                "function"
+        ) {
+
+            newClientButton.addEventListener(
+                "click",
+                function () {
+
+                    window.openClientModal();
+
+                }
+            );
+
+        }
+
+
+
+        /* ==================================================
+           NOVO PROJETO
+        ================================================== */
+
+        const newProjectButton =
+            document.getElementById(
+                "new-project-btn"
+            );
+
+
+        if (
+            newProjectButton &&
+            typeof window.openProjectModal ===
+                "function"
+        ) {
+
+            newProjectButton.addEventListener(
+                "click",
+                function () {
+
+                    window.openProjectModal();
+
+                }
+            );
+
+        }
+
+    }
+);
+
+</script>
+
+</body>
+
+</html>
