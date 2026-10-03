@@ -601,15 +601,35 @@ function renderProjects() {
                 <td>
                   <div class="table-actions">
                     <button
-                      class="btn"
-                      onclick="openProjectViewPopup('${escapeHtml(
-                        projectId
-                      )}')">
-                      Visualizar
+                    type="button"
+                    class="icon-btn"
+                    title="Visualizar projeto"
+                    aria-label="Visualizar projeto"
+                    onclick="openProjectViewPopup('${escapeHtml(projectId)}')">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true">
+                      <path
+                        d="M2.5 12C4.3 8.3 7.6 6 12 6C16.4 6 19.7 8.3 21.5 12C19.7 15.7 16.4 18 12 18C7.6 18 4.3 15.7 2.5 12Z"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"/>
+                        <circle
+                        cx="12"
+                        cy="12"
+                        r="3"
+                        stroke="currentColor"
+                        stroke-width="1.8"/>
+                      </svg>
                     </button>
-
+                    
                     <button
-                      class="btn"
+                    class="btn"
                       onclick="openProjectActionsMenu('${escapeHtml(
                         projectId
                       )}')">
