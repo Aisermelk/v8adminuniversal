@@ -57,6 +57,9 @@ const ROUTES = {
     publicConfig: /^\/api\/public\/config\/([^/]+)$/,
     publicLeads: /^\/api\/public\/leads\/([^/]+)$/,
     publicReviews: /^\/api\/public\/reviews\/([^/]+)$/,
+    publicCatalog: /^\/api\/public\/catalog\/([^/]+)$/,
+    publicCheckout: /^\/api\/public\/payments\/([^/]+)\/checkout$/,
+    publicPayWebhook: /^\/api\/public\/payments\/([^/]+)\/webhook\/(infinitepay|mercadopago)$/,
     project: /^\/api\/data\/projects\/([^/]+)$/,
     leads: /^\/api\/data\/leads\/([^/]+)$/ ,
     leadItem: /^\/api\/data\/leads\/([^/]+)\/([^/]+)$/,
@@ -658,6 +661,23 @@ async function clientUpdateProject(
     );
 }
 
+function cleanInfiniteTag(value) {
+    return String(value || "").trim().replace(/^[@$]+/, "").replace(/[^A-Za-z0-9._-]/g, "").slice(0, 100);
+}
+function sanitizePaymentSettings(raw, legacyEcommerce) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const legacy = legacyEcommerce && typeof legacyEcommerce === "object" ? legacyEcommerce : {};
+    const ip = (src.infinitePay && typeof src.infinitePay === "object") ? src.infinitePay : (legacy.infinitePay || {});
+    const mp = (src.mercadoPago && typeof src.mercadoPago === "object") ? src.mercadoPago : (legacy.mercadoPago || {});
+    return {
+        infinitePay: { enabled: !!ip.enabled, handle: cleanInfiniteTag(ip.handle) },
+        mercadoPago: {
+            enabled: !!mp.enabled,
+            accessToken: String(mp.accessToken || "").trim().slice(0, 500),
+            publicKey: String(mp.publicKey || "").trim().slice(0, 500)
+        }
+    };
+}
 function sanitizeEcommerce(input) {
     const ec = input && typeof input === "object" ? input : {};
     const mp = ec.mercadoPago && typeof ec.mercadoPago === "object" ? ec.mercadoPago : {};
@@ -749,6 +769,11 @@ function normalizeProject(
             existing.ecommerce ??
             {}
         );
+
+    const paymentSettings = sanitizePaymentSettings(
+        data.paymentSettings ?? existing.paymentSettings,
+        existing.ecommerce
+    );
 
     const access =
         data.access ??
@@ -908,6 +933,8 @@ function normalizeProject(
         },
 
         ecommerce,
+
+        paymentSettings,
 
         createdAt:
             data.createdAt ||
@@ -1690,7 +1717,8 @@ function projectConfig(project) {
         seo: project.seo,
         access: project.access,
         scripts: project.scripts,
-        ecommerce: project.ecommerce
+        ecommerce: project.ecommerce,
+        paymentSettings: project.paymentSettings
     };
 }
 
@@ -3027,6 +3055,28 @@ async function publicConfig(
     delete publicProject.updatedAt;
     delete publicProject.metadata;
     delete publicProject.deletedAt;
+    delete publicProject.access;
+    delete publicProject.paymentSettings;
+
+    // Quais provedores de pagamento estão ativos (sem segredos) — usado pelo v8-loader (data-v8-pay).
+    {
+        const ps = effectivePaymentSettings(project);
+        publicProject.payments = {
+            infinitePay: { enabled: !!(ps.infinitePay.enabled && ps.infinitePay.handle) },
+            mercadoPago: { enabled: !!(ps.mercadoPago.enabled && ps.mercadoPago.accessToken), publicKey: ps.mercadoPago.publicKey || "" }
+        };
+    }
+
+    // Nunca expor segredos de pagamento/frete na config pública.
+    if (publicProject.ecommerce && typeof publicProject.ecommerce === "object") {
+        const ec = publicProject.ecommerce;
+        publicProject.ecommerce = {
+            enabled: !!ec.enabled,
+            pickup: { enabled: !!ec.pickup?.enabled },
+            mercadoPago: { enabled: !!ec.mercadoPago?.enabled, publicKey: ec.mercadoPago?.publicKey || "" },
+            infinitePay: { enabled: !!ec.infinitePay?.enabled }
+        };
+    }
 
     return json(
         {
@@ -3036,6 +3086,254 @@ async function publicConfig(
         200,
         origin
     );
+}
+
+
+/* =========================================================
+   PAGAMENTOS (InfinitePay / Mercado Pago) — independente da Loja
+   ========================================================= */
+
+const PAYMENT_STATUSES = ["pending", "paid", "cancelled", "refunded"];
+
+function effectivePaymentSettings(project) {
+    return sanitizePaymentSettings(project?.paymentSettings, project?.ecommerce);
+}
+async function d1GetPayment(env, projectId, id) {
+    await ensureCatalogSchema(env);
+    return rowToPayment(await env.V8_D1.prepare(`SELECT * FROM payments WHERE id=? AND project_id=?`).bind(id, projectId).first());
+}
+async function d1UpdatePayment(env, projectId, id, data) {
+    await ensureCatalogSchema(env);
+    const cur = await d1GetPayment(env, projectId, id);
+    if (!cur) return { notFound: true };
+    const amount = "amount" in data ? Math.max(0, Number(data.amount) || 0) : cur.amount;
+    if (!amount) return { error: "Informe um valor maior que zero." };
+    const status = PAYMENT_STATUSES.includes(data.status) ? data.status : cur.status;
+    const nowValue = now();
+    let paidAt = "paidAt" in data ? String(data.paidAt || "") : cur.paidAt;
+    if (status === "paid" && !paidAt) paidAt = nowValue;
+    if (status !== "paid" && !("paidAt" in data)) paidAt = status === "pending" ? "" : cur.paidAt;
+    const metadata = { ...(cur.metadata || {}), ...(data.metadata && typeof data.metadata === "object" ? data.metadata : {}) };
+    await env.V8_D1.prepare(`UPDATE payments SET customer_name=?, customer_email=?, description=?, amount=?, provider=?, provider_payment_id=?, status=?, due_date=?, paid_at=?, metadata_json=?, updated_at=? WHERE id=? AND project_id=?`)
+        .bind(
+            "customerName" in data ? String(data.customerName || "").slice(0, 200) : cur.customerName,
+            "customerEmail" in data ? String(data.customerEmail || "").slice(0, 200) : cur.customerEmail,
+            "description" in data ? String(data.description || "").slice(0, 500) : cur.description,
+            amount,
+            "provider" in data ? String(data.provider || "manual").slice(0, 40) : cur.provider,
+            "providerPaymentId" in data ? String(data.providerPaymentId || "") : cur.providerPaymentId,
+            status, "dueDate" in data ? String(data.dueDate || "").slice(0, 20) : cur.dueDate, paidAt,
+            JSON.stringify(metadata), nowValue, id, projectId
+        ).run();
+    return { payment: await d1GetPayment(env, projectId, id) };
+}
+async function d1DeletePayment(env, projectId, id) {
+    await ensureCatalogSchema(env);
+    const r = await env.V8_D1.prepare(`DELETE FROM payments WHERE id=? AND project_id=?`).bind(id, projectId).run();
+    return Number(r.meta?.changes || 0) > 0;
+}
+async function markPaymentPaid(env, payment, extra = {}) {
+    if (payment.status === "paid") return payment;
+    const r = await d1UpdatePayment(env, payment.projectId, payment.id, { status: "paid", metadata: extra });
+    return r.payment || payment;
+}
+
+function workerBase(request) {
+    const u = new URL(request.url);
+    return u.origin;
+}
+
+/* Cria o link de checkout no provedor e grava no metadata da cobrança. */
+async function createProviderCheckout(env, request, project, payment, opts = {}) {
+    const settings = effectivePaymentSettings(project);
+    const provider = payment.provider;
+    const base = workerBase(request);
+    const redirect = safeHttpUrl(opts.redirectUrl) || safeHttpUrl(project.siteUrl) || "";
+    const description = (payment.description || project.name || "Pagamento").slice(0, 200);
+
+    if (provider === "infinitepay") {
+        const handle = settings.infinitePay.handle;
+        if (!settings.infinitePay.enabled || !handle) return { error: "InfinitePay não está configurada neste projeto (aba Pagamentos › Configuração)." };
+        const body = {
+            handle,
+            order_nsu: payment.id,
+            items: [{ quantity: 1, price: Math.round(payment.amount * 100), description }],
+            webhook_url: `${base}/api/public/payments/${encodeURIComponent(project.id)}/webhook/infinitepay`
+        };
+        if (redirect) body.redirect_url = redirect;
+        if (payment.customerName || payment.customerEmail || opts.phone) {
+            body.customer = {};
+            if (payment.customerName) body.customer.name = payment.customerName;
+            if (payment.customerEmail) body.customer.email = payment.customerEmail;
+            if (opts.phone) body.customer.phone_number = String(opts.phone).slice(0, 25);
+        }
+        let res, data;
+        try {
+            res = await fetch("https://api.checkout.infinitepay.io/links", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            data = await res.json().catch(() => ({}));
+        } catch (e) { return { error: "Não foi possível falar com a InfinitePay." }; }
+        const url = data.url || data.checkout_url || data.link || "";
+        if (!res.ok || !url) return { error: `InfinitePay recusou a cobrança${data.message ? ": " + String(data.message).slice(0, 150) : ""}.` };
+        const r = await d1UpdatePayment(env, project.id, payment.id, { providerPaymentId: payment.id, metadata: { checkoutUrl: url, provider: "infinitepay" } });
+        return { payment: r.payment, url };
+    }
+
+    if (provider === "mercadopago") {
+        const mp = settings.mercadoPago;
+        if (!mp.enabled || !mp.accessToken) return { error: "Mercado Pago não está configurado neste projeto (aba Pagamentos › Configuração)." };
+        const body = {
+            items: [{ title: description, quantity: 1, unit_price: Number(payment.amount.toFixed(2)), currency_id: "BRL" }],
+            external_reference: payment.id,
+            notification_url: `${base}/api/public/payments/${encodeURIComponent(project.id)}/webhook/mercadopago`
+        };
+        if (payment.customerEmail) body.payer = { email: payment.customerEmail, name: payment.customerName || undefined };
+        if (redirect) { body.back_urls = { success: redirect, pending: redirect, failure: redirect }; body.auto_return = "approved"; }
+        let res, data;
+        try {
+            res = await fetch("https://api.mercadopago.com/checkout/preferences", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${mp.accessToken}` }, body: JSON.stringify(body) });
+            data = await res.json().catch(() => ({}));
+        } catch (e) { return { error: "Não foi possível falar com o Mercado Pago." }; }
+        const url = data.init_point || "";
+        if (!res.ok || !url) return { error: `Mercado Pago recusou a cobrança${data.message ? ": " + String(data.message).slice(0, 150) : ""}.` };
+        const r = await d1UpdatePayment(env, project.id, payment.id, { providerPaymentId: String(data.id || ""), metadata: { checkoutUrl: url, provider: "mercadopago", preferenceId: data.id || "" } });
+        return { payment: r.payment, url };
+    }
+    return { error: "Esta cobrança é manual: escolha InfinitePay ou Mercado Pago para gerar um link." };
+}
+
+/* Confirma o pagamento direto no provedor (botão "Verificar pagamento" e webhooks). */
+async function verifyProviderPayment(env, project, payment) {
+    const settings = effectivePaymentSettings(project);
+    if (payment.provider === "infinitepay") {
+        const handle = settings.infinitePay.handle; if (!handle) return { error: "InfinitePay sem InfiniteTag." };
+        const m = payment.metadata || {};
+        const body = { handle, order_nsu: payment.id };
+        if (m.transactionNsu) body.transaction_nsu = m.transactionNsu;
+        if (m.slug) body.slug = m.slug;
+        let data;
+        try {
+            const res = await fetch("https://api.checkout.infinitepay.io/payment_check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            data = await res.json().catch(() => ({}));
+        } catch (e) { return { error: "Não foi possível consultar a InfinitePay." }; }
+        if (data && data.success && data.paid) {
+            const p = await markPaymentPaid(env, payment, { captureMethod: data.capture_method || "", paidAmount: Number(data.paid_amount || 0) / 100, installments: data.installments || 1 });
+            return { paid: true, payment: p };
+        }
+        return { paid: false, payment };
+    }
+    if (payment.provider === "mercadopago") {
+        const token = settings.mercadoPago.accessToken; if (!token) return { error: "Mercado Pago sem token." };
+        let data;
+        try {
+            const res = await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(payment.id)}&sort=date_created&criteria=desc`, { headers: { Authorization: `Bearer ${token}` } });
+            data = await res.json().catch(() => ({}));
+        } catch (e) { return { error: "Não foi possível consultar o Mercado Pago." }; }
+        const approved = (data.results || []).find(r => r.status === "approved");
+        if (approved) {
+            const p = await markPaymentPaid(env, payment, { captureMethod: approved.payment_type_id || "", mpPaymentId: String(approved.id || "") });
+            return { paid: true, payment: p };
+        }
+        return { paid: false, payment };
+    }
+    return { error: "Cobrança manual: marque como paga manualmente." };
+}
+
+function safeHttpUrl(u) {
+    try { const x = new URL(String(u || "")); return /^https?:$/.test(x.protocol) ? x.toString() : ""; } catch { return ""; }
+}
+
+/* Rotas públicas: criar cobrança a partir de um item do catálogo e receber webhooks. */
+async function publicCreateCheckout(env, request, projectId, origin) {
+    const project = await d1GetProject(env, projectId);
+    if (!project) return json({ success: false, error: "Projeto não encontrado." }, 404, origin);
+    const body = await readJson(request);
+    const settings = effectivePaymentSettings(project);
+    let provider = String(body.provider || "").toLowerCase();
+    if (!["infinitepay", "mercadopago"].includes(provider)) provider = settings.infinitePay.enabled ? "infinitepay" : (settings.mercadoPago.enabled ? "mercadopago" : "");
+    if (!provider || (provider === "infinitepay" && !settings.infinitePay.enabled) || (provider === "mercadopago" && !settings.mercadoPago.enabled)) {
+        return json({ success: false, error: "Pagamento online indisponível." }, 400, origin);
+    }
+    // Proteção básica contra abuso: limita cobranças criadas pelo site por hora.
+    await ensureCatalogSchema(env);
+    const since = new Date(Date.now() - 3600 * 1000).toISOString();
+    const recent = await env.V8_D1.prepare(`SELECT COUNT(*) total FROM payments WHERE project_id=? AND source_type='catalog' AND created_at>?`).bind(projectId, since).first();
+    if (Number(recent?.total || 0) >= 120) return json({ success: false, error: "Muitas tentativas. Tente novamente em alguns minutos." }, 429, origin);
+    // O valor SEMPRE vem do catálogo (nunca do navegador do visitante).
+    const itemId = String(body.itemId || "");
+    const products = await d1ListProducts(env, projectId);
+    const item = products.find(p => p.id === itemId && p.status === "active");
+    if (!item) return json({ success: false, error: "Item não encontrado." }, 404, origin);
+    if (item.price == null || Number(item.price) <= 0) return json({ success: false, error: "Este item é sob consulta." }, 400, origin);
+    const qty = Math.min(20, Math.max(1, parseInt(body.quantity, 10) || 1));
+    const amount = Number((Number(item.price) * qty).toFixed(2));
+    const created = await d1CreatePayment(env, projectId, {
+        sourceType: "catalog", sourceId: item.id,
+        customerName: String(body.name || "").trim().slice(0, 200), customerEmail: String(body.email || "").trim().slice(0, 200),
+        description: qty > 1 ? `${item.name} (x${qty})` : item.name, amount, provider, status: "pending",
+        metadata: { quantity: qty, unitPrice: Number(item.price) }
+    });
+    if (created.error) return json({ success: false, error: created.error }, 400, origin);
+    const r = await createProviderCheckout(env, request, project, created.payment, { redirectUrl: body.redirectUrl, phone: body.phone });
+    if (r.error) return json({ success: false, error: r.error }, 502, origin);
+    return json({ success: true, url: r.url, paymentId: created.payment.id }, 201, origin);
+}
+
+async function publicPaymentWebhook(env, request, projectId, provider, origin) {
+    const project = await d1GetProject(env, projectId);
+    if (!project) return json({ success: false }, 404, origin);
+    const body = await readJson(request).catch(() => ({}));
+    let paymentId = "";
+    const extra = {};
+    if (provider === "infinitepay") {
+        paymentId = String(body.order_nsu || "");
+        if (body.transaction_nsu) extra.transactionNsu = String(body.transaction_nsu);
+        if (body.invoice_slug) extra.slug = String(body.invoice_slug);
+        if (body.receipt_url) extra.receiptUrl = safeHttpUrl(body.receipt_url);
+        if (body.capture_method) extra.captureMethod = String(body.capture_method);
+    } else if (provider === "mercadopago") {
+        const url = new URL(request.url);
+        const mpId = String(body?.data?.id || url.searchParams.get("data.id") || url.searchParams.get("id") || "");
+        const token = effectivePaymentSettings(project).mercadoPago.accessToken;
+        if (!mpId || !token) return json({ success: true }, 200, origin);
+        try {
+            const res = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(mpId)}`, { headers: { Authorization: `Bearer ${token}` } });
+            const data = await res.json().catch(() => ({}));
+            paymentId = String(data.external_reference || "");
+            if (data.status !== "approved") return json({ success: true }, 200, origin);
+        } catch { return json({ success: false }, 400, origin); }
+    } else return json({ success: false }, 404, origin);
+    const payment = paymentId ? await d1GetPayment(env, projectId, paymentId) : null;
+    if (!payment) return json({ success: true }, 200, origin); // evita reenvio infinito para pedidos desconhecidos
+    // Não confia no corpo do webhook: confirma no provedor antes de marcar como pago.
+    if (Object.keys(extra).length) await d1UpdatePayment(env, projectId, payment.id, { metadata: extra });
+    const fresh = await d1GetPayment(env, projectId, payment.id);
+    const v = await verifyProviderPayment(env, project, fresh);
+    return json({ success: true, paid: !!v.paid }, v.error ? 400 : 200, origin);
+}
+
+/* =========================================================
+   PUBLIC CATALOG (somente leitura, só itens ativos)
+   ========================================================= */
+
+async function publicCatalog(env, projectId, origin) {
+    const project = await d1GetProject(env, projectId);
+    if (!project) return json({ success: false, error: "Projeto não encontrado." }, 404, origin);
+    const [products, categories, tags] = await Promise.all([
+        d1ListProducts(env, projectId),
+        d1ListCategories(env, projectId),
+        d1ListTags(env, projectId)
+    ]);
+    const items = products.filter(p => p.status === "active").map(p => ({
+        id: p.id, name: p.name, description: p.description, price: p.price, itemType: p.itemType,
+        categoryId: p.categoryId, tags: p.tags || [], featured: p.featured, promotion: p.promotion,
+        image: p.image, order: p.order
+    }));
+    return json({
+        success: true,
+        products: items,
+        categories: categories.map(c => ({ id: c.id, name: c.name, parentId: c.parentId || "", description: c.description, order: c.order })),
+        tags: tags.map(t => ({ id: t.id, name: t.name }))
+    }, 200, origin);
 }
 
 /* =========================================================
@@ -3724,6 +4022,21 @@ async function router(
         );
     }
 
+    match = path.match(ROUTES.publicCheckout);
+    if (match && method === "POST") {
+        return publicCreateCheckout(env, request, match[1], origin);
+    }
+
+    match = path.match(ROUTES.publicPayWebhook);
+    if (match && method === "POST") {
+        return publicPaymentWebhook(env, request, match[1], match[2], origin);
+    }
+
+    match = path.match(ROUTES.publicCatalog);
+    if (match && method === "GET") {
+        return publicCatalog(env, match[1], origin);
+    }
+
     match =
         path.match(
             ROUTES.publicLeads
@@ -4067,8 +4380,10 @@ async function router(
     const tagMatch = path.match(/^\/api\/data\/catalog\/([^/]+)\/tags$/);
     const tagItemMatch = path.match(/^\/api\/data\/catalog\/([^/]+)\/tags\/([^/]+)$/);
     const paymentsMatch = path.match(/^\/api\/data\/payments\/([^/]+)$/);
-    if (categoryMatch || categoryItemMatch || tagMatch || tagItemMatch || catalogMatch || paymentsMatch) {
-        const projectId = (categoryMatch||categoryItemMatch||tagMatch||tagItemMatch||catalogMatch||paymentsMatch)[1];
+    const paymentItemMatch = path.match(/^\/api\/data\/payments\/([^/]+)\/([^/]+)$/);
+    const paymentActionMatch = path.match(/^\/api\/data\/payments\/([^/]+)\/([^/]+)\/(checkout|verify)$/);
+    if (categoryMatch || categoryItemMatch || tagMatch || tagItemMatch || catalogMatch || paymentsMatch || paymentItemMatch || paymentActionMatch) {
+        const projectId = (categoryMatch||categoryItemMatch||tagMatch||tagItemMatch||catalogMatch||paymentsMatch||paymentItemMatch||paymentActionMatch)[1];
         const project = await getProjectForUser(env, projectId, user);
         if (!project) return json({success:false,error:"Projeto não encontrado."},404,origin);
         if (user.type !== "admin" && !(hasClientModuleAccess(project,"catalog") || hasClientModuleAccess(project,"ecommerce"))) return json({success:false,error:"Acesso ao Catálogo não liberado para este projeto."},403,origin);
@@ -4077,6 +4392,23 @@ async function router(
         if (tagMatch) { if(method==="GET") return json({success:true,tags:await d1ListTags(env,projectId)},200,origin); if(method==="POST"){const r=await d1SaveTag(env,projectId,await readJson(request)); if(r.duplicate) return json({success:true,...r,error:undefined},200,origin); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},200,origin);} }
         if (tagItemMatch) { const id=tagItemMatch[2]; if(method==="PUT"||method==="POST"){const r=await d1SaveTag(env,projectId,await readJson(request),id); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},200,origin);} if(method==="DELETE") return json({success:await d1DeleteTag(env,projectId,id)},200,origin); }
         if (catalogMatch) { if(method==="GET") return json({success:true,products:await d1ListProducts(env,projectId),categories:await d1ListCategories(env,projectId),tags:await d1ListTags(env,projectId)},200,origin); }
+        if (paymentActionMatch && method==="POST") {
+            const pid=paymentActionMatch[2], action=paymentActionMatch[3], payment=await d1GetPayment(env,projectId,pid);
+            if(!payment) return json({success:false,error:"Cobrança não encontrada."},404,origin);
+            const proj=await d1GetProject(env,projectId);
+            if(action==="checkout"){
+                const body=await readJson(request).catch(()=>({}));
+                const r=await createProviderCheckout(env,request,proj,payment,{redirectUrl:body.redirectUrl,phone:body.phone});
+                return r.error?json({success:false,error:r.error},400,origin):json({success:true,url:r.url,payment:r.payment},200,origin);
+            }
+            const v=await verifyProviderPayment(env,proj,payment);
+            return v.error?json({success:false,error:v.error},400,origin):json({success:true,paid:!!v.paid,payment:v.payment},200,origin);
+        }
+        if (paymentItemMatch && !paymentActionMatch && !["settings"].includes(paymentItemMatch[2])) {
+            const pid=paymentItemMatch[2];
+            if(method==="PUT"||method==="POST"){const r=await d1UpdatePayment(env,projectId,pid,await readJson(request)); if(r.notFound) return json({success:false,error:"Cobrança não encontrada."},404,origin); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},200,origin);}
+            if(method==="DELETE") return json({success:await d1DeletePayment(env,projectId,pid)},200,origin);
+        }
         if (paymentsMatch) { if(method==="GET") return json({success:true,payments:await d1ListPayments(env,projectId)},200,origin); if(method==="POST"){const r=await d1CreatePayment(env,projectId,await readJson(request)); return r.error?json({success:false,error:r.error},400,origin):json({success:true,...r},201,origin);} }
     }
 
