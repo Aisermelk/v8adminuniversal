@@ -369,8 +369,6 @@ function paintStoreConfig(el, projectId) {
   }
 
   const ec = project.ecommerce || {};
-  const mp = ec.mercadoPago || {};
-  const ip = ec.infinitePay || {};
   const pickup = ec.pickup || {};
   const shipping = Array.isArray(ec.shipping) ? ec.shipping : [];
 
@@ -404,21 +402,8 @@ function paintStoreConfig(el, projectId) {
     </div>
 
     <div class="store-panel">
-      <div class="store-panel-head"><div><h3>Mercado Pago</h3><p>Pix e cartão, processados na própria conta do cliente.</p></div></div>
-      <div class="store-form-grid">
-        <label class="store-check store-full"><input type="checkbox" id="mp-enabled" ${mp.enabled ? "checked" : ""}> Ativar Mercado Pago</label>
-        <label class="store-full">Access Token<input id="mp-token" value="${escapeHtml(mp.accessToken || "")}" placeholder="APP_USR-..."></label>
-        <label class="store-full">Public Key<input id="mp-public" value="${escapeHtml(mp.publicKey || "")}" placeholder="APP_USR-..."></label>
-      </div>
-      <small class="form-help">Na conta do Mercado Pago do cliente: Seu negócio → Configurações → Credenciais de produção.</small>
-    </div>
-
-    <div class="store-panel">
-      <div class="store-panel-head"><div><h3>InfinitePay</h3><p>Link de pagamento, gerado na conta do cliente.</p></div></div>
-      <div class="store-form-grid">
-        <label class="store-check store-full"><input type="checkbox" id="ip-enabled" ${ip.enabled ? "checked" : ""}> Ativar InfinitePay</label>
-        <label class="store-full">InfiniteTag (@usuario)<input id="ip-handle" value="${escapeHtml(ip.handle || "")}" placeholder="@minhaloja"></label>
-      </div>
+      <div class="store-panel-head"><div><h3>Pagamento</h3><p>Os provedores (InfinitePay e Mercado Pago) agora são configurados na aba Pagamentos e servem para qualquer projeto, com ou sem loja.</p></div>
+        <button class="btn btn-sm" onclick="document.querySelector('.nav-item[data-section=&quot;payments&quot;]')?.click()">Abrir Pagamentos</button></div>
     </div>
 
     <div class="store-form-actions" style="margin-top:4px">
@@ -482,15 +467,6 @@ async function saveStoreConfig(projectId) {
     enabled: !!$("ec-enabled")?.checked,
     originState: $("ec-origin")?.value || "",
     pickup: { enabled: !!$("ec-pickup")?.checked },
-    mercadoPago: {
-      enabled: !!$("mp-enabled")?.checked,
-      accessToken: $("mp-token")?.value.trim() || "",
-      publicKey: $("mp-public")?.value.trim() || ""
-    },
-    infinitePay: {
-      enabled: !!$("ip-enabled")?.checked,
-      handle: $("ip-handle")?.value.trim() || ""
-    },
     shipping: readShippingRowsFromDom()
   };
 
