@@ -381,7 +381,9 @@ const CLIENT_EDITABLE_FIELDS = {
         "specialization",
         "experience",
         "address",
-        "registration"
+        "registration",
+        "officeLink",
+        "photo"
     ],
     media: [
         "galleryEnabled",
@@ -868,7 +870,11 @@ function normalizeProject(
             address:
                 content.address || "",
             registration:
-                content.registration || ""
+                content.registration || "",
+            officeLink:
+                content.officeLink || "",
+            photo:
+                content.photo || ""
         },
 
         media: {
